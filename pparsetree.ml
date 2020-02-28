@@ -7,6 +7,8 @@ let prefix ~indent:n ~spaces:b l r = prefix n b l r
 module Tokens = struct
   let pipe = char '|'
 
+  let and_ = string "and"
+
   let as_ = string "as"
 
   let arrow = string "->"
@@ -20,6 +22,10 @@ module Tokens = struct
   let dotdot = string ".."
 
   let lazy_ = string "lazy"
+
+  let let_ = string "let"
+
+  let in_ = string "in"
 end
 open Tokens
 
@@ -420,4 +426,214 @@ end = struct
     | Ppat_exception p -> pp_exception p
     | Ppat_extension ext -> Extension.pp Item ext
     | Ppat_open (lid, p) -> pp_open lid p
+end
+
+and Expression : sig
+  val pp : ?needs_parens:bool -> expression -> document
+end = struct
+  let rec pp ?(needs_parens=false) { pexp_desc; pexp_attributes; _ } =
+    let desc = pp_desc ~needs_parens pexp_desc in
+    match pexp_attributes with
+    | [] -> desc
+    | attrs ->
+      group (
+        nest 2 (
+          desc ^/^
+          separate_map (break 0) (Attribute.pp Attached_to_item) attrs
+        )
+      )
+
+  and pp_desc ~needs_parens = function
+    | Pexp_ident id -> Longident.pp id.txt
+    | Pexp_constant c -> Constant.pp c
+    | Pexp_let (rf, vbs, body) -> pp_let rf vbs body
+    | Pexp_function cases -> pp_function ~needs_parens cases
+    | Pexp_fun (lbl, default, pat, exp) ->
+      pp_fun ~needs_parens lbl default pat exp
+    | Pexp_apply (expr, args) -> pp_apply ~needs_parens expr args
+    | Pexp_match (arg, cases) -> pp_match ~needs_parens arg cases
+    | Pexp_try (arg, cases) -> pp_try ~needs_parens arg cases
+    | Pexp_tuple exps -> pp_tuple ~needs_parens exps
+    | Pexp_construct (lid, arg) -> pp_construct ~needs_parens lid arg
+    | Pexp_variant (tag, arg) -> pp_variant ~needs_parens tag arg
+    | Pexp_record (fields, exp) -> pp_record fields exp
+    | _ -> assert false
+
+  and pp_let rf vbs body =
+    let vbs =
+      List.mapi (fun i vb ->
+        let lhs, rhs = Value_binding.pp Attached_to_item vb in
+        let kw = if i = 0 then let_ ^^ rec_flag rf else and_ in
+        prefix ~indent:2 ~spaces:1
+          (group (prefix ~indent:2 ~spaces:1 kw (group (lhs ^/^ equals))))
+          rhs
+      ) vbs
+    in
+    let vbs = separate hardline vbs in
+    let body = pp body in
+    vbs ^/^ in_ ^/^ body
+
+  and rec_flag = function
+    | Recursive -> string " rec"
+    | Nonrecursive -> empty
+
+  and case { pc_lhs; pc_guard; pc_rhs } =
+    let lhs = Pattern.pp pc_lhs in
+    let rhs = pp pc_rhs in
+    let lhs =
+      match pc_guard with
+      | None -> lhs
+      | Some guard ->
+        let guard = pp guard in
+        lhs ^/^ group (!^"when" ^/^ guard)
+    in
+    prefix ~indent:2 ~spaces:1 (lhs ^/^ arrow) rhs
+
+  and cases case_list =
+    let cases = separate_map (break 1 ^^ pipe ^^ space) case case_list in
+    let prefix = ifflat empty (hardline ^^ pipe) in
+    prefix ^^ space ^^ cases
+
+  and pp_function ~needs_parens case_list =
+    let doc = !^"function" ^/^ cases case_list in
+    if needs_parens then
+      parens doc
+    else
+      doc
+
+  and parameter lbl default pat =
+    let suffix lbl =
+      match pat.ppat_desc with
+      | Ppat_var v when lbl = v.txt -> empty
+      | _ -> colon ^^ Pattern.pp (* FIXME: needs parens = true *) pat
+    in
+    match lbl with
+    | Nolabel -> Pattern.pp pat
+    | Labelled lbl -> tilde ^^ string lbl ^^ suffix lbl
+    | Optional lbl ->
+      match default with
+      | None -> qmark ^^ string lbl ^^ suffix lbl
+      | Some def ->
+        (* TODO: punning *)
+        qmark ^^ string lbl ^^ colon ^^
+        parens (group (Pattern.pp pat ^/^ equals ^/^ pp def))
+
+
+  and pp_fun ~needs_parens lbl default pat exp =
+    let body = pp exp in
+    let arg = parameter lbl default pat in
+    let doc =
+      prefix ~indent:2 ~spaces:1
+        (!^"fun" ^/^ arg ^/^ arrow)
+        body
+    in
+    if needs_parens then
+      parens doc
+    else
+      doc
+
+  and argument (lbl, exp) =
+    let suffix lbl =
+      match exp.pexp_desc with
+      | Pexp_ident { txt = Lident id; _ } when lbl = id -> empty
+      | _ -> colon ^^ pp ~needs_parens:true exp
+    in
+    match lbl with
+    | Nolabel -> pp ~needs_parens:true exp
+    | Labelled lbl -> tilde ^^ string lbl ^^ suffix lbl
+    | Optional lbl -> qmark ^^ string lbl ^^ suffix lbl
+
+  and pp_apply ~needs_parens exp args =
+    (* FIXME: handle infix ops *)
+    let exp = pp ~needs_parens:true exp in
+    let args = separate_map (break 1) argument args in
+    let doc = prefix ~indent:2 ~spaces:1 exp args in
+    if needs_parens then
+      parens doc
+    else
+      doc
+
+  and pp_match ~needs_parens arg case_list =
+    let arg = pp arg in
+    let cases = cases case_list in
+    let doc =
+      group (
+        string "match" ^^
+        nest 2 (break 1 ^^ arg) ^/^
+        string "with"
+      ) ^^ cases
+    in
+    if needs_parens then
+      parens doc
+    else
+      doc
+
+  and pp_try ~needs_parens arg case_list =
+    let arg = pp arg in
+    let cases = cases case_list in
+    let doc =
+      (* FIXME: the layout is generally different. *)
+      group (
+        string "try" ^^
+        nest 2 (break 1 ^^ arg) ^/^
+        string "with"
+      ) ^^ cases
+    in
+    if needs_parens then
+      parens doc
+    else
+      doc
+
+  and pp_tuple ~needs_parens exps =
+    let doc = separate_map (comma ^^ break 1) (pp ~needs_parens:true) exps in
+    if needs_parens then
+      parens doc
+    else
+      doc
+
+  and pp_construct ~needs_parens lid arg_opt =
+    let name = Longident.pp lid.txt in
+    let arg  = optional (pp ~needs_parens:true) arg_opt in
+    let doc  = prefix ~indent:2 ~spaces:1 name arg in
+    if needs_parens then
+      parens doc
+    else
+      doc
+
+  and pp_variant ~needs_parens tag arg_opt =
+    let tag = Polymorphic_variant_tag.pp tag in
+    let arg  = optional (pp ~needs_parens:true) arg_opt in
+    let doc  = prefix ~indent:2 ~spaces:1 tag arg in
+    if needs_parens then
+      parens doc
+    else
+      doc
+
+  and record_field (lid, exp) =
+    (* TODO: print the whole lid only once *)
+    let fld = Longident.pp lid.txt in
+    match exp.pexp_desc with
+    | Pexp_ident { txt = Lident id; _ } when Longident.last lid.txt = id -> fld
+    | _ -> fld ^/^ equals ^/^ pp exp
+
+  and pp_record fields updated_record =
+    let fields = separate_map (semi ^^ break 1) record_field fields in
+    let prefix =
+      match updated_record with
+      | None -> empty
+      | Some e -> pp ~needs_parens:true e ^/^ !^"with" ^^ break 1
+    in
+    braces (prefix ^^ fields)
+end
+
+and Value_binding : sig
+  val pp : Attribute.kind -> value_binding -> document * document
+end = struct
+  let pp attr_kind { pvb_pat; pvb_expr; pvb_attributes; _ } =
+    let lhs = Pattern.pp pvb_pat in
+    let rhs = Expression.pp pvb_expr in
+    let attrs =
+      separate_map (break 0) (Attribute.pp attr_kind) pvb_attributes
+    in
+    lhs, rhs ^/^ attrs (* FIXME: is this correct? *)
 end
