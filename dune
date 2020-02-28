@@ -1,0 +1,3 @@
+(executable
+ (name main)
+ (libraries compiler-libs.common pprint))
