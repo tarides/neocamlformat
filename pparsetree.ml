@@ -11,9 +11,15 @@ module Tokens = struct
 
   let arrow = string "->"
 
+  let exception_ = string "exception"
+
   let module_ = string "module"
 
   let of_ = string "of"
+
+  let dotdot = string ".."
+
+  let lazy_ = string "lazy"
 end
 open Tokens
 
@@ -52,9 +58,9 @@ end = struct
 end
 
 module Polymorphic_variant_tag : sig
-  val pp : label loc -> document
+  val pp : label -> document
 end = struct
-  let pp tag = bquote ^^ string tag.txt
+  let pp tag = bquote ^^ string tag
 end
 
 module rec Attribute : sig
@@ -263,7 +269,7 @@ and Row_field : sig
 end = struct
   let pp_desc = function
     | Rinherit ct -> Core_type.pp ct
-    | Rtag (tag, true, []) -> Polymorphic_variant_tag.pp tag
+    | Rtag (tag, true, []) -> Polymorphic_variant_tag.pp tag.txt
     | Rtag (tag, has_empty_constr, params) ->
       let sep = break 1 ^^ ampersand ^^ break 1 in
       let params = separate_map sep Core_type.pp params in
@@ -273,7 +279,7 @@ end = struct
         else
           break 1 ^^ params
       in
-      Polymorphic_variant_tag.pp tag ^/^ of_ ^^ params
+      Polymorphic_variant_tag.pp tag.txt ^/^ of_ ^^ params
 
   let pp { prf_desc; prf_attributes; _ } =
     let desc = pp_desc prf_desc in
@@ -287,4 +293,131 @@ end = struct
           separate_map (break 0) (Attribute.pp Attached_to_item) attrs
         )
       )
+end
+
+and Pattern : sig
+  val pp : pattern -> document
+end = struct
+  let rec pp { ppat_desc; ppat_attributes; _ } =
+    let desc = pp_desc ppat_desc in
+    match ppat_attributes with
+    | [] -> desc
+    | attrs ->
+      group (
+        nest 2 (
+          desc ^/^
+          separate_map (break 0) (Attribute.pp Attached_to_item) attrs
+        )
+      )
+
+  and pp_alias pat alias =
+    nest 2 (pp pat ^/^ as_ ^/^ string alias.txt)
+
+  and pp_interval c1 c2 =
+    Constant.pp c1 ^/^ dotdot ^/^ Constant.pp c2
+
+  (* FIXME? nest on the outside, not in each of them. *)
+
+  and pp_tuple lst =
+    nest 2 (
+      separate_map (star ^^ break 1) pp lst
+    )
+
+  and pp_construct name arg_opt =
+    let name = Longident.pp name.txt in
+    match arg_opt with
+    | None -> name
+    | Some p -> prefix ~indent:2 ~spaces:1 name (parens (pp p))
+
+  and pp_variant tag arg_opt =
+    let tag = Polymorphic_variant_tag.pp tag in
+    match arg_opt with
+    | None -> tag
+    | Some p -> 
+      let arg = pp p in
+      let arg =
+        match p.ppat_desc with
+        | Ppat_tuple _ -> parens arg
+        | _ -> arg
+      in
+      tag ^/^ arg
+
+  and pp_record_field (lid, pat) =
+    (* TODO: print the whole lid only once *)
+    let field = Longident.pp lid.txt in
+    match pat.ppat_desc with
+    | Ppat_var v when Longident.last lid.txt = v.txt -> field
+    | _ -> field ^/^ equals ^/^ pp pat
+
+  and pp_record pats closed =
+    let fields =
+      separate_map (semi ^^ break 1)
+        pp_record_field pats
+    in
+    let fields =
+      match closed with
+      | Closed -> fields
+      | Open -> fields ^^ semi ^/^ underscore
+    in
+    braces fields
+
+  and pp_array pats =
+    brackets (
+      pipe ^/^
+      separate_map (semi ^^ break 1) pp pats ^/^
+      pipe
+    )
+
+  and pp_or p1 p2 =
+    pp p1 ^^ hardline ^^ pipe ^^ space ^^ pp p2
+
+  and pp_constraint p ct =
+    match p.ppat_desc with
+    | Ppat_unpack mod_name -> pp_unpack mod_name (Some ct)
+    | _ -> parens (pp p ^/^ colon ^/^ Core_type.pp ct)
+
+  and pp_type typ =
+    sharp ^^ Longident.pp typ.txt
+
+  and pp_lazy p =
+    (* FIXME: remove parens when not needed. *)
+    parens (lazy_ ^/^  pp p)
+
+  and pp_unpack mod_name ct =
+    let constraint_ =
+      match ct with
+      | None -> empty
+      | Some ct ->
+        match ct.ptyp_desc with
+        | Ptyp_package pkg -> break 1 ^^ colon ^/^ Package_type.pp pkg
+        | _ -> assert false
+    in
+    parens (module_ ^/^ string mod_name.txt ^^ constraint_)
+
+  and pp_exception p =
+    (* FIXME: needs parens *)
+    exception_ ^/^ pp p
+
+  and pp_open lid_loc p =
+    Longident.pp lid_loc.txt ^^ dot ^^ parens (break 0 ^^ pp p)
+
+  and pp_desc = function
+    | Ppat_any -> underscore
+    | Ppat_var v -> string v.txt
+    | Ppat_alias (pat, alias) -> pp_alias pat alias
+    | Ppat_constant c -> Constant.pp c
+    | Ppat_interval (c1, c2) -> pp_interval c1 c2
+    | Ppat_tuple pats -> pp_tuple pats
+    | Ppat_construct (name, arg) -> pp_construct name arg
+    | Ppat_variant (tag, arg) -> pp_variant tag arg
+    | Ppat_record (pats, closed) -> pp_record pats closed
+    | Ppat_array pats -> pp_array pats
+    | Ppat_or (p1, p2) -> pp_or p1 p2
+    | Ppat_constraint (p, ct) -> pp_constraint p ct
+    | Ppat_type pt -> pp_type pt
+    | Ppat_lazy p -> pp_lazy p
+    | Ppat_unpack mod_name -> pp_unpack mod_name None
+    | Ppat_exception p -> pp_exception p
+    | Ppat_extension ext -> Extension.pp Item ext
+    | Ppat_open (lid, p) -> pp_open lid p
 end
