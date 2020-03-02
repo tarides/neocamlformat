@@ -180,7 +180,12 @@ end = struct
     | PStr st -> nest 2 (break 1 ^^ Structure.pp st)
     | PSig sg -> nest 2 (colon ^/^ Signature.pp sg)
     | PTyp ct -> nest 2 (colon ^/^ Core_type.pp [] ct)
-    | PPat _ -> nest 2 (qmark ^/^ string "TODO")
+    | PPat (p, None) -> nest 2 (qmark ^/^ Pattern.pp [] p)
+    | PPat (p, Some e) ->
+      nest 2 (
+        qmark ^/^ Pattern.pp [] p ^/^
+        group (!^"when" ^/^ Expression.pp [] e)
+      )
 end
 
 and Core_type : sig
@@ -880,9 +885,9 @@ end
 and Module_expr : sig
   val pp : module_expr -> document
 end = struct
-  (* TODO: attributes *)
-  let rec pp { pmod_desc; _ } =
-    pp_desc pmod_desc
+  let rec pp { pmod_desc; pmod_attributes; _ } =
+    let doc = pp_desc pmod_desc in
+    Attribute.attach_to_item doc pmod_attributes
 
   and pp_desc = function
     | Pmod_ident lid -> Longident.pp lid.txt
@@ -931,9 +936,8 @@ end
 and Module_type : sig
   val pp : module_type -> document
 end = struct
-  (* TODO: attributes *)
-  let rec pp { pmty_desc; _ } =
-    pp_desc pmty_desc
+  let rec pp { pmty_desc; pmty_attributes; _ } =
+    Attribute.attach_to_item (pp_desc pmty_desc) pmty_attributes
 
   and pp_desc = function
     | Pmty_ident lid -> Longident.pp lid.txt
@@ -1139,9 +1143,11 @@ end = struct
         let prims = separate_map (break 1) (fun p -> dquotes (string p)) prims in
         break 1 ^^ group (equals ^/^ prims)
     in
-    (* TODO: attributes *)
-    prefix ~indent:2 ~spaces:1 (group (!^"val" ^/^ name))
-      (colon ^^ ifflat space (twice space) ^^ ctyp ^^ prim)
+    let doc =
+      prefix ~indent:2 ~spaces:1 (group (!^"val" ^/^ name))
+        (colon ^^ ifflat space (twice space) ^^ ctyp ^^ prim)
+    in
+    Attribute.attach_to_top_item doc vd.pval_attributes
 end
 
 and Type_declaration : sig
