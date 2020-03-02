@@ -11,7 +11,8 @@ let () =
       let sg = Parse.interface b in
       Pparsetree.Signature.pp sg
     else
-      PPrint.string "NOT IMPLEMENTED"
+      let st = Parse.implementation b in
+      Pparsetree.Structure.pp st
   in
   PPrint.ToChannel.pretty 10. width stdout doc;
   print_newline ();

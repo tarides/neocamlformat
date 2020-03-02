@@ -946,6 +946,33 @@ end = struct
 
 end
 
+and Module_binding : sig
+  val pp : module_binding -> document * document
+end = struct
+  (* TODO: proper printing *)
+  let pp { pmb_name; pmb_expr; pmb_attributes; _ } =
+    let lhs = string pmb_name.txt in
+    let rhs = Module_expr.pp pmb_expr in
+    let rhs = Attribute.attach_to_top_item rhs pmb_attributes in
+    lhs, rhs
+end
+
+and Module_type_declaration : sig
+  val pp : module_type_declaration -> document
+end = struct
+  let pp { pmtd_name; pmtd_type; pmtd_attributes; _ } =
+    let kw = !^"module type" in
+    let name = string pmtd_name.txt in
+    let doc =
+      match pmtd_type with
+      | None -> kw ^/^ name
+      | Some mty ->
+        let typ = Module_type.pp mty in
+        binding kw name typ
+    in
+    Attribute.attach_to_top_item doc pmtd_attributes
+end
+
 and Structure : sig
   val pp : structure -> document
 end = struct
@@ -953,23 +980,61 @@ end = struct
     let exp = Expression.pp exp in
     Attribute.attach_to_top_item exp attrs
 
+  and rec_flag = function
+    | Recursive -> string " rec"
+    | Nonrecursive -> empty
+
+  let pp_value rf vbs =
+    let vbs =
+      List.mapi (fun i vb ->
+        let lhs, rhs = Value_binding.pp Attached_to_structure_item vb in
+        let kw = if i = 0 then let_ ^^ rec_flag rf else and_ in
+        binding kw lhs rhs
+      ) vbs
+    in
+    separate hardline vbs
+
+  let pp_module mb =
+    let lhs, rhs = Module_binding.pp mb in
+    binding module_ lhs rhs
+
+  let pp_recmodule mbs =
+    let mbs =
+      List.mapi (fun i mb ->
+        let lhs, rhs = Module_binding.pp mb in
+        let kw = if i = 0 then group (module_ ^/^ !^"rec") else and_ in
+        binding kw lhs rhs
+      ) mbs
+    in
+    separate (repeat 2 hardline) mbs
+
+  let pp_include { pincl_mod; pincl_attributes; _ } =
+    let incl = Module_expr.pp pincl_mod in
+    Attribute.attach_to_top_item 
+      (group (!^"include" ^/^ incl))
+      pincl_attributes
+
+  let pp_extension ext attrs =
+    let ext = Extension.pp Structure_item ext in
+    Attribute.attach_to_top_item ext attrs
+
   let pp_item ({ pstr_desc; _ } as _item) =
     match pstr_desc with
     | Pstr_eval (e, attrs) -> pp_eval e attrs
-    | Pstr_value (_, _) -> (??)
-    | Pstr_primitive _ -> (??)
-    | Pstr_type (_, _) -> (??)
-    | Pstr_typext _ -> (??)
-    | Pstr_exception _ -> (??)
-    | Pstr_module _ -> (??)
-    | Pstr_recmodule _ -> (??)
-    | Pstr_modtype _ -> (??)
-    | Pstr_open _ -> (??)
-    | Pstr_class _ -> (??)
-    | Pstr_class_type _ -> (??)
-    | Pstr_include _ -> (??)
-    | Pstr_attribute _ -> (??)
-    | Pstr_extension (_, _) -> (??)
+    | Pstr_value (rf, vbs) -> pp_value rf vbs
+    | Pstr_primitive vd -> Value_description.pp vd
+    | Pstr_type (rf, tds) -> Type_declaration.pp_decl rf tds
+    | Pstr_typext _ -> assert false
+    | Pstr_exception _ -> assert false
+    | Pstr_module mb -> pp_module mb
+    | Pstr_recmodule mbs -> pp_recmodule mbs
+    | Pstr_modtype mtd -> Module_type_declaration.pp mtd
+    | Pstr_open od -> Open_declaration.pp od
+    | Pstr_class _ -> assert false
+    | Pstr_class_type _ -> assert false
+    | Pstr_include incl -> pp_include incl
+    | Pstr_attribute attr -> Attribute.pp Free_floating attr
+    | Pstr_extension (ext, attrs) -> pp_extension ext attrs
 
   let pp = separate_map (repeat 2 hardline) pp_item
 end
@@ -977,13 +1042,26 @@ end
 and Signature : sig
   val pp : signature -> document
 end = struct
+  let pp_extension ext attrs =
+    let ext = Extension.pp Structure_item ext in
+    Attribute.attach_to_top_item ext attrs
+
+  let pp_include { pincl_mod; pincl_attributes; _ } =
+    let incl = Module_type.pp pincl_mod in
+    Attribute.attach_to_top_item 
+      (group (!^"include" ^/^ incl))
+      pincl_attributes
+
   let pp_item ({ psig_desc; _ } as item) =
     match psig_desc with
     | Psig_value vd -> Value_description.pp vd
     | Psig_type (rf, decls) -> Type_declaration.pp_decl rf decls
     | Psig_typesubst decls -> Type_declaration.pp_subst decls
+    | Psig_modtype mtd -> Module_type_declaration.pp mtd
     | Psig_open od -> Open_description.pp od
+    | Psig_include incl -> pp_include incl
     | Psig_attribute attr -> Attribute.pp Free_floating attr
+    | Psig_extension (ext, attrs) -> pp_extension ext attrs
     | _ ->
       Pprintast.signature Format.err_formatter [ item ];
       assert false
@@ -1151,6 +1229,20 @@ and Open_description : sig
 end = struct
   let pp { popen_expr; popen_override; popen_attributes; _ } =
     let expr = Longident.pp popen_expr.txt in
+    let over =
+      match popen_override with
+      | Override -> bang
+      | _ -> empty
+    in
+    let opn = group (!^"open" ^^ over ^/^ expr) in
+    Attribute.attach_to_top_item opn popen_attributes
+end
+
+and Open_declaration : sig
+  val pp : open_declaration -> document
+end = struct
+  let pp { popen_expr; popen_override; popen_attributes; _ } =
+    let expr = Module_expr.pp popen_expr in
     let over =
       match popen_override with
       | Override -> bang
