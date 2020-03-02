@@ -1,0 +1,4 @@
+- match:
+  + leading-pipe: always | never | multiline-match
+  + compact: always | never | under-application
+
