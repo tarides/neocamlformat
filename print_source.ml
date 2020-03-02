@@ -544,7 +544,7 @@ end = struct
     prefix ^^ space ^^ cases
 
   and pp_function ~needs_parens case_list =
-    let doc = !^"function" ^/^ cases case_list in
+    let doc = !^"function" ^^ cases case_list in
     if needs_parens then
       parens doc
     else
