@@ -464,7 +464,7 @@ end = struct
     Attribute.attach_to_item desc pexp_attributes
 
   and pp_desc ~needs_parens = function
-    | Pexp_ident id -> Longident.pp id.txt
+    | Pexp_ident id -> pp_ident id
     | Pexp_constant c -> Constant.pp c
     | Pexp_let (rf, vbs, body) -> pp_let rf vbs body
     | Pexp_function cases -> pp_function ~needs_parens cases
@@ -502,6 +502,10 @@ end = struct
     | Pexp_letop letop -> pp_letop letop
     | Pexp_extension ext -> Extension.pp Item ext
     | Pexp_unreachable -> dot
+
+  and pp_ident id =
+    (* FIXME: move the grouping to [Longident.pp] *)
+    group (Longident.pp id.txt)
 
   and pp_let rf vbs body =
     let vbs =
