@@ -358,8 +358,8 @@ let pat_of_label ~loc lbl =
 
 let mk_newtypes ~loc newtypes exp =
   let mkexp = mkexp ~loc in
-  List.fold_right (fun newtype exp -> mkexp (Pexp_newtype (newtype, exp)))
-    newtypes exp
+  let newtypes = List.map (fun s -> Type s) newtypes in
+  mkexp (Pexp_fun (newtypes, exp))
 
 let wrap_type_annotation ~loc newtypes core_type body =
   let mkexp, ghtyp = mkexp ~loc, ghtyp ~loc in
@@ -2141,7 +2141,13 @@ expr:
       { Pexp_function $3, $2 }
   | FUN ext_attributes labeled_simple_pattern fun_def
       { let (l,o,p) = $3 in
-        Pexp_fun(l, o, p, $4), $2 }
+        let body = $4 in
+        let desc =
+          match body.pexp_desc with
+          | Pexp_fun (lst, body) -> Pexp_fun(Term (l, o, p) :: lst, body)
+          | _ -> Pexp_fun([ Term (l, o, p)], body)
+        in
+        desc, $2 }
   | FUN ext_attributes LPAREN TYPE lident_list RPAREN fun_def
       { (mk_newtypes ~loc:$sloc $5 $7).pexp_desc, $2 }
   | MATCH ext_attributes seq_expr WITH match_cases
@@ -2460,7 +2466,8 @@ strict_binding:
     EQUAL seq_expr
       { $2 }
   | labeled_simple_pattern fun_binding
-      { let (l, o, p) = $1 in ghexp ~loc:$sloc (Pexp_fun(l, o, p, $2)) }
+      { let (l, o, p) = $1 in
+        ghexp ~loc:$sloc (Pexp_fun([Term (l, o, p)], $2)) }
   | LPAREN TYPE lident_list RPAREN fun_binding
       { mk_newtypes ~loc:$sloc $3 $5 }
 ;
@@ -2486,7 +2493,12 @@ fun_def:
   | labeled_simple_pattern fun_def
       {
        let (l,o,p) = $1 in
-       ghexp ~loc:$sloc (Pexp_fun(l, o, p, $2))
+       let body = $2 in
+       match body.pexp_desc with
+       | Pexp_fun (lst, body) ->
+           ghexp ~loc:$sloc (Pexp_fun(Term (l, o, p) :: lst, body))
+       | _ ->
+           ghexp ~loc:$sloc (Pexp_fun([ Term (l, o, p)], body))
       }
   | LPAREN TYPE lident_list RPAREN fun_def
       { mk_newtypes ~loc:$sloc $3 $5 }

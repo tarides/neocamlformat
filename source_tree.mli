@@ -262,6 +262,11 @@ and expression =
      pexp_attributes: attributes; (* ... [@id1] [@id2] *)
     }
 
+and fun_param =
+  | Term of arg_label * expression option * pattern (* FIXME? location *)
+  | Type of string loc
+        (* fun (type t) -> E *)
+
 and expression_desc =
   | Pexp_ident of Longident.t loc
         (* x
@@ -275,7 +280,7 @@ and expression_desc =
          *)
   | Pexp_function of case list
         (* function P1 -> E1 | ... | Pn -> En *)
-  | Pexp_fun of arg_label * expression option * pattern * expression
+  | Pexp_fun of fun_param list * expression
         (* fun P -> E1                          (Simple, None)
            fun ~l:P -> E1                       (Labelled l, None)
            fun ?l:P -> E1                       (Optional l, None)
@@ -367,8 +372,6 @@ and expression_desc =
            for methods (not values). *)
   | Pexp_object of class_structure
         (* object ... end *)
-  | Pexp_newtype of string loc * expression
-        (* fun (type t) -> E *)
   | Pexp_pack of module_expr
         (* (module ME)
 

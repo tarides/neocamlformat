@@ -4,6 +4,11 @@ open PPrint
 
 let prefix ~indent:n ~spaces:b l r = prefix n b l r
 
+let left_assoc_map ~sep ~f = function
+  | [] -> empty
+  | x :: xs ->
+    List.fold_left (fun doc elt -> group (doc ^^ sep ^^ f elt)) (f x) xs
+
 module Binding = struct
   type t = {
     lhs : document;
@@ -468,8 +473,8 @@ end = struct
     | Pexp_constant c -> Constant.pp c
     | Pexp_let (rf, vbs, body) -> pp_let rf vbs body
     | Pexp_function cases -> pp_function ~needs_parens cases
-    | Pexp_fun (lbl, default, pat, exp) ->
-      pp_fun ~needs_parens lbl default pat exp
+    | Pexp_fun (params, exp) ->
+      pp_fun ~needs_parens params exp
     | Pexp_apply (expr, args) -> pp_apply ~needs_parens expr args
     | Pexp_match (arg, cases) -> pp_match ~needs_parens arg cases
     | Pexp_try (arg, cases) -> pp_try ~needs_parens arg cases
@@ -496,7 +501,6 @@ end = struct
     | Pexp_lazy exp -> pp_lazy ~needs_parens exp
     | Pexp_poly _ -> assert false
     | Pexp_object cl -> pp_object cl
-    | Pexp_newtype (ty, exp) -> pp_newtype ~needs_parens ty exp
     | Pexp_pack me -> pp_pack me None
     | Pexp_open (od, exp) -> pp_open od exp
     | Pexp_letop letop -> pp_letop letop
@@ -547,7 +551,7 @@ end = struct
     else
       doc
 
-  and parameter lbl default pat =
+  and term_parameter lbl default pat =
     let suffix lbl =
       match pat.ppat_desc with
       | Ppat_var v when lbl = v.txt -> empty
@@ -564,15 +568,22 @@ end = struct
         qmark ^^ string lbl ^^ colon ^^
         parens (group (Pattern.pp pat ^/^ equals ^/^ pp def))
 
-  and fun_ ~arg ~body =
+  and newtype typ =
+    parens (!^"type" ^/^ string typ.txt)
+
+  and parameter = function
+    | Term (lbl, default, pat) -> term_parameter lbl default pat
+    | Type typ -> newtype typ
+
+  and fun_ ~args ~body =
     prefix ~indent:2 ~spaces:1
-      (!^"fun" ^/^ arg ^/^ arrow)
+      (group ((prefix ~indent:2 ~spaces:1 !^"fun" args) ^/^ arrow))
       body
 
-  and pp_fun ~needs_parens lbl default pat exp =
+  and pp_fun ~needs_parens params exp =
     let body = pp exp in
-    let arg = parameter lbl default pat in
-    let doc = fun_ ~arg ~body in
+    let args = left_assoc_map ~sep:(break 1) ~f:parameter params in
+    let doc = fun_ ~args ~body in
     if needs_parens then
       parens doc
     else
@@ -840,14 +851,6 @@ end = struct
       string "end"
     )
 
-  and pp_newtype ~needs_parens typ exp =
-    let typ = parens (!^"type" ^/^ string typ.txt) in
-    let exp = pp exp in
-    let doc = fun_ ~arg:typ ~body:exp in
-    if needs_parens then
-      parens doc
-    else
-      doc
 
   and pp_pack me constr_opt =
     let me = Module_expr.pp me in
