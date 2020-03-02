@@ -499,7 +499,6 @@ end = struct
     | Pexp_letexception (exn, exp) -> pp_letexception exn exp
     | Pexp_assert exp -> pp_assert exp
     | Pexp_lazy exp -> pp_lazy ~needs_parens exp
-    | Pexp_poly _ -> assert false
     | Pexp_object cl -> pp_object cl
     | Pexp_pack me -> pp_pack me None
     | Pexp_open (od, exp) -> pp_open od exp
@@ -551,30 +550,6 @@ end = struct
     else
       doc
 
-  and term_parameter lbl default pat =
-    let suffix lbl =
-      match pat.ppat_desc with
-      | Ppat_var v when lbl = v.txt -> empty
-      | _ -> colon ^^ Pattern.pp (* FIXME: needs parens = true *) pat
-    in
-    match lbl with
-    | Nolabel -> Pattern.pp pat
-    | Labelled lbl -> tilde ^^ string lbl ^^ suffix lbl
-    | Optional lbl ->
-      match default with
-      | None -> qmark ^^ string lbl ^^ suffix lbl
-      | Some def ->
-        (* TODO: punning *)
-        qmark ^^ string lbl ^^ colon ^^
-        parens (group (Pattern.pp pat ^/^ equals ^/^ pp def))
-
-  and newtype typ =
-    parens (!^"type" ^/^ string typ.txt)
-
-  and parameter = function
-    | Term (lbl, default, pat) -> term_parameter lbl default pat
-    | Type typ -> newtype typ
-
   and fun_ ~args ~body =
     prefix ~indent:2 ~spaces:1
       (group ((prefix ~indent:2 ~spaces:1 !^"fun" args) ^/^ arrow))
@@ -582,7 +557,7 @@ end = struct
 
   and pp_fun ~needs_parens params exp =
     let body = pp exp in
-    let args = left_assoc_map ~sep:(break 1) ~f:parameter params in
+    let args = left_assoc_map ~sep:(break 1) ~f:Fun_param.pp params in
     let doc = fun_ ~args ~body in
     if needs_parens then
       parens doc
@@ -872,11 +847,54 @@ end = struct
     assert false
 end
 
+and Fun_param : sig
+  val pp : fun_param -> document
+end = struct
+  let term lbl default pat =
+    let suffix lbl =
+      match pat.ppat_desc with
+      | Ppat_var v when lbl = v.txt -> empty
+      | _ -> colon ^^ Pattern.pp (* FIXME: needs parens = true *) pat
+    in
+    match lbl with
+    | Nolabel -> Pattern.pp pat
+    | Labelled lbl -> tilde ^^ string lbl ^^ suffix lbl
+    | Optional lbl ->
+      match default with
+      | None -> qmark ^^ string lbl ^^ suffix lbl
+      | Some def ->
+        (* TODO: punning *)
+        qmark ^^ string lbl ^^ colon ^^
+        parens (group (Pattern.pp pat ^/^ equals ^/^ Expression.pp def))
+
+  let newtype typ =
+    parens (!^"type" ^/^ string typ.txt)
+
+  let pp = function
+    | Term (lbl, default, pat) -> term lbl default pat
+    | Type typ -> newtype typ
+end
+
 and Value_binding : sig
   val pp : Attribute.kind -> value_binding -> document * document
 end = struct
-  let pp attr_kind { pvb_pat; pvb_expr; pvb_attributes; _ } =
-    let lhs = Pattern.pp pvb_pat in
+
+  let pp attr_kind
+      { pvb_pat; pvb_params; pvb_type; pvb_expr; pvb_attributes; _ } =
+    let lhs =
+      let pat = Pattern.pp pvb_pat in
+      let params =
+        match pvb_params with
+        | [] -> empty
+        | lst -> break 1 ^^ left_assoc_map ~sep:(break 1) ~f:Fun_param.pp lst
+      in
+      let typ =
+        let ty1, ty2 = pvb_type in
+        let pp ty = break 1 ^^ Core_type.pp ty in
+        optional pp ty1 ^^ optional pp ty2
+      in
+      pat ^^ params ^^ typ
+    in
     let rhs = Expression.pp pvb_expr in
     let rhs = Attribute.attach attr_kind rhs pvb_attributes in
     lhs, rhs

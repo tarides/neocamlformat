@@ -176,8 +176,6 @@ module Exp:
       -> expression
     val assert_: ?loc:loc -> ?attrs:attrs -> expression -> expression
     val lazy_: ?loc:loc -> ?attrs:attrs -> expression -> expression
-    val poly: ?loc:loc -> ?attrs:attrs -> expression -> core_type option
-              -> expression
     val object_: ?loc:loc -> ?attrs:attrs -> class_structure -> expression
     val newtype: ?loc:loc -> ?attrs:attrs -> str -> expression -> expression
     val pack: ?loc:loc -> ?attrs:attrs -> module_expr -> expression
@@ -364,7 +362,8 @@ module Incl:
 module Vb:
   sig
     val mk: ?loc: loc -> ?attrs:attrs -> ?docs:docs -> ?text:text ->
-      pattern -> expression -> value_binding
+      pattern -> fun_param list -> core_type option * core_type option ->
+      expression -> value_binding
   end
 
 
@@ -455,7 +454,7 @@ module Ci:
   sig
     val mk: ?loc:loc -> ?attrs:attrs -> ?docs:docs -> ?text:text ->
       ?virt:virtual_flag -> ?params:(core_type * variance) list ->
-      str -> 'a -> 'a class_infos
+      str -> fun_param list -> class_type option -> 'a -> 'a class_infos
   end
 
 (** Class signatures *)

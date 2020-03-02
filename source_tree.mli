@@ -365,11 +365,6 @@ and expression_desc =
            type-checker. *)
   | Pexp_lazy of expression
         (* lazy E *)
-  | Pexp_poly of expression * core_type option
-        (* Used for method bodies.
-
-           Can only be used as the expression under Cfk_concrete
-           for methods (not values). *)
   | Pexp_object of class_structure
         (* object ... end *)
   | Pexp_pack of module_expr
@@ -407,6 +402,8 @@ and binding_op =
   {
     pbop_op : string loc;
     pbop_pat : pattern;
+    pbop_params: fun_param list;
+    pbop_type: core_type option * core_type option;
     pbop_exp : expression;
     pbop_loc : Location.t;
   }
@@ -603,6 +600,8 @@ and 'a class_infos =
      pci_virt: virtual_flag;
      pci_params: (core_type * variance) list;
      pci_name: string loc;
+     pci_term_params: fun_param list;
+     pci_type: class_type option;
      pci_expr: 'a;
      pci_loc: Location.t;
      pci_attributes: attributes;  (* ... [@@id1] [@@id2] *)
@@ -633,7 +632,7 @@ and class_expr_desc =
            ['a1, ..., 'an] c *)
   | Pcl_structure of class_structure
         (* object ... end *)
-  | Pcl_fun of arg_label * expression option * pattern * class_expr
+  | Pcl_fun of fun_param list * class_expr
         (* fun P -> CE                          (Simple, None)
            fun ~l:P -> CE                       (Labelled l, None)
            fun ?l:P -> CE                       (Optional l, None)
@@ -700,7 +699,9 @@ and class_field_desc =
 
 and class_field_kind =
   | Cfk_virtual of core_type
-  | Cfk_concrete of override_flag * expression
+  | Cfk_concrete of
+      override_flag * fun_param list * (core_type option * core_type option)
+      * expression
 
 and class_declaration = class_expr class_infos
 
@@ -930,6 +931,8 @@ and structure_item_desc =
 and value_binding =
   {
     pvb_pat: pattern;
+    pvb_params: fun_param list;
+    pvb_type: core_type option * core_type option;
     pvb_expr: expression;
     pvb_attributes: attributes;
     pvb_loc: Location.t;

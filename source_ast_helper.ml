@@ -206,7 +206,6 @@ module Exp = struct
   let letexception ?loc ?attrs a b = mk ?loc ?attrs (Pexp_letexception (a, b))
   let assert_ ?loc ?attrs a = mk ?loc ?attrs (Pexp_assert a)
   let lazy_ ?loc ?attrs a = mk ?loc ?attrs (Pexp_lazy a)
-  let poly ?loc ?attrs a b = mk ?loc ?attrs (Pexp_poly (a, b))
   let object_ ?loc ?attrs a = mk ?loc ?attrs (Pexp_object a)
   let newtype ?loc ?attrs a b = mk ?loc ?attrs (Pexp_fun ([Type a], b))
   let pack ?loc ?attrs a = mk ?loc ?attrs (Pexp_pack a)
@@ -227,6 +226,8 @@ module Exp = struct
     {
       pbop_op = op;
       pbop_pat = pat;
+      pbop_params = [];
+      pbop_type = (None, None);
       pbop_exp = exp;
       pbop_loc = loc;
     }
@@ -322,7 +323,7 @@ module Cl = struct
 
   let constr ?loc ?attrs a b = mk ?loc ?attrs (Pcl_constr (a, b))
   let structure ?loc ?attrs a = mk ?loc ?attrs (Pcl_structure a)
-  let fun_ ?loc ?attrs a b c d = mk ?loc ?attrs (Pcl_fun (a, b, c, d))
+  let fun_ ?loc ?attrs a b c d = mk ?loc ?attrs (Pcl_fun ([Term (a, b, c)], d))
   let apply ?loc ?attrs a b = mk ?loc ?attrs (Pcl_apply (a, b))
   let let_ ?loc ?attrs a b c = mk ?loc ?attrs (Pcl_let (a, b, c))
   let constraint_ ?loc ?attrs a b = mk ?loc ?attrs (Pcl_constraint (a, b))
@@ -394,7 +395,7 @@ module Cf = struct
       f_txt
 
   let virtual_ ct = Cfk_virtual ct
-  let concrete o e = Cfk_concrete (o, e)
+  let concrete o e = Cfk_concrete (o, [], (None, None), e)
 
   let attr d a = {d with pcf_attributes = d.pcf_attributes @ [a]}
 
@@ -485,9 +486,11 @@ end
 
 module Vb = struct
   let mk ?(loc = !default_loc) ?(attrs = []) ?(docs = empty_docs)
-        ?(text = []) pat expr =
+        ?(text = []) pat params typ expr =
     {
      pvb_pat = pat;
+     pvb_params = params;
+     pvb_type = typ;
      pvb_expr = expr;
      pvb_attributes =
        add_text_attrs text (add_docs_attrs docs attrs);
@@ -498,11 +501,13 @@ end
 module Ci = struct
   let mk ?(loc = !default_loc) ?(attrs = [])
         ?(docs = empty_docs) ?(text = [])
-        ?(virt = Concrete) ?(params = []) name expr =
+        ?(virt = Concrete) ?(params = []) name term_params typ expr =
     {
      pci_virt = virt;
      pci_params = params;
      pci_name = name;
+     pci_term_params = term_params;
+     pci_type = typ;
      pci_expr = expr;
      pci_attributes =
        add_text_attrs text (add_docs_attrs docs attrs);

@@ -361,13 +361,6 @@ let mk_newtypes ~loc newtypes exp =
   let newtypes = List.map (fun s -> Type s) newtypes in
   mkexp (Pexp_fun (newtypes, exp))
 
-let wrap_type_annotation ~loc newtypes core_type body =
-  let mkexp, ghtyp = mkexp ~loc, ghtyp ~loc in
-  let mk_newtypes = mk_newtypes ~loc in
-  let exp = mkexp(Pexp_constraint(body,core_type)) in
-  let exp = mk_newtypes newtypes exp in
-  (exp, ghtyp(Ptyp_poly(newtypes, Typ.varify_constructors newtypes core_type)))
-
 let wrap_exp_attrs ~loc body (ext, attrs) =
   let ghexp = ghexp ~loc in
   (* todo: keep exact location for the entire attribute *)
@@ -449,6 +442,8 @@ let extra_rhs_core_type ct ~pos =
 
 type let_binding =
   { lb_pattern: pattern;
+    lb_params: fun_param list;
+    lb_type: core_type option * core_type option;
     lb_expression: expression;
     lb_attributes: attributes;
     lb_docs: docs Lazy.t;
@@ -461,9 +456,11 @@ type let_bindings =
     lbs_extension: string Asttypes.loc option;
     lbs_loc: Location.t }
 
-let mklb first ~loc (p, e) attrs =
+let mklb first ~loc (p, (params, typ, e)) attrs =
   {
     lb_pattern = p;
+    lb_params = params;
+    lb_type = typ;
     lb_expression = e;
     lb_attributes = attrs;
     lb_docs = symbol_docs_lazy loc;
@@ -490,7 +487,7 @@ let val_of_let_bindings ~loc lbs =
          Vb.mk ~loc:lb.lb_loc ~attrs:lb.lb_attributes
            ~docs:(Lazy.force lb.lb_docs)
            ~text:(Lazy.force lb.lb_text)
-           lb.lb_pattern lb.lb_expression)
+           lb.lb_pattern lb.lb_params lb.lb_type lb.lb_expression)
       lbs.lbs_bindings
   in
   let str = mkstr ~loc (Pstr_value(lbs.lbs_rec, List.rev bindings)) in
@@ -503,7 +500,7 @@ let expr_of_let_bindings ~loc lbs body =
     List.map
       (fun lb ->
          Vb.mk ~loc:lb.lb_loc ~attrs:lb.lb_attributes
-           lb.lb_pattern lb.lb_expression)
+           lb.lb_pattern lb.lb_params lb.lb_type lb.lb_expression)
       lbs.lbs_bindings
   in
     mkexp_attrs ~loc (Pexp_let(lbs.lbs_rec, List.rev bindings, body))
@@ -514,7 +511,7 @@ let class_of_let_bindings ~loc lbs body =
     List.map
       (fun lb ->
          Vb.mk ~loc:lb.lb_loc ~attrs:lb.lb_attributes
-           lb.lb_pattern lb.lb_expression)
+           lb.lb_pattern lb.lb_params lb.lb_type lb.lb_expression)
       lbs.lbs_bindings
   in
     (* Our use of let_bindings(no_ext) guarantees the following: *)
@@ -1666,8 +1663,9 @@ module_subst:
     let attrs = attrs1 @ attrs2 in
     let loc = make_loc $sloc in
     let docs = symbol_docs $sloc in
+    let term_params, typ, body = body in
     ext,
-    Ci.mk id body ~virt ~params ~attrs ~loc ~docs
+    Ci.mk id term_params typ body ~virt ~params ~attrs ~loc ~docs
   }
 ;
 %inline and_class_declaration:
@@ -1683,19 +1681,20 @@ module_subst:
     let loc = make_loc $sloc in
     let docs = symbol_docs $sloc in
     let text = symbol_text $symbolstartpos in
-    Ci.mk id body ~virt ~params ~attrs ~loc ~text ~docs
+    let term_params, ty, body = body in
+    Ci.mk id term_params ty body ~virt ~params ~attrs ~loc ~text ~docs
   }
 ;
 
 class_fun_binding:
     EQUAL class_expr
-      { $2 }
-  | mkclass(
-      COLON class_type EQUAL class_expr
-        { Pcl_constraint($4, $2) }
-    | labeled_simple_pattern class_fun_binding
-      { let (l,o,p) = $1 in Pcl_fun(l, o, p, $2) }
-    ) { $1 }
+      { [], None, $2 }
+  | COLON class_type EQUAL class_expr
+      { [], Some $2, $4 }
+  | labeled_simple_pattern class_fun_binding
+      { let (l,o,p) = $1 in
+        let params, typ, exp = $2 in
+        (Term (l, o, p) :: params), typ, exp }
 ;
 
 formal_class_parameters:
@@ -1750,7 +1749,13 @@ class_fun_def:
   mkclass(
     labeled_simple_pattern MINUSGREATER e = class_expr
   | labeled_simple_pattern e = class_fun_def
-      { let (l,o,p) = $1 in Pcl_fun(l, o, p, e) }
+      { let (l,o,p) = $1 in
+        let params, e =
+          match e.pcl_desc with
+          | Pcl_fun (params, e) -> params, e
+          | _ -> [], e
+        in
+        Pcl_fun(Term (l, o, p) :: params, e) }
   ) { $1 }
 ;
 %inline class_structure:
@@ -1804,12 +1809,10 @@ value:
     label = mkrhs(label) COLON ty = core_type
       { (label, mutable_, Cfk_virtual ty), attrs }
   | override_flag attributes mutable_flag mkrhs(label) EQUAL seq_expr
-      { ($4, $3, Cfk_concrete ($1, $6)), $2 }
+      { ($4, $3, Cfk_concrete ($1, [], (None, None), $6)), $2 }
   | override_flag attributes mutable_flag mkrhs(label) type_constraint
     EQUAL seq_expr
-      { let e = mkexp_constraint ~loc:$sloc $7 $5 in
-        ($4, $3, Cfk_concrete ($1, e)), $2
-      }
+      { ($4, $3, Cfk_concrete ($1, [], $5, $7)), $2 }
 ;
 method_:
     no_override_flag
@@ -1818,28 +1821,20 @@ method_:
     label = mkrhs(label) COLON ty = poly_type
       { (label, private_, Cfk_virtual ty), attrs }
   | override_flag attributes private_flag mkrhs(label) strict_binding
-      { let e = $5 in
-        let loc = Location.(e.pexp_loc.loc_start, e.pexp_loc.loc_end) in
-        ($4, $3,
-        Cfk_concrete ($1, ghexp ~loc (Pexp_poly (e, None)))), $2 }
+      { let params, typ, e = $5 in
+        ($4, $3, Cfk_concrete ($1, params, typ, e)), $2 }
   | override_flag attributes private_flag mkrhs(label)
     COLON poly_type EQUAL seq_expr
-      { let poly_exp =
-          let loc = ($startpos($6), $endpos($8)) in
-          ghexp ~loc (Pexp_poly($8, Some $6)) in
-        ($4, $3, Cfk_concrete ($1, poly_exp)), $2 }
+      { ($4, $3, Cfk_concrete ($1, [], (Some $6, None), $8)), $2 }
   | override_flag attributes private_flag mkrhs(label) COLON TYPE lident_list
     DOT core_type EQUAL seq_expr
-      { let poly_exp_loc = ($startpos($7), $endpos($11)) in
-        let poly_exp =
-          let exp, poly =
-            (* it seems odd to use the global ~loc here while poly_exp_loc
-               is tighter, but this is what ocamlyacc does;
-               TODO improve parser.mly *)
-            wrap_type_annotation ~loc:$sloc $7 $9 $11 in
-          ghexp ~loc:poly_exp_loc (Pexp_poly(exp, Some poly)) in
-        ($4, $3,
-        Cfk_concrete ($1, poly_exp)), $2 }
+      { let newtypes = $7 in
+        let core_type = $9 in
+        let typ =
+          ghtyp ~loc:($startpos($7), $endpos($9))
+            (Ptyp_poly(newtypes, (* don't varify constructors *) core_type))
+        in
+        ($4, $3, Cfk_concrete ($1, [], (Some typ, None), $11)), $2 }
 ;
 
 /* Class types */
@@ -1957,7 +1952,7 @@ constrain_field:
       let loc = make_loc $sloc in
       let docs = symbol_docs $sloc in
       ext,
-      Ci.mk id cty ~virt ~params ~attrs ~loc ~docs
+      Ci.mk id [] None cty ~virt ~params ~attrs ~loc ~docs
     }
 ;
 %inline and_class_description:
@@ -1974,7 +1969,7 @@ constrain_field:
       let loc = make_loc $sloc in
       let docs = symbol_docs $sloc in
       let text = symbol_text $symbolstartpos in
-      Ci.mk id cty ~virt ~params ~attrs ~loc ~text ~docs
+      Ci.mk id [] None cty ~virt ~params ~attrs ~loc ~text ~docs
     }
 ;
 class_type_declarations:
@@ -1996,7 +1991,7 @@ class_type_declarations:
       let loc = make_loc $sloc in
       let docs = symbol_docs $sloc in
       ext,
-      Ci.mk id csig ~virt ~params ~attrs ~loc ~docs
+      Ci.mk id [] None csig ~virt ~params ~attrs ~loc ~docs
     }
 ;
 %inline and_class_type_declaration:
@@ -2013,7 +2008,7 @@ class_type_declarations:
       let loc = make_loc $sloc in
       let docs = symbol_docs $sloc in
       let text = symbol_text $symbolstartpos in
-      Ci.mk id csig ~virt ~params ~attrs ~loc ~text ~docs
+      Ci.mk id [] None csig ~virt ~params ~attrs ~loc ~text ~docs
     }
 ;
 
@@ -2091,10 +2086,14 @@ expr:
   | let_bindings(ext) IN seq_expr
       { expr_of_let_bindings ~loc:$sloc $1 $3 }
   | pbop_op = mkrhs(LETOP) bindings = letop_bindings IN body = seq_expr
-      { let (pbop_pat, pbop_exp, rev_ands) = bindings in
+      { let (pbop_pat, (pbop_params, pbop_type, pbop_exp), rev_ands) =
+          bindings
+        in
         let ands = List.rev rev_ands in
         let pbop_loc = make_loc $sloc in
-        let let_ = {pbop_op; pbop_pat; pbop_exp; pbop_loc} in
+        let let_ =
+          {pbop_op; pbop_pat; pbop_params; pbop_type; pbop_exp; pbop_loc}
+        in
         mkexp ~loc:$sloc (Pexp_letop{ let_; ands; body}) }
   | expr COLONCOLON expr
       { mkexp_cons ~loc:$sloc $loc($2) (ghexp ~loc:$sloc (Pexp_tuple[$1;$3])) }
@@ -2376,37 +2375,24 @@ let_binding_body:
     let_ident strict_binding
       { ($1, $2) }
   | let_ident type_constraint EQUAL seq_expr
-      { let v = $1 in (* PR#7344 *)
-        let t =
-          match $2 with
-            Some t, None -> t
-          | _, Some t -> t
-          | _ -> assert false
-        in
-        let loc = Location.(t.ptyp_loc.loc_start, t.ptyp_loc.loc_end) in
-        let typ = ghtyp ~loc (Ptyp_poly([],t)) in
-        let patloc = ($startpos($1), $endpos($2)) in
-        (ghpat ~loc:patloc (Ppat_constraint(v, typ)),
-         mkexp_constraint ~loc:$sloc $4 $2) }
+      { $1, ([], $2, $4) }
   | let_ident COLON typevar_list DOT core_type EQUAL seq_expr
       (* TODO: could replace [typevar_list DOT core_type]
                with [mktyp(poly(core_type))]
                and simplify the semantic action? *)
       { let typloc = ($startpos($3), $endpos($5)) in
-        let patloc = ($startpos($1), $endpos($5)) in
-        (ghpat ~loc:patloc
-           (Ppat_constraint($1, ghtyp ~loc:typloc (Ptyp_poly($3,$5)))),
-         $7) }
+        let typ = ghtyp ~loc:typloc (Ptyp_poly($3,$5)) in
+        $1, ([], (Some typ, None), $7) }
   | let_ident COLON TYPE lident_list DOT core_type EQUAL seq_expr
-      { let exp, poly =
-          wrap_type_annotation ~loc:$sloc $4 $6 $8 in
-        let loc = ($startpos($1), $endpos($6)) in
-        (ghpat ~loc (Ppat_constraint($1, poly)), exp) }
+      { let typ =
+          ghtyp ~loc:($startpos($3), $endpos($6))
+            (Ptyp_poly ($4, $6))
+        in
+        ($1, ([], (Some typ, None), $8)) }
   | pattern_no_exn EQUAL seq_expr
-      { ($1, $3) }
+      { ($1, ([], (None, None), $3)) }
   | simple_pattern_not_ident COLON core_type EQUAL seq_expr
-      { let loc = ($startpos($1), $endpos($3)) in
-        (ghpat ~loc (Ppat_constraint($1, $3)), $5) }
+      { ($1, ([], (Some $3, None), $5)) }
 ;
 (* The formal parameter EXT can be instantiated with ext or no_ext
    so as to indicate whether an extension is allowed or disallowed. *)
@@ -2440,10 +2426,9 @@ letop_binding_body:
     pat = let_ident exp = strict_binding
       { (pat, exp) }
   | pat = simple_pattern COLON typ = core_type EQUAL exp = seq_expr
-      { let loc = ($startpos(pat), $endpos(typ)) in
-        (ghpat ~loc (Ppat_constraint(pat, typ)), exp) }
+      { pat, ([], (Some typ, None), exp) }
   | pat = pattern_no_exn EQUAL exp = seq_expr
-      { (pat, exp) }
+      { (pat, ([], (None, None), exp)) }
 ;
 letop_bindings:
     body = letop_binding_body
@@ -2451,25 +2436,31 @@ letop_bindings:
         let_pat, let_exp, [] }
   | bindings = letop_bindings pbop_op = mkrhs(ANDOP) body = let_binding_body
       { let let_pat, let_exp, rev_ands = bindings in
-        let pbop_pat, pbop_exp = body in
+        let pbop_pat, (pbop_params, pbop_type, pbop_exp) = body in
         let pbop_loc = make_loc $sloc in
-        let and_ = {pbop_op; pbop_pat; pbop_exp; pbop_loc} in
+        let and_ =
+          {pbop_op; pbop_pat; pbop_params; pbop_type; pbop_exp; pbop_loc}
+        in
         let_pat, let_exp, and_ :: rev_ands }
 ;
 fun_binding:
     strict_binding
       { $1 }
   | type_constraint EQUAL seq_expr
-      { mkexp_constraint ~loc:$sloc $3 $1 }
+      { [], $1, $3 }
 ;
 strict_binding:
     EQUAL seq_expr
-      { $2 }
+      { [], (None, None), $2 }
   | labeled_simple_pattern fun_binding
       { let (l, o, p) = $1 in
-        ghexp ~loc:$sloc (Pexp_fun([Term (l, o, p)], $2)) }
+        let param = Term (l, o, p) in
+        let params, typ, expr = $2 in
+        param :: params, typ, expr }
   | LPAREN TYPE lident_list RPAREN fun_binding
-      { mk_newtypes ~loc:$sloc $3 $5 }
+      { let param = List.map (fun t -> Type t) $3 in
+        let params, typ, expr = $5 in
+        param @ params, typ, expr }
 ;
 %inline match_cases:
   xs = preceded_or_separated_nonempty_llist(BAR, match_case)
