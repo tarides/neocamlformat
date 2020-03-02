@@ -216,11 +216,11 @@ end = struct
       | Optional l -> qmark ^^ string l ^^ colon ^^ break 0 ^^ lhs
     in
     let rhs = pp (List.tl ps) ct2 in
-    let arrow = infix 2 1 lhs arrow rhs in
+    let arrow = infix 2 1 arrow lhs rhs in
     Printing_stack.parenthesize ps arrow
 
-  and pp_tuple ps lst =
-    let tuple = separate_map star (pp ps) lst in
+  and pp_tuple ps l =
+    let tuple = left_assoc_map ~sep:(break 1 ^^ star ^^ break 1) ~f:(pp ps) l in
     Printing_stack.parenthesize ps tuple
 
   and pp_constr name args =
@@ -1050,7 +1050,7 @@ end = struct
           { lhs; rhs; typ = None }
       ) vbs
     in
-    separate hardline vbs
+    separate (twice hardline) vbs
 
   let pp_module mb =
     Binding.pp ~keyword:module_ (Module_binding.pp mb)
@@ -1062,7 +1062,7 @@ end = struct
         Binding.pp ~keyword (Module_binding.pp mb)
       ) mbs
     in
-    separate (repeat 2 hardline) mbs
+    separate (twice hardline) mbs
 
   let pp_include { pincl_mod; pincl_attributes; _ } =
     let incl = Module_expr.pp pincl_mod in
@@ -1092,7 +1092,7 @@ end = struct
     | Pstr_attribute attr -> Attribute.pp Free_floating attr
     | Pstr_extension (ext, attrs) -> pp_extension ext attrs
 
-  let pp = separate_map (repeat 2 hardline) pp_item
+  let pp = separate_map (twice hardline) pp_item
 end
 
 and Signature : sig
@@ -1120,7 +1120,7 @@ end = struct
     | Psig_extension (ext, attrs) -> pp_extension ext attrs
     | _ -> assert false
 
-  let pp = separate_map (repeat 2 hardline) pp_item
+  let pp = separate_map (twice hardline) pp_item
 end
 
 and Value_description : sig
@@ -1137,7 +1137,7 @@ end = struct
         break 1 ^^ group (equals ^/^ prims)
     in
     (* TODO: attributes *)
-    prefix ~indent:2 ~spaces:1 (!^"val" ^/^ name)
+    prefix ~indent:2 ~spaces:1 (group (!^"val" ^/^ name))
       (group ((colon ^/^ ctyp)) ^^ prim)
 end
 
@@ -1263,7 +1263,7 @@ end = struct
         Binding.pp ~keyword { lhs; rhs; typ = None }
       ) decls
     in
-    separate hardline decls
+    separate (twice hardline) decls
 
   let pp_subst decls =
     let binder = !^":=" in
