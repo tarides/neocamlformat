@@ -325,14 +325,16 @@ end = struct
 
   and pp_tuple lst =
     nest 2 (
-      separate_map (star ^^ break 1) pp lst
+      separate_map (comma ^^ break 1) pp lst
     )
 
   and pp_construct name arg_opt =
     let name = Longident.pp name.txt in
     match arg_opt with
     | None -> name
-    | Some p -> prefix ~indent:2 ~spaces:1 name (parens (pp p))
+    | Some p ->
+      (* FIXME: don't put parens when only one argument. *)
+      prefix ~indent:2 ~spaces:1 name (parens (pp p))
 
   and pp_variant tag arg_opt =
     let tag = Polymorphic_variant_tag.pp tag in
@@ -484,7 +486,7 @@ end = struct
     in
     let vbs = separate hardline vbs in
     let body = pp body in
-    vbs ^/^ in_ ^/^ body
+    group (vbs ^/^ in_) ^/^ body
 
   and rec_flag = function
     | Recursive -> string " rec"
@@ -500,7 +502,7 @@ end = struct
         let guard = pp guard in
         lhs ^/^ group (!^"when" ^/^ guard)
     in
-    prefix ~indent:2 ~spaces:1 (lhs ^/^ arrow) rhs
+    prefix ~indent:2 ~spaces:1 (group (lhs ^/^ arrow)) rhs
 
   and cases case_list =
     let cases = separate_map (break 1 ^^ pipe ^^ space) case case_list in
@@ -598,7 +600,9 @@ end = struct
       doc
 
   and pp_tuple ~needs_parens exps =
-    let doc = separate_map (comma ^^ break 1) (pp ~needs_parens:true) exps in
+    let doc =
+      group (separate_map (comma ^^ break 1) (pp ~needs_parens:true) exps)
+    in
     if needs_parens then
       parens doc
     else
@@ -841,10 +845,8 @@ end = struct
   let pp attr_kind { pvb_pat; pvb_expr; pvb_attributes; _ } =
     let lhs = Pattern.pp pvb_pat in
     let rhs = Expression.pp pvb_expr in
-    let attrs =
-      separate_map (break 0) (Attribute.pp attr_kind) pvb_attributes
-    in
-    lhs, rhs ^/^ attrs (* FIXME: is this correct? *)
+    let rhs = Attribute.attach attr_kind rhs pvb_attributes in
+    lhs, rhs
 end
 
 and Module_expr : sig
