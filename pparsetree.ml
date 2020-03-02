@@ -1,5 +1,5 @@
 open Asttypes
-open Parsetree
+open Source_tree
 open PPrint
 
 let prefix ~indent:n ~spaces:b l r = prefix n b l r

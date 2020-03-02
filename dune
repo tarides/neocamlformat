@@ -1,3 +1,9 @@
 (executable
  (name main)
- (libraries compiler-libs.common pprint))
+ (libraries compiler-libs.common pprint menhirLib)
+ (modules_without_implementation source_tree))
+
+(ocamllex source_lexer)
+(menhir
+  (modules source_parser)
+  (flags --table))
