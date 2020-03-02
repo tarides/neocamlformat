@@ -63,7 +63,7 @@ module Typ = struct
 
   let any ?loc ?attrs () = mk ?loc ?attrs Ptyp_any
   let var ?loc ?attrs a = mk ?loc ?attrs (Ptyp_var a)
-  let arrow ?loc ?attrs a b c = mk ?loc ?attrs (Ptyp_arrow (a, b, c))
+  let arrow ?loc ?attrs a b c = mk ?loc ?attrs (Ptyp_arrow ([a, b], c))
   let tuple ?loc ?attrs a = mk ?loc ?attrs (Ptyp_tuple a)
   let constr ?loc ?attrs a b = mk ?loc ?attrs (Ptyp_constr (a, b))
   let object_ ?loc ?attrs a b = mk ?loc ?attrs (Ptyp_object (a, b))
@@ -79,6 +79,7 @@ module Typ = struct
     | Ptyp_poly _ -> t
     | _ -> poly ~loc:t.ptyp_loc [] t (* -> ghost? *)
 
+  (*
   let varify_constructors var_names t =
     let check_variable vl loc v =
       if List.mem v vl then
@@ -137,6 +138,7 @@ module Typ = struct
       { field with pof_desc; }
     in
     loop t
+     *)
 
 end
 

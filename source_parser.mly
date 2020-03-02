@@ -3171,7 +3171,12 @@ function_type:
       domain = extra_rhs(tuple_type)
       MINUSGREATER
       codomain = function_type
-        { Ptyp_arrow(label, domain, codomain) }
+        { let params, codomain =
+            match codomain.ptyp_desc with
+            | Ptyp_arrow (params, codomain) -> params, codomain
+            | _ -> [], codomain
+          in
+          Ptyp_arrow((label, domain) :: params, codomain) }
     )
     { $1 }
 ;

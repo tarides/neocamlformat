@@ -7,7 +7,7 @@ let prefix ~indent:n ~spaces:b l r = prefix n b l r
 let left_assoc_map ~sep ~f = function
   | [] -> empty
   | x :: xs ->
-    List.fold_left (fun doc elt -> group (doc ^^ sep ^^ f elt)) (f x) xs
+    List.fold_left (fun doc elt -> doc ^/^ group (sep ^^ f elt)) (f x) xs
 
 module Binding = struct
   type t = {
@@ -196,7 +196,7 @@ end = struct
     | Ptyp_any -> underscore
     | Ptyp_var v -> pp_var v
     (* FIXME: use n-ary arrow *)
-    | Ptyp_arrow (lbl, ct1, ct2) -> pp_arrow ps lbl ct1 ct2
+    | Ptyp_arrow (params, ct2) -> pp_arrow ps params ct2
     | Ptyp_tuple lst -> pp_tuple ps lst
     | Ptyp_constr (name, args) -> pp_constr name args
     | Ptyp_object (fields, closed) -> pp_object fields closed
@@ -207,20 +207,23 @@ end = struct
     | Ptyp_package pkg -> pp_package pkg
     | Ptyp_extension ext -> Extension.pp Item ext
 
-  and pp_arrow ps arg_label ct1 ct2 =
-    let lhs =
-      let lhs = pp ps ct1 in
-      match arg_label with
-      | Nolabel -> lhs
-      | Labelled l -> string l ^^ colon ^^ break 0 ^^ lhs
-      | Optional l -> qmark ^^ string l ^^ colon ^^ break 0 ^^ lhs
+  and pp_param ps (arg_label, ct) =
+    let ct = pp ps ct in
+    match arg_label with
+    | Nolabel -> ct
+    | Labelled l -> string l ^^ colon ^^ break 0 ^^ ct
+    | Optional l -> qmark ^^ string l ^^ colon ^^ break 0 ^^ ct
+
+  and pp_arrow ps params res =
+    let params =
+      left_assoc_map ~sep:(arrow ^^ space) ~f:(pp_param ps) params
     in
-    let rhs = pp (List.tl ps) ct2 in
-    let arrow = infix 2 1 arrow lhs rhs in
-    Printing_stack.parenthesize ps arrow
+    let res = pp (List.tl ps) res in
+    let doc = params ^/^ group (arrow ^/^ res) in
+    Printing_stack.parenthesize ps doc
 
   and pp_tuple ps l =
-    let tuple = left_assoc_map ~sep:(break 1 ^^ star ^^ break 1) ~f:(pp ps) l in
+    let tuple = left_assoc_map ~sep:(star ^^ break 1) ~f:(pp ps) l in
     Printing_stack.parenthesize ps tuple
 
   and pp_constr name args =
@@ -556,7 +559,7 @@ end = struct
 
   and pp_fun ps params exp =
     let body = pp ps exp in
-    let args = left_assoc_map ~sep:(break 1) ~f:Fun_param.pp params in
+    let args = left_assoc_map ~sep:empty ~f:Fun_param.pp params in
     let doc = fun_ ~args ~body in
     Printing_stack.parenthesize ps doc
 
@@ -860,7 +863,7 @@ end = struct
       let params =
         match pvb_params with
         | [] -> empty
-        | lst -> break 1 ^^ left_assoc_map ~sep:(break 1) ~f:Fun_param.pp lst
+        | lst -> break 1 ^^ left_assoc_map ~sep:empty ~f:Fun_param.pp lst
       in
       let typ =
         let ty1, ty2 = pvb_type in
@@ -1138,7 +1141,7 @@ end = struct
     in
     (* TODO: attributes *)
     prefix ~indent:2 ~spaces:1 (group (!^"val" ^/^ name))
-      (group ((colon ^/^ ctyp)) ^^ prim)
+      (colon ^^ ifflat space (twice space) ^^ ctyp ^^ prim)
 end
 
 and Type_declaration : sig
