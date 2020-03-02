@@ -9,10 +9,10 @@ let () =
   let doc =
     if Filename.check_suffix fn "mli" then
       let sg = Parse_source.interface b in
-      Pparsetree.Signature.pp sg
+      Print_source.Signature.pp sg
     else
       let st = Parse_source.implementation b in
-      Pparsetree.Structure.pp st
+      Print_source.Structure.pp st
   in
   PPrint.ToChannel.pretty 10. width stdout doc;
   print_newline ();
