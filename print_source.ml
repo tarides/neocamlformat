@@ -179,54 +179,49 @@ end = struct
   let pp = function
     | PStr st -> nest 2 (break 1 ^^ Structure.pp st)
     | PSig sg -> nest 2 (colon ^/^ Signature.pp sg)
-    | PTyp ct -> nest 2 (colon ^/^ Core_type.pp ct)
+    | PTyp ct -> nest 2 (colon ^/^ Core_type.pp [] ct)
     | PPat _ -> nest 2 (qmark ^/^ string "TODO")
 end
 
 and Core_type : sig
-  val pp : ?needs_parens:bool -> core_type -> document
+  val pp : Printing_stack.t -> core_type -> document
 end = struct
   let pp_var v = squote ^^ string v
 
-  let rec pp ?(needs_parens=false) ct =
-    group (pp_desc ~needs_parens ct.ptyp_desc)
+  let rec pp ps ct =
+    let ps = Printing_stack.Core_type ct.ptyp_desc :: ps in
+    group (pp_desc ps ct.ptyp_desc)
 
-  and pp_desc ~needs_parens = function
+  and pp_desc ps = function
     | Ptyp_any -> underscore
     | Ptyp_var v -> pp_var v
     (* FIXME: use n-ary arrow *)
-    | Ptyp_arrow (lbl, ct1, ct2) -> pp_arrow ~needs_parens lbl ct1 ct2
-    | Ptyp_tuple lst -> pp_tuple ~needs_parens lst
+    | Ptyp_arrow (lbl, ct1, ct2) -> pp_arrow ps lbl ct1 ct2
+    | Ptyp_tuple lst -> pp_tuple ps lst
     | Ptyp_constr (name, args) -> pp_constr name args
     | Ptyp_object (fields, closed) -> pp_object fields closed
     | Ptyp_class (name, args) -> pp_class name args
-    | Ptyp_alias (ct, alias) -> pp_alias ~needs_parens ct alias
+    | Ptyp_alias (ct, alias) -> pp_alias ps ct alias
     | Ptyp_variant (fields, closed, present) -> pp_variant fields closed present
     | Ptyp_poly (vars, ct) -> pp_poly vars ct
     | Ptyp_package pkg -> pp_package pkg
     | Ptyp_extension ext -> Extension.pp Item ext
 
-  and pp_arrow ~needs_parens arg_label ct1 ct2 =
+  and pp_arrow ps arg_label ct1 ct2 =
     let lhs =
-      let lhs = pp ct1 in
+      let lhs = pp ps ct1 in
       match arg_label with
       | Nolabel -> lhs
       | Labelled l -> string l ^^ colon ^^ break 0 ^^ lhs
       | Optional l -> qmark ^^ string l ^^ colon ^^ break 0 ^^ lhs
     in
-    let rhs = pp ct2 in
+    let rhs = pp (List.tl ps) ct2 in
     let arrow = infix 2 1 lhs arrow rhs in
-    if needs_parens then
-      parens arrow
-    else
-      arrow
+    Printing_stack.parenthesize ps arrow
 
-  and pp_tuple ~needs_parens lst =
-    let tuple = separate_map star pp lst in
-    if needs_parens then
-      parens tuple
-    else
-      tuple
+  and pp_tuple ps lst =
+    let tuple = separate_map star (pp ps) lst in
+    Printing_stack.parenthesize ps tuple
 
   and pp_constr name args =
     let name = Longident.pp name.txt in
@@ -235,8 +230,8 @@ end = struct
     | x :: xs -> pp_params x xs ^/^ name
 
   and pp_params first = function
-    | []   -> pp first
-    | rest -> parens (separate_map comma pp (first :: rest))
+    | []   -> pp [] first
+    | rest -> parens (separate_map comma (pp []) (first :: rest))
 
   and pp_object fields closed =
     let semi_sep = semi ^^ break 1 in
@@ -255,13 +250,10 @@ end = struct
     | x :: xs -> pp_params x xs ^/^ name
 
   (* FIXME: not sure parens are ever needed *)
-  and pp_alias ~needs_parens ct alias =
+  and pp_alias ps ct alias =
     (* TODO: hang & ident one linebreak *)
-    let alias = pp ct ^/^ as_ ^/^ pp_var alias in
-    if needs_parens then
-      parens alias
-    else
-      alias
+    let alias = pp ps ct ^/^ as_ ^/^ pp_var alias in
+    Printing_stack.parenthesize ps alias
 
   and pp_variant fields closed present =
         (* [ `A|`B ]         (flag = Closed; labels = None)
@@ -287,7 +279,8 @@ end = struct
     )
 
   and pp_poly vars ct =
-    let ct = pp ct in
+    (* FIXME: doesn't look right. *)
+    let ct = pp [] ct in
     match vars with
     | [] -> ct
     | vars ->
@@ -304,8 +297,8 @@ and Object_field : sig
   val pp : object_field -> document
 end = struct
   let pp_desc = function
-    | Otag (name, ct) -> string name.txt ^^ colon ^/^ Core_type.pp ct
-    | Oinherit ct -> Core_type.pp ct
+    | Otag (name, ct) -> string name.txt ^^ colon ^/^ Core_type.pp [] ct
+    | Oinherit ct -> Core_type.pp [] ct
 
   let pp { pof_desc; pof_attributes; _ } =
     let desc = pp_desc pof_desc in
@@ -322,11 +315,11 @@ and Row_field : sig
   val pp : row_field -> document
 end = struct
   let pp_desc = function
-    | Rinherit ct -> Core_type.pp ct
+    | Rinherit ct -> Core_type.pp [] ct
     | Rtag (tag, true, []) -> Polymorphic_variant_tag.pp tag.txt
     | Rtag (tag, has_empty_constr, params) ->
       let sep = break 1 ^^ ampersand ^^ break 1 in
-      let params = separate_map sep Core_type.pp params in
+      let params = separate_map sep (Core_type.pp [ Row_field ]) params in
       let params =
         if has_empty_constr then
           sep ^^ params
@@ -341,57 +334,56 @@ end = struct
 end
 
 and Pattern : sig
-  val pp : pattern -> document
+  val pp : Printing_stack.t -> pattern -> document
 end = struct
-  let rec pp { ppat_desc; ppat_attributes; _ } =
-    let desc = pp_desc ppat_desc in
+  let rec pp ps { ppat_desc; ppat_attributes; _ } =
+    let ps = Printing_stack.Pattern ppat_desc :: ps in
+    let desc = pp_desc ps ppat_desc in
     Attribute.attach_to_item desc ppat_attributes
 
-  and pp_alias pat alias =
-    nest 2 (pp pat ^/^ as_ ^/^ string alias.txt)
+  and pp_alias ps pat alias =
+    nest 2 (pp ps pat ^/^ as_ ^/^ string alias.txt)
 
   and pp_interval c1 c2 =
     Constant.pp c1 ^/^ dotdot ^/^ Constant.pp c2
 
   (* FIXME? nest on the outside, not in each of them. *)
 
-  and pp_tuple lst =
-    nest 2 (
-      separate_map (comma ^^ break 1) pp lst
-    )
+  and pp_tuple ps lst =
+    let doc =
+      nest 2 (
+        separate_map (comma ^^ break 1) (pp ps) lst
+      )
+    in
+    Printing_stack.parenthesize ps doc
 
-  and pp_construct name arg_opt =
+  and pp_construct ps name arg_opt =
     let name = Longident.pp name.txt in
     match arg_opt with
     | None -> name
     | Some p ->
-      (* FIXME: don't put parens when only one argument. *)
-      prefix ~indent:2 ~spaces:1 name (parens (pp p))
+      let doc = prefix ~indent:2 ~spaces:1 name (pp ps p) in
+      Printing_stack.parenthesize ps doc
 
-  and pp_variant tag arg_opt =
+  and pp_variant ps tag arg_opt =
     let tag = Polymorphic_variant_tag.pp tag in
     match arg_opt with
     | None -> tag
     | Some p -> 
-      let arg = pp p in
-      let arg =
-        match p.ppat_desc with
-        | Ppat_tuple _ -> parens arg
-        | _ -> arg
-      in
-      tag ^/^ arg
+      let arg = pp ps p in
+      Printing_stack.parenthesize ps (tag ^/^ arg)
 
-  and pp_record_field (lid, pat) =
+  and pp_record_field ps (lid, pat) =
     (* TODO: print the whole lid only once *)
     let field = Longident.pp lid.txt in
     match pat.ppat_desc with
     | Ppat_var v when Longident.last lid.txt = v.txt -> field
-    | _ -> field ^/^ equals ^/^ pp pat
+    | _ -> field ^/^ equals ^/^ pp ps pat
 
-  and pp_record pats closed =
+  and pp_record ps pats closed =
     let fields =
       separate_map (semi ^^ break 1)
-        pp_record_field pats
+        (pp_record_field ps) pats
     in
     let fields =
       match closed with
@@ -400,27 +392,34 @@ end = struct
     in
     braces fields
 
-  and pp_array pats =
+  and pp_array ps pats =
     brackets (
       pipe ^/^
-      separate_map (semi ^^ break 1) pp pats ^/^
+      separate_map (semi ^^ break 1) (pp ps) pats ^/^
       pipe
     )
 
-  and pp_or p1 p2 =
-    pp p1 ^^ hardline ^^ pipe ^^ space ^^ pp p2
+  and pp_or ps p1 p2 =
+    let p1 =
+      (* or-patterns are left-assoc *)
+      pp (List.tl ps) p1
+    in
+    let p2 = pp ps p2 in
+    let or_ = p1 ^/^ pipe ^^ space ^^ p2 in
+    Printing_stack.parenthesize ps or_
 
   and pp_constraint p ct =
     match p.ppat_desc with
     | Ppat_unpack mod_name -> pp_unpack mod_name (Some ct)
-    | _ -> parens (pp p ^/^ colon ^/^ Core_type.pp ct)
+    | _ ->
+      (* Are there cases where we don't want parentheses? *)
+      parens (pp [] p ^/^ colon ^/^ Core_type.pp [] ct)
 
   and pp_type typ =
     sharp ^^ Longident.pp typ.txt
 
-  and pp_lazy p =
-    (* FIXME: remove parens when not needed. *)
-    parens (lazy_ ^/^  pp p)
+  and pp_lazy ps p =
+    Printing_stack.parenthesize ps (lazy_ ^/^  pp ps p)
 
   and pp_unpack mod_name ct =
     let constraint_ =
@@ -433,72 +432,72 @@ end = struct
     in
     parens (module_ ^/^ module_name mod_name.txt ^^ constraint_)
 
-  and pp_exception p =
-    (* FIXME: needs parens *)
-    exception_ ^/^ pp p
+  and pp_exception ps p =
+    exception_ ^/^ pp ps p
 
   and pp_open lid_loc p =
-    Longident.pp lid_loc.txt ^^ dot ^^ parens (break 0 ^^ pp p)
+    Longident.pp lid_loc.txt ^^ dot ^^ parens (break 0 ^^ pp [] p)
 
-  and pp_desc = function
+  and pp_desc ps = function
     | Ppat_any -> underscore
     | Ppat_var v -> string v.txt
-    | Ppat_alias (pat, alias) -> pp_alias pat alias
+    | Ppat_alias (pat, alias) -> pp_alias ps pat alias
     | Ppat_constant c -> Constant.pp c
     | Ppat_interval (c1, c2) -> pp_interval c1 c2
-    | Ppat_tuple pats -> pp_tuple pats
-    | Ppat_construct (name, arg) -> pp_construct name arg
-    | Ppat_variant (tag, arg) -> pp_variant tag arg
-    | Ppat_record (pats, closed) -> pp_record pats closed
-    | Ppat_array pats -> pp_array pats
-    | Ppat_or (p1, p2) -> pp_or p1 p2
+    | Ppat_tuple pats -> pp_tuple ps pats
+    | Ppat_construct (name, arg) -> pp_construct ps name arg
+    | Ppat_variant (tag, arg) -> pp_variant ps tag arg
+    | Ppat_record (pats, closed) -> pp_record ps pats closed
+    | Ppat_array pats -> pp_array ps pats
+    | Ppat_or (p1, p2) -> pp_or ps p1 p2
     | Ppat_constraint (p, ct) -> pp_constraint p ct
     | Ppat_type pt -> pp_type pt
-    | Ppat_lazy p -> pp_lazy p
+    | Ppat_lazy p -> pp_lazy ps p
     | Ppat_unpack mod_name -> pp_unpack mod_name None
-    | Ppat_exception p -> pp_exception p
+    | Ppat_exception p -> pp_exception ps p
     | Ppat_extension ext -> Extension.pp Item ext
     | Ppat_open (lid, p) -> pp_open lid p
 end
 
 and Expression : sig
-  val pp : ?needs_parens:bool -> expression -> document
+  val pp : Printing_stack.t -> expression -> document
 end = struct
-  let rec pp ?(needs_parens=false) { pexp_desc; pexp_attributes; _ } =
-    let desc = pp_desc ~needs_parens pexp_desc in
+  let rec pp ps { pexp_desc; pexp_attributes; _ } =
+    let desc = pp_desc (Printing_stack.Expression pexp_desc :: ps) pexp_desc in
     Attribute.attach_to_item desc pexp_attributes
 
-  and pp_desc ~needs_parens = function
+  and pp_desc ps = function
     | Pexp_ident id -> pp_ident id
     | Pexp_constant c -> Constant.pp c
-    | Pexp_let (rf, vbs, body) -> pp_let rf vbs body
-    | Pexp_function cases -> pp_function ~needs_parens cases
+    | Pexp_let (rf, vbs, body) -> pp_let ps rf vbs body
+    | Pexp_function cases -> pp_function ps cases
     | Pexp_fun (params, exp) ->
-      pp_fun ~needs_parens params exp
-    | Pexp_apply (expr, args) -> pp_apply ~needs_parens expr args
-    | Pexp_match (arg, cases) -> pp_match ~needs_parens arg cases
-    | Pexp_try (arg, cases) -> pp_try ~needs_parens arg cases
-    | Pexp_tuple exps -> pp_tuple ~needs_parens exps
-    | Pexp_construct (lid, arg) -> pp_construct ~needs_parens lid arg
-    | Pexp_variant (tag, arg) -> pp_variant ~needs_parens tag arg
-    | Pexp_record (fields, exp) -> pp_record fields exp
-    | Pexp_field (exp, fld) -> pp_field exp fld
-    | Pexp_setfield (exp, fld, val_) -> pp_setfield exp fld val_
-    | Pexp_array elts -> pp_array elts
-    | Pexp_ifthenelse (cond, then_, else_) -> pp_if_then_else cond then_ else_
-    | Pexp_sequence (e1, e2) -> pp_sequence ~needs_parens e1 e2
+      pp_fun ps params exp
+    | Pexp_apply (expr, args) -> pp_apply ps expr args
+    | Pexp_match (arg, cases) -> pp_match ps arg cases
+    | Pexp_try (arg, cases) -> pp_try ps arg cases
+    | Pexp_tuple exps -> pp_tuple ps exps
+    | Pexp_construct (lid, arg) -> pp_construct ps lid arg
+    | Pexp_variant (tag, arg) -> pp_variant ps tag arg
+    | Pexp_record (fields, exp) -> pp_record ps fields exp
+    | Pexp_field (exp, fld) -> pp_field ps exp fld
+    | Pexp_setfield (exp, fld, val_) -> pp_setfield ps exp fld val_
+    | Pexp_array elts -> pp_array ps elts
+    | Pexp_ifthenelse (cond, then_, else_) ->
+      pp_if_then_else ps cond then_ else_
+    | Pexp_sequence (e1, e2) -> pp_sequence ps e1 e2
     | Pexp_while (cond, body) -> pp_while cond body
     | Pexp_for (it, start, stop, dir, body) -> pp_for it start stop dir body
     | Pexp_constraint (e, ct) -> pp_constraint e ct
     | Pexp_coerce (e, ct_start, ct) -> pp_coerce e ct_start ct
-    | Pexp_send (e, meth) -> pp_send ~needs_parens e meth
+    | Pexp_send (e, meth) -> pp_send ps e meth
     | Pexp_new lid -> pp_new lid
-    | Pexp_setinstvar (lbl, exp) -> pp_setinstvar lbl exp
+    | Pexp_setinstvar (lbl, exp) -> pp_setinstvar ps lbl exp
     | Pexp_override fields -> pp_override fields
-    | Pexp_letmodule (name, mb, body) -> pp_letmodule ~needs_parens name mb body
+    | Pexp_letmodule (name, mb, body) -> pp_letmodule ps name mb body
     | Pexp_letexception (exn, exp) -> pp_letexception exn exp
-    | Pexp_assert exp -> pp_assert exp
-    | Pexp_lazy exp -> pp_lazy ~needs_parens exp
+    | Pexp_assert exp -> pp_assert ps exp
+    | Pexp_lazy exp -> pp_lazy ps exp
     | Pexp_object cl -> pp_object cl
     | Pexp_pack me -> pp_pack me None
     | Pexp_open (od, exp) -> pp_open od exp
@@ -510,7 +509,7 @@ end = struct
     (* FIXME: move the grouping to [Longident.pp] *)
     group (Longident.pp id.txt)
 
-  and pp_let rf vbs body =
+  and pp_let ps rf vbs body =
     let vbs =
       List.mapi (fun i vb ->
         let lhs, rhs = Value_binding.pp Attached_to_item vb in
@@ -519,75 +518,69 @@ end = struct
       ) vbs
     in
     let vbs = separate hardline vbs in
-    let body = pp body in
-    group (vbs ^/^ in_) ^/^ body
+    let body =
+      let ps = if Printing_stack.will_parenthesize ps then [] else List.tl ps in
+      pp ps body
+    in
+    Printing_stack.parenthesize ps (group (vbs ^/^ in_) ^/^ body)
 
   and rec_flag = function
     | Recursive -> string " rec"
     | Nonrecursive -> empty
 
-  and case { pc_lhs; pc_guard; pc_rhs } =
-    let lhs = Pattern.pp pc_lhs in
-    let rhs = pp pc_rhs in
+  and case ps { pc_lhs; pc_guard; pc_rhs } =
+    let lhs = Pattern.pp [] pc_lhs in
+    let rhs = pp ps pc_rhs in
     let lhs =
       match pc_guard with
       | None -> lhs
       | Some guard ->
-        let guard = pp guard in
+        let guard = pp ps guard in
         lhs ^/^ group (!^"when" ^/^ guard)
     in
     prefix ~indent:2 ~spaces:1 (group (lhs ^/^ arrow)) rhs
 
-  and cases case_list =
-    let cases = separate_map (break 1 ^^ pipe ^^ space) case case_list in
+  and cases ps case_list =
+    let cases = separate_map (break 1 ^^ pipe ^^ space) (case ps) case_list in
     let prefix = ifflat empty (hardline ^^ pipe) in
     prefix ^^ space ^^ cases
 
-  and pp_function ~needs_parens case_list =
-    let doc = !^"function" ^^ cases case_list in
-    if needs_parens then
-      parens doc
-    else
-      doc
+  and pp_function ps case_list =
+    let doc = !^"function" ^^ (cases ps) case_list in
+    Printing_stack.parenthesize ps doc
 
   and fun_ ~args ~body =
     prefix ~indent:2 ~spaces:1
       (group ((prefix ~indent:2 ~spaces:1 !^"fun" args) ^/^ arrow))
       body
 
-  and pp_fun ~needs_parens params exp =
-    let body = pp exp in
+  and pp_fun ps params exp =
+    let body = pp ps exp in
     let args = left_assoc_map ~sep:(break 1) ~f:Fun_param.pp params in
     let doc = fun_ ~args ~body in
-    if needs_parens then
-      parens doc
-    else
-      doc
+    Printing_stack.parenthesize ps doc
 
-  and argument (lbl, exp) =
+  and argument ps (lbl, exp) =
     let suffix lbl =
       match exp.pexp_desc with
       | Pexp_ident { txt = Lident id; _ } when lbl = id -> empty
-      | _ -> colon ^^ pp ~needs_parens:true exp
+      | _ -> colon ^^ pp ps exp
     in
     match lbl with
-    | Nolabel -> pp ~needs_parens:true exp
+    | Nolabel -> pp ps exp
     | Labelled lbl -> tilde ^^ string lbl ^^ suffix lbl
     | Optional lbl -> qmark ^^ string lbl ^^ suffix lbl
 
-  and pp_apply ~needs_parens exp args =
+  and pp_apply ps exp args =
     (* FIXME: handle infix ops *)
-    let exp = pp ~needs_parens:true exp in
-    let args = separate_map (break 1) argument args in
+    let exp = pp ps exp in
+    let args = separate_map (break 1) (argument ps) args in
     let doc = prefix ~indent:2 ~spaces:1 exp args in
-    if needs_parens then
-      parens doc
-    else
-      doc
+    Printing_stack.parenthesize ps doc
 
-  and pp_match ~needs_parens arg case_list =
-    let arg = pp arg in
-    let cases = cases case_list in
+  and pp_match ps arg case_list =
+    let arg = pp [] arg in
+    let cases = cases ps case_list in
     let doc =
       group (
         string "match" ^^
@@ -595,14 +588,11 @@ end = struct
         string "with"
       ) ^^ cases
     in
-    if needs_parens then
-      parens doc
-    else
-      doc
+    Printing_stack.parenthesize ps doc
 
-  and pp_try ~needs_parens arg case_list =
-    let arg = pp arg in
-    let cases = cases case_list in
+  and pp_try ps arg case_list =
+    let arg = pp [] arg in
+    let cases = cases ps case_list in
     let doc =
       (* FIXME: the layout is generally different. *)
       group (
@@ -611,86 +601,74 @@ end = struct
         string "with"
       ) ^^ cases
     in
-    if needs_parens then
-      parens doc
-    else
-      doc
+    Printing_stack.parenthesize ps doc
 
-  and pp_tuple ~needs_parens exps =
+  and pp_tuple ps exps =
     let doc =
-      group (separate_map (comma ^^ break 1) (pp ~needs_parens:true) exps)
+      group (separate_map (comma ^^ break 1) (pp ps) exps)
     in
-    if needs_parens then
-      parens doc
-    else
-      doc
+    Printing_stack.parenthesize ps doc
 
-  and pp_construct ~needs_parens lid arg_opt =
+  and pp_construct ps lid arg_opt =
     let name = Longident.pp lid.txt in
-    let arg  = optional (pp ~needs_parens:true) arg_opt in
+    let arg  = optional (pp ps) arg_opt in
     let doc  = prefix ~indent:2 ~spaces:1 name arg in
-    if needs_parens then
-      parens doc
-    else
-      doc
+    Printing_stack.parenthesize ps doc
 
-  and pp_variant ~needs_parens tag arg_opt =
+  and pp_variant ps tag arg_opt =
     let tag = Polymorphic_variant_tag.pp tag in
-    let arg  = optional (pp ~needs_parens:true) arg_opt in
+    let arg  = optional (pp ps) arg_opt in
     let doc  = prefix ~indent:2 ~spaces:1 tag arg in
-    if needs_parens then
-      parens doc
-    else
-      doc
+    Printing_stack.parenthesize ps doc
 
   and record_field (lid, exp) =
     (* TODO: print the whole lid only once *)
     let fld = Longident.pp lid.txt in
     match exp.pexp_desc with
     | Pexp_ident { txt = Lident id; _ } when Longident.last lid.txt = id -> fld
-    | _ -> fld ^/^ equals ^/^ pp exp
+    | _ -> fld ^/^ equals ^/^ pp [ Printing_stack.Record_field ] exp
 
-  and pp_record fields updated_record =
+  and pp_record ps fields updated_record =
     let fields = separate_map (semi ^^ break 1) record_field fields in
     let prefix =
       match updated_record with
       | None -> empty
-      | Some e -> pp ~needs_parens:true e ^/^ !^"with" ^^ break 1
+      | Some e -> pp ps e ^/^ !^"with" ^^ break 1
     in
     braces (prefix ^^ fields)
 
-  and pp_field re fld =
-    let record = pp ~needs_parens:true re in
+  and pp_field ps re fld =
+    let record = pp ps re in
     let field = Longident.pp fld.txt in
     flow (break 0) [
       record; dot; field
     ]
 
-  and pp_setfield re fld val_ =
-    let field = pp_field re fld in
-    let value = pp ~needs_parens:true val_ in
+  and pp_setfield ps re fld val_ =
+    let field = pp_field ps re fld in
+    let value = pp (List.tl ps) val_ in
     prefix ~indent:2 ~spaces:1
       (group (field ^/^ larrow))
       value
 
-  and pp_array elts =
+  and pp_array ps elts =
     let elements =
       separate_map
         (semi ^^ break 1)
-        (pp ~needs_parens:true)
+        (pp ps)
         elts
     in
     (* FIXME: empty arrays will have two spaces. *)
     brackets (pipe ^/^ elements ^/^ pipe)
 
   (* FIXME: change ast to present n-ary [if]s *)
-  and pp_if_then_else cond then_ else_opt =
-    let cond = pp cond in
-    let then_ = pp ~needs_parens:true then_ in
+  and pp_if_then_else ps cond then_ else_opt =
+    let cond = pp [] cond in
+    let then_ = pp ps then_ in
     let else_ =
       optional (fun e ->
         break 1 ^^ !^"else" ^^
-        nest 2 (break 1 ^^ pp ~needs_parens:true e)
+        nest 2 (break 1 ^^ pp ps e)
       ) else_opt
     in
     group (
@@ -703,18 +681,18 @@ end = struct
       else_
     )
 
-  and pp_sequence ~needs_parens e1 e2 =
-    let e1 = pp e1 in
-    let e2 = pp e2 in
+  and pp_sequence ps e1 e2 =
+    let e1 = pp ps e1 in
+    let e2 =
+      let ps = if Printing_stack.will_parenthesize ps then [] else List.tl ps in
+      pp ps e2
+    in
     let doc = e1 ^^ semi ^/^ e2 in
-    if needs_parens then
-      parens doc
-    else
-      doc
+    Printing_stack.parenthesize ps doc
 
   and pp_while cond body =
-    let cond = pp cond in
-    let body = pp body in
+    let cond = pp [] cond in
+    let body = pp [] body in
     group (
       group (
         string "while" ^^
@@ -726,15 +704,15 @@ end = struct
     ) 
 
   and pp_for it start stop dir body =
-    let it = Pattern.pp it in
-    let start = pp start in
-    let stop = pp stop in
+    let it = Pattern.pp [ Printing_stack.Value_binding ] it in
+    let start = pp [] start in
+    let stop = pp [] stop in
     let dir =
       match dir with
       | Upto -> !^"to"
       | Downto -> !^"downto"
     in
-    let body = pp body in
+    let body = pp [] body in
     group (
       group (
         string "for" ^^
@@ -754,38 +732,36 @@ end = struct
     match exp.pexp_desc with
     | Pexp_pack me -> pp_pack me (Some ct)
     | _ ->
-      let exp = pp exp in
-      let ct = Core_type.pp ct in
+      let exp = pp [] exp in
+      let ct = Core_type.pp [] ct in
       group (parens (exp ^/^ colon ^/^ ct))
 
   and pp_coerce exp ct_start ct =
-    let exp = pp exp in
+    let exp = pp [] exp in
     let ct_start =
-      optional (fun ct -> break 1 ^^ colon ^/^ Core_type.pp ct) ct_start
+      optional (fun ct -> break 1 ^^ colon ^/^ Core_type.pp [] ct) ct_start
     in
-    let ct = Core_type.pp ct in
+    let ct = Core_type.pp [] ct in
     group (parens (group (exp ^^ ct_start) ^/^ !^":>" ^/^  ct))
 
-  and pp_send ~needs_parens exp met =
-    let exp = pp exp in
+  and pp_send ps exp met =
+    let exp = pp ps exp in
     let met = string met.txt in
     let doc = flow (break 0) [ exp; sharp; met ] in
-    if needs_parens then
-      parens doc
-    else
-      doc
+    Printing_stack.parenthesize ps doc
 
   and pp_new lid =
     Longident.pp lid.txt
 
-  and pp_setinstvar lbl exp =
+  and pp_setinstvar ps lbl exp =
     let lbl = string lbl.txt in
-    let exp = pp exp in
+    let exp = pp (List.tl ps) exp in
+    (* FIXME: parens? *)
     lbl ^/^ larrow ^/^ exp
 
   and obj_field_override (lbl, exp) =
     let fld = string lbl.txt in
-    let exp = pp exp in
+    let exp = pp [ Printing_stack.Record_field ] exp in
     fld ^/^ equals ^/^ exp
 
   and pp_override fields =
@@ -793,30 +769,27 @@ end = struct
     (* FIXME: breaking, indent, blablabla *)
     braces (angles fields)
 
-  and pp_letmodule ~needs_parens name (params, typ, mexp) expr =
+  and pp_letmodule ps name (params, typ, mexp) expr =
     let binding = Module_binding.pp_raw name params typ mexp in
-    let expr = pp expr in
     let bind = Binding.pp ~keyword:(group (let_ ^/^ module_)) binding in
+    let expr =
+      let ps = if Printing_stack.will_parenthesize ps then [] else List.tl ps in
+      pp ps expr
+    in
     let doc = bind ^/^ in_ ^/^ expr in
-    if needs_parens then
-      parens doc
-    else
-      doc
+    Printing_stack.parenthesize ps doc
 
   and pp_letexception _exn _exp =
     assert false
 
-  and pp_assert exp =
-    let exp = pp exp in
+  and pp_assert ps exp =
+    let exp = pp ps exp in
     !^"assert" ^/^ exp
 
-  and pp_lazy ~needs_parens exp =
-    let exp = pp ~needs_parens:true exp in
+  and pp_lazy ps exp =
+    let exp = pp ps exp in
     let doc = lazy_ ^/^ exp in
-    if needs_parens then
-      parens doc
-    else
-      doc
+    Printing_stack.parenthesize ps doc
 
   and pp_object cl =
     let cl = Class_structure.pp cl in
@@ -854,18 +827,19 @@ end = struct
     let suffix lbl =
       match pat.ppat_desc with
       | Ppat_var v when lbl = v.txt -> empty
-      | _ -> colon ^^ Pattern.pp (* FIXME: needs parens = true *) pat
+      | _ -> colon ^^ Pattern.pp [ Printing_stack.Value_binding ] pat
     in
     match lbl with
-    | Nolabel -> Pattern.pp pat
+    | Nolabel -> Pattern.pp [ Printing_stack.Value_binding ] pat
     | Labelled lbl -> tilde ^^ string lbl ^^ suffix lbl
     | Optional lbl ->
       match default with
       | None -> qmark ^^ string lbl ^^ suffix lbl
       | Some def ->
         (* TODO: punning *)
-        qmark ^^ string lbl ^^ colon ^^
-        parens (group (Pattern.pp pat ^/^ equals ^/^ Expression.pp def))
+        let pat = Pattern.pp [] pat in
+        let exp = Expression.pp [ Printing_stack.Value_binding ] def in
+        qmark ^^ string lbl ^^ colon ^^ parens (group (pat ^/^ equals ^/^ exp))
 
   let newtype typ =
     parens (!^"type" ^/^ string typ.txt)
@@ -882,7 +856,7 @@ end = struct
   let pp attr_kind
       { pvb_pat; pvb_params; pvb_type; pvb_expr; pvb_attributes; _ } =
     let lhs =
-      let pat = Pattern.pp pvb_pat in
+      let pat = Pattern.pp [ Printing_stack.Value_binding ] pvb_pat in
       let params =
         match pvb_params with
         | [] -> empty
@@ -890,12 +864,12 @@ end = struct
       in
       let typ =
         let ty1, ty2 = pvb_type in
-        let pp ty = break 1 ^^ Core_type.pp ty in
+        let pp ty = break 1 ^^ Core_type.pp [] ty in
         optional pp ty1 ^^ optional pp ty2
       in
       pat ^^ params ^^ typ
     in
-    let rhs = Expression.pp pvb_expr in
+    let rhs = Expression.pp [ Printing_stack.Value_binding ] pvb_expr in
     let rhs = Attribute.attach attr_kind rhs pvb_attributes in
     lhs, rhs
 end
@@ -947,7 +921,7 @@ end = struct
     parens (me ^/^ colon ^/^ mty)
 
   and pp_unpack exp =
-    let exp = Expression.pp ~needs_parens:true exp in
+    let exp = Expression.pp [ Unpack ] exp in
     parens (!^"val" ^^ exp)
 end
 
@@ -1060,7 +1034,7 @@ and Structure : sig
   val pp : structure -> document
 end = struct
   let pp_eval exp attrs =
-    let exp = Expression.pp exp in
+    let exp = Expression.pp [] exp in
     Attribute.attach_to_top_item exp attrs
 
   and rec_flag = function
@@ -1154,7 +1128,7 @@ and Value_description : sig
 end = struct
   let pp vd =
     let name = string vd.pval_name.txt in
-    let ctyp = Core_type.pp vd.pval_type in
+    let ctyp = Core_type.pp [] vd.pval_type in
     let prim =
       match vd.pval_prim with
       | [] -> empty
@@ -1175,7 +1149,7 @@ and Type_declaration : sig
   val pp_subst : type_declaration list -> document
 end = struct
   let pp_param (ct, var) =
-    let ct = Core_type.pp ct in
+    let ct = Core_type.pp [] ct in
     match var with
     | Invariant -> ct
     | Covariant -> plus ^^ ct
@@ -1194,7 +1168,7 @@ end = struct
       | Immutable -> empty
     in
     let name = string pld_name.txt in
-    let typ  = Core_type.pp pld_type in
+    let typ  = Core_type.pp [] pld_type in
     let decl =
       group (
         nest 2 (
@@ -1213,12 +1187,17 @@ end = struct
   let constructor_arguments = function
     | Pcstr_record lbl_decls -> record lbl_decls
     | Pcstr_tuple args ->
-      separate_map (break 1 ^^ star ^^ break 1) Core_type.pp args
+      let printing_stack =
+        (* morally equivalent to: *)
+        [ Printing_stack.Core_type (Ptyp_tuple args) ]
+      in
+      separate_map (break 1 ^^ star ^^ break 1)
+        (Core_type.pp printing_stack) args
 
   let gadt_constructor { pcd_name; pcd_args; pcd_res; pcd_attributes; _ } =
     let name = string pcd_name.txt in
     let args = constructor_arguments pcd_args in
-    let res  = Core_type.pp (Option.get pcd_res) in
+    let res  = Core_type.pp [] (Option.get pcd_res) in
     let decl = name ^/^ colon ^/^ args ^/^ arrow ^/^ res in
     Attribute.attach_to_item decl pcd_attributes
 
@@ -1256,7 +1235,7 @@ end = struct
     let name = string ptype_name.txt in
     let params = pp_params ptype_params in
     let kind = type_kind ptype_kind in
-    let manifest = optional Core_type.pp ptype_manifest in
+    let manifest = optional (Core_type.pp []) ptype_manifest in
     let private_ =
       match ptype_private with
       | Private -> !^"private" ^^ break 1
