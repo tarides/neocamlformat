@@ -1321,13 +1321,12 @@ structure_item:
 (* The body (right-hand side) of a module binding. *)
 module_binding_body:
     EQUAL me = module_expr
-      { me }
-  | mkmod(
-      COLON mty = module_type EQUAL me = module_expr
-        { Pmod_constraint(me, mty) }
-    | arg = functor_arg body = module_binding_body
-        { Pmod_functor(arg, body) }
-  ) { $1 }
+      { [], None, me }
+  | COLON mty = module_type EQUAL me = module_expr
+      { [], Some mty, me }
+  | arg = functor_arg body = module_binding_body
+      { let params, mty, body = body in
+        arg :: params, mty, body }
 ;
 
 (* A group of recursive module bindings. *)

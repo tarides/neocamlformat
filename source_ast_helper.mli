@@ -343,7 +343,8 @@ module Mtd:
 module Mb:
   sig
     val mk: ?loc:loc -> ?attrs:attrs -> ?docs:docs -> ?text:text ->
-      str_opt -> module_expr -> module_binding
+      str_opt -> (functor_parameter list * module_type option * module_expr) ->
+      module_binding
   end
 
 (** Opens *)

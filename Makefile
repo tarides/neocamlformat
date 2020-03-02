@@ -3,7 +3,8 @@ pp: main.ml
 	@-ln -s ./_build/default/main.exe $@
 
 test: pp
-	./pp ~/repos/ocaml/trunk/parsing/parsetree.mli
+	./pp ./source_tree.mli
+	./pp ./print_source.ml
 
 clean:
 	dune clean

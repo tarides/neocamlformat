@@ -348,7 +348,9 @@ and expression_desc =
         (* x <- 2 *)
   | Pexp_override of (label loc * expression) list
         (* {< x1 = E1; ...; Xn = En >} *)
-  | Pexp_letmodule of string option loc * module_expr * expression
+  | Pexp_letmodule of
+      string option loc *
+      (functor_parameter list * module_type option * module_expr) * expression
         (* let module M = ME in E *)
   | Pexp_letexception of extension_constructor * expression
         (* let exception C in E *)
@@ -933,6 +935,8 @@ and value_binding =
 and module_binding =
     {
      pmb_name: string option loc;
+     pmb_params: functor_parameter list;
+     pmb_type: module_type option;
      pmb_expr: module_expr;
      pmb_attributes: attributes;
      pmb_loc: Location.t;

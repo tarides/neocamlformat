@@ -4,10 +4,33 @@ open PPrint
 
 let prefix ~indent:n ~spaces:b l r = prefix n b l r
 
-let binding ?(binder=equals) kw lhs rhs =
-  prefix ~indent:2 ~spaces:1
-    (group (prefix ~indent:2 ~spaces:1 kw (group (lhs ^/^ binder))))
-    rhs
+module Binding = struct
+  type t = {
+    lhs : document;
+    typ : document option;
+    rhs : document;
+  }
+
+  let simple ~binder kw lhs rhs =
+    prefix ~indent:2 ~spaces:1
+      (group (prefix ~indent:2 ~spaces:1 kw (group (lhs ^/^ binder))))
+      rhs
+
+  let with_constraint ~binder kw lhs typ rhs =
+    nest 2 (
+      group (kw ^/^ (lhs ^^ space ^^ colon)) ^/^
+      typ
+    ) ^/^ binder ^^
+    nest 2 (
+      break 1 ^^ 
+      rhs
+    )
+
+  let pp ?(binder=equals) ~keyword { lhs; rhs; typ } =
+    match typ with
+    | None -> simple ~binder keyword lhs rhs
+    | Some typ -> with_constraint ~binder keyword lhs typ rhs
+end
 
 let module_name = function
   | None -> underscore
@@ -467,7 +490,7 @@ end = struct
     | Pexp_new lid -> pp_new lid
     | Pexp_setinstvar (lbl, exp) -> pp_setinstvar lbl exp
     | Pexp_override fields -> pp_override fields
-    | Pexp_letmodule (name, me, body) -> pp_letmodule ~needs_parens name me body
+    | Pexp_letmodule (name, mb, body) -> pp_letmodule ~needs_parens name mb body
     | Pexp_letexception (exn, exp) -> pp_letexception exn exp
     | Pexp_assert exp -> pp_assert exp
     | Pexp_lazy exp -> pp_lazy ~needs_parens exp
@@ -484,8 +507,8 @@ end = struct
     let vbs =
       List.mapi (fun i vb ->
         let lhs, rhs = Value_binding.pp Attached_to_item vb in
-        let kw = if i = 0 then let_ ^^ rec_flag rf else and_ in
-        binding kw lhs rhs
+        let keyword = if i = 0 then let_ ^^ rec_flag rf else and_ in
+        Binding.pp ~keyword { lhs; rhs; typ = None }
       ) vbs
     in
     let vbs = separate hardline vbs in
@@ -780,11 +803,10 @@ end = struct
     (* FIXME: breaking, indent, blablabla *)
     braces (angles fields)
 
-  and pp_letmodule ~needs_parens name mexp expr =
-    let name = module_name name.txt in
-    let mexp = Module_expr.pp mexp in
+  and pp_letmodule ~needs_parens name (params, typ, mexp) expr =
+    let binding = Module_binding.pp_raw name params typ mexp in
     let expr = pp expr in
-    let bind = binding (group (let_ ^/^ module_)) name mexp in
+    let bind = Binding.pp ~keyword:(group (let_ ^/^ module_)) binding in
     let doc = bind ^/^ in_ ^/^ expr in
     if needs_parens then
       parens doc
@@ -954,14 +976,42 @@ end = struct
 end
 
 and Module_binding : sig
-  val pp : module_binding -> document * document
+  val pp_raw
+    :  string option loc
+    -> functor_parameter list
+    -> module_type option
+    -> module_expr
+    -> Binding.t
+
+  val pp : module_binding -> Binding.t
 end = struct
+  let param = function
+    | Unit -> !^"()"
+    | Named (name, mty) ->
+      group (
+        parens (
+          prefix ~indent:2 ~spaces:1
+            (group (module_name name.txt ^/^ colon))
+            (Module_type.pp mty)
+        )
+      )
+
+  let pp_raw name params mty me =
+    let lhs = module_name name.txt in
+    let lhs =
+      match params with
+      | [] -> lhs
+      | _ -> separate_map (break 1) param params
+    in
+    let typ = Option.map Module_type.pp mty in
+    let rhs = Module_expr.pp me in
+    { Binding. lhs; typ; rhs }
+
   (* TODO: proper printing *)
-  let pp { pmb_name; pmb_expr; pmb_attributes; _ } =
-    let lhs = module_name pmb_name.txt in
-    let rhs = Module_expr.pp pmb_expr in
-    let rhs = Attribute.attach_to_top_item rhs pmb_attributes in
-    lhs, rhs
+  let pp { pmb_name; pmb_params; pmb_type; pmb_expr; pmb_attributes; _ } =
+    let binding = pp_raw pmb_name pmb_params pmb_type pmb_expr in
+    let rhs = Attribute.attach_to_top_item binding.rhs pmb_attributes in
+    { binding with rhs }
 end
 
 and Module_type_declaration : sig
@@ -975,7 +1025,8 @@ end = struct
       | None -> kw ^/^ name
       | Some mty ->
         let typ = Module_type.pp mty in
-        binding kw name typ
+        Binding.pp ~keyword:kw
+          { lhs = name; rhs = typ; typ = None }
     in
     Attribute.attach_to_top_item doc pmtd_attributes
 end
@@ -995,22 +1046,21 @@ end = struct
     let vbs =
       List.mapi (fun i vb ->
         let lhs, rhs = Value_binding.pp Attached_to_structure_item vb in
-        let kw = if i = 0 then let_ ^^ rec_flag rf else and_ in
-        binding kw lhs rhs
+        let keyword = if i = 0 then let_ ^^ rec_flag rf else and_ in
+        Binding.pp ~keyword
+          { lhs; rhs; typ = None }
       ) vbs
     in
     separate hardline vbs
 
   let pp_module mb =
-    let lhs, rhs = Module_binding.pp mb in
-    binding module_ lhs rhs
+    Binding.pp ~keyword:module_ (Module_binding.pp mb)
 
   let pp_recmodule mbs =
     let mbs =
       List.mapi (fun i mb ->
-        let lhs, rhs = Module_binding.pp mb in
-        let kw = if i = 0 then group (module_ ^/^ !^"rec") else and_ in
-        binding kw lhs rhs
+        let keyword = if i = 0 then group (module_ ^/^ !^"rec") else and_ in
+        Binding.pp ~keyword (Module_binding.pp mb)
       ) mbs
     in
     separate (repeat 2 hardline) mbs
@@ -1205,8 +1255,8 @@ end = struct
     let decls =
       List.mapi (fun i decl ->
         let lhs, rhs = pp decl in
-        let kw = if i = 0 then !^"type" ^^ rec_flag rf else and_ in
-        binding kw lhs rhs
+        let keyword = if i = 0 then !^"type" ^^ rec_flag rf else and_ in
+        Binding.pp ~keyword { lhs; rhs; typ = None }
       ) decls
     in
     separate hardline decls
@@ -1216,8 +1266,8 @@ end = struct
     let decls =
       List.mapi (fun i decl ->
         let lhs, rhs = pp decl in
-        let kw = if i = 0 then !^"type" else and_ in
-        binding ~binder kw lhs rhs
+        let keyword = if i = 0 then !^"type" else and_ in
+        Binding.pp ~binder ~keyword { lhs; rhs; typ = None }
       ) decls
     in
     separate hardline decls
