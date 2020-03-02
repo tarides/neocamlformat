@@ -83,6 +83,10 @@ module rec Attribute : sig
     | Attached_to_item
 
   val pp : kind -> attribute -> document
+
+  val attach : kind -> document -> attributes -> document
+  val attach_to_item : document -> attributes -> document
+  val attach_to_top_item : document -> attributes -> document
 end = struct
   type kind =
     | Free_floating
@@ -99,6 +103,20 @@ end = struct
 
   let pp kind { attr_name; attr_payload; attr_loc = _ } =
     brackets (ats kind ^^ string attr_name.txt ^^ Payload.pp attr_payload)
+
+  let attach kind doc = function
+    | [] -> doc
+    | attrs ->
+      group (
+        prefix ~indent:2 ~spaces:1 doc 
+          (separate_map (break 0) (pp kind) attrs)
+      )
+
+  let attach_to_item doc =
+    attach Attached_to_item doc
+
+  let attach_to_top_item doc =
+    attach Attached_to_structure_item doc
 end
 
 and Extension : sig
@@ -127,9 +145,9 @@ and Payload : sig
   val pp : payload -> document
 end = struct
   let pp = function
-    | PStr _ -> nest 2 (break 1 ^^ string "TODO")
-    | PSig _ -> nest 2 (colon ^/^ string "TODO")
-    | PTyp _ -> nest 2 (colon ^/^ string "TODO")
+    | PStr st -> nest 2 (break 1 ^^ Structure.pp st)
+    | PSig sg -> nest 2 (colon ^/^ Signature.pp sg)
+    | PTyp ct -> nest 2 (colon ^/^ Core_type.pp ct)
     | PPat _ -> nest 2 (qmark ^/^ string "TODO")
 end
 
@@ -259,16 +277,7 @@ end = struct
 
   let pp { pof_desc; pof_attributes; _ } =
     let desc = pp_desc pof_desc in
-    (* TODO: extract that logic *)
-    match pof_attributes with
-    | [] -> desc
-    | attrs ->
-      group (
-        nest 2 (
-          desc ^/^
-          separate_map (break 0) (Attribute.pp Attached_to_item) attrs
-        )
-      )
+    Attribute.attach_to_item desc pof_attributes
 end
 
 and Package_type : sig
@@ -296,16 +305,7 @@ end = struct
 
   let pp { prf_desc; prf_attributes; _ } =
     let desc = pp_desc prf_desc in
-    (* TODO: extract that logic *)
-    match prf_attributes with
-    | [] -> desc
-    | attrs ->
-      group (
-        nest 2 (
-          desc ^/^
-          separate_map (break 0) (Attribute.pp Attached_to_item) attrs
-        )
-      )
+    Attribute.attach_to_item desc prf_attributes
 end
 
 and Pattern : sig
@@ -313,15 +313,7 @@ and Pattern : sig
 end = struct
   let rec pp { ppat_desc; ppat_attributes; _ } =
     let desc = pp_desc ppat_desc in
-    match ppat_attributes with
-    | [] -> desc
-    | attrs ->
-      group (
-        nest 2 (
-          desc ^/^
-          separate_map (break 0) (Attribute.pp Attached_to_item) attrs
-        )
-      )
+    Attribute.attach_to_item desc ppat_attributes
 
   and pp_alias pat alias =
     nest 2 (pp pat ^/^ as_ ^/^ string alias.txt)
@@ -440,15 +432,7 @@ and Expression : sig
 end = struct
   let rec pp ?(needs_parens=false) { pexp_desc; pexp_attributes; _ } =
     let desc = pp_desc ~needs_parens pexp_desc in
-    match pexp_attributes with
-    | [] -> desc
-    | attrs ->
-      group (
-        nest 2 (
-          desc ^/^
-          separate_map (break 0) (Attribute.pp Attached_to_item) attrs
-        )
-      )
+    Attribute.attach_to_item desc pexp_attributes
 
   and pp_desc ~needs_parens = function
     | Pexp_ident id -> Longident.pp id.txt
@@ -965,8 +949,29 @@ end
 and Structure : sig
   val pp : structure -> document
 end = struct
-  let pp _ =
-    assert false
+  let pp_eval exp attrs =
+    let exp = Expression.pp exp in
+    Attribute.attach_to_top_item exp attrs
+
+  let pp_item ({ pstr_desc; _ } as _item) =
+    match pstr_desc with
+    | Pstr_eval (e, attrs) -> pp_eval e attrs
+    | Pstr_value (_, _) -> (??)
+    | Pstr_primitive _ -> (??)
+    | Pstr_type (_, _) -> (??)
+    | Pstr_typext _ -> (??)
+    | Pstr_exception _ -> (??)
+    | Pstr_module _ -> (??)
+    | Pstr_recmodule _ -> (??)
+    | Pstr_modtype _ -> (??)
+    | Pstr_open _ -> (??)
+    | Pstr_class _ -> (??)
+    | Pstr_class_type _ -> (??)
+    | Pstr_include _ -> (??)
+    | Pstr_attribute _ -> (??)
+    | Pstr_extension (_, _) -> (??)
+
+  let pp = separate_map (repeat 2 hardline) pp_item
 end
 
 and Signature : sig
@@ -1039,13 +1044,7 @@ end = struct
         )
       )
     in
-    match pld_attributes with
-    | [] -> decl
-    | attrs ->
-      group (
-        prefix ~indent:2 ~spaces:1 decl 
-          (separate_map (break 0) (Attribute.pp Attached_to_item) attrs)
-      )
+    Attribute.attach_to_item decl pld_attributes
 
   let record lbl_decls =
     let lbls = separate_map (semi ^^ break 1) label_declaration lbl_decls in
@@ -1063,13 +1062,7 @@ end = struct
     let args = constructor_arguments pcd_args in
     let res  = Core_type.pp (Option.get pcd_res) in
     let decl = name ^/^ colon ^/^ args ^/^ arrow ^/^ res in
-    match pcd_attributes with
-    | [] -> decl
-    | attrs ->
-      group (
-        prefix ~indent:2 ~spaces:1 decl 
-          (separate_map (break 0) (Attribute.pp Attached_to_item) attrs)
-      )
+    Attribute.attach_to_item decl pcd_attributes
 
   let simple_constructor { pcd_name; pcd_args; pcd_attributes; _ } =
     let name = string pcd_name.txt in
@@ -1081,13 +1074,7 @@ end = struct
           args
       )
     in
-    match pcd_attributes with
-    | [] -> decl
-    | attrs ->
-      group (
-        prefix ~indent:2 ~spaces:1 decl 
-          (separate_map (break 0) (Attribute.pp Attached_to_item) attrs)
-      )
+    Attribute.attach_to_item decl pcd_attributes
 
   let constructor cstr =
     match cstr.pcd_res with
@@ -1124,15 +1111,7 @@ end = struct
       | Some _, _ -> manifest ^/^ equals ^/^ private_ ^^ kind
       | None, _ -> private_ ^^ kind
     in
-    let rhs =
-      match ptype_attributes with
-      | [] -> rhs
-      | attrs ->
-        let attrs =
-          separate_map (break 0) (Attribute.pp Attached_to_structure_item) attrs
-        in
-        group (prefix ~indent:2 ~spaces:1 rhs attrs)
-    in
+    let rhs = Attribute.attach_to_top_item rhs ptype_attributes in
     lhs, rhs
 
   let rec_flag = function
@@ -1178,11 +1157,5 @@ end = struct
       | _ -> empty
     in
     let opn = group (!^"open" ^^ over ^/^ expr) in
-    match popen_attributes with
-    | [] -> opn
-    | attrs ->
-      let attrs =
-        separate_map (break 0) (Attribute.pp Attached_to_structure_item) attrs
-      in
-      group (prefix ~indent:2 ~spaces:1 opn attrs)
+    Attribute.attach_to_top_item opn popen_attributes
 end
