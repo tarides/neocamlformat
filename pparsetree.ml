@@ -9,6 +9,10 @@ let binding ?(binder=equals) kw lhs rhs =
     (group (prefix ~indent:2 ~spaces:1 kw (group (lhs ^/^ binder))))
     rhs
 
+let module_name = function
+  | None -> underscore
+  | Some name -> string name
+
 module Tokens = struct
   let pipe = char '|'
 
@@ -399,7 +403,7 @@ end = struct
         | Ptyp_package pkg -> break 1 ^^ colon ^/^ Package_type.pp pkg
         | _ -> assert false
     in
-    parens (module_ ^/^ string mod_name.txt ^^ constraint_)
+    parens (module_ ^/^ module_name mod_name.txt ^^ constraint_)
 
   and pp_exception p =
     (* FIXME: needs parens *)
@@ -777,7 +781,7 @@ end = struct
     braces (angles fields)
 
   and pp_letmodule ~needs_parens name mexp expr =
-    let name = string name.txt in
+    let name = module_name name.txt in
     let mexp = Module_expr.pp mexp in
     let expr = pp expr in
     let bind = binding (group (let_ ^/^ module_)) name mexp in
@@ -859,8 +863,9 @@ end = struct
   and pp_desc = function
     | Pmod_ident lid -> Longident.pp lid.txt
     | Pmod_structure str -> pp_structure str
-    | Pmod_functor (_, None, me) -> pp_generative_functor me
-    | Pmod_functor (param, Some mty, me) -> pp_applicative_functor param mty me
+    | Pmod_functor (Unit, me) -> pp_generative_functor me
+    | Pmod_functor (Named (param, mty), me) ->
+      pp_applicative_functor param mty me
     | Pmod_apply (me1, me2) -> pp_apply me1 me2
     | Pmod_constraint (me, mty) -> pp_constraint me mty
     | Pmod_unpack e -> pp_unpack e
@@ -879,7 +884,7 @@ end = struct
     !^"functor" ^/^ !^"()" ^/^ arrow ^/^ me
 
   and pp_applicative_functor param mty me =
-    let param = string param.txt in
+    let param = module_name param.txt in
     let mty = Module_type.pp mty in
     let me = pp me in
     !^"functor" ^/^ parens (param ^/^ colon ^/^ mty) ^/^ arrow ^/^ me
@@ -909,8 +914,8 @@ end = struct
   and pp_desc = function
     | Pmty_ident lid -> Longident.pp lid.txt
     | Pmty_signature sg -> pp_signature sg
-    | Pmty_functor (_, None, mty) -> pp_generative_functor mty
-    | Pmty_functor (param, Some pmty, mty) ->
+    | Pmty_functor (Unit, mty) -> pp_generative_functor mty
+    | Pmty_functor (Named (param, pmty), mty) ->
       pp_applicative_functor param pmty mty
     | Pmty_with (mty, cstrs) -> pp_with mty cstrs
     | Pmty_typeof me -> pp_typeof me
@@ -930,7 +935,7 @@ end = struct
     !^"functor" ^/^ !^"()" ^/^ arrow ^/^ me
 
   and pp_applicative_functor param pmty mty =
-    let param = string param.txt in
+    let param = module_name param.txt in
     let pmty = pp pmty in
     let mty = pp mty in
     !^"functor" ^/^ parens (param ^/^ colon ^/^ pmty) ^/^ arrow ^/^ mty
@@ -953,7 +958,7 @@ and Module_binding : sig
 end = struct
   (* TODO: proper printing *)
   let pp { pmb_name; pmb_expr; pmb_attributes; _ } =
-    let lhs = string pmb_name.txt in
+    let lhs = module_name pmb_name.txt in
     let rhs = Module_expr.pp pmb_expr in
     let rhs = Attribute.attach_to_top_item rhs pmb_attributes in
     lhs, rhs
@@ -1054,7 +1059,7 @@ end = struct
       (group (!^"include" ^/^ incl))
       pincl_attributes
 
-  let pp_item ({ psig_desc; _ } as item) =
+  let pp_item { psig_desc; _ } =
     match psig_desc with
     | Psig_value vd -> Value_description.pp vd
     | Psig_type (rf, decls) -> Type_declaration.pp_decl rf decls
@@ -1064,9 +1069,7 @@ end = struct
     | Psig_include incl -> pp_include incl
     | Psig_attribute attr -> Attribute.pp Free_floating attr
     | Psig_extension (ext, attrs) -> pp_extension ext attrs
-    | _ ->
-      Pprintast.signature Format.err_formatter [ item ];
-      assert false
+    | _ -> assert false
 
   let pp = separate_map (repeat 2 hardline) pp_item
 end

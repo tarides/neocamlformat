@@ -8,10 +8,10 @@ let () =
   let b = Lexing.from_channel ic in
   let doc =
     if Filename.check_suffix fn "mli" then
-      let sg = Parse.interface b in
+      let sg = Parse_source.interface b in
       Pparsetree.Signature.pp sg
     else
-      let st = Parse.implementation b in
+      let st = Parse_source.implementation b in
       Pparsetree.Structure.pp st
   in
   PPrint.ToChannel.pretty 10. width stdout doc;
