@@ -508,7 +508,8 @@ end = struct
     | Pexp_lazy exp -> pp_lazy ps exp
     | Pexp_object cl -> pp_object cl
     | Pexp_pack me -> pp_pack me None
-    | Pexp_open (od, exp) -> pp_open od exp
+    | Pexp_open (lid, exp) -> pp_open lid exp
+    | Pexp_letopen (od, exp) -> pp_letopen ps od exp
     | Pexp_letop letop -> pp_letop letop
     | Pexp_extension ext -> Extension.pp Item ext
     | Pexp_unreachable -> dot
@@ -821,8 +822,19 @@ end = struct
     in
     parens (module_ ^/^ me ^^ constraint_)
 
-  and pp_open _od _exp =
-    assert false
+  and pp_open lid exp =
+    let lid = Longident.pp lid.txt in
+    let exp = pp [] exp in
+    lid ^^ dot ^^ parens (break 0 ^^ exp ^^ break 0)
+
+  and pp_letopen ps od exp =
+    let od = Open_declaration.pp Attached_to_item od in
+    let exp =
+      let ps = if Printing_stack.will_parenthesize ps then [] else List.tl ps in
+      pp ps exp
+    in
+    let doc = !^"let " ^^ od ^^ !^" in" ^/^ exp in
+    Printing_stack.parenthesize ps doc
 
   and pp_letop _ =
     assert false
@@ -1092,7 +1104,7 @@ end = struct
     | Pstr_module mb -> pp_module mb
     | Pstr_recmodule mbs -> pp_recmodule mbs
     | Pstr_modtype mtd -> Module_type_declaration.pp mtd
-    | Pstr_open od -> Open_declaration.pp od
+    | Pstr_open od -> Open_declaration.pp Attached_to_structure_item od
     | Pstr_class _ -> assert false
     | Pstr_class_type _ -> assert false
     | Pstr_include incl -> pp_include incl
@@ -1307,9 +1319,9 @@ end = struct
 end
 
 and Open_declaration : sig
-  val pp : open_declaration -> document
+  val pp : Attribute.kind -> open_declaration -> document
 end = struct
-  let pp { popen_expr; popen_override; popen_attributes; _ } =
+  let pp kind { popen_expr; popen_override; popen_attributes; _ } =
     let expr = Module_expr.pp popen_expr in
     let over =
       match popen_override with
@@ -1317,5 +1329,5 @@ end = struct
       | _ -> empty
     in
     let opn = group (!^"open" ^^ over ^/^ expr) in
-    Attribute.attach_to_top_item opn popen_attributes
+    Attribute.attach kind opn popen_attributes
 end
