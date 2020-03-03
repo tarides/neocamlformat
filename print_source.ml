@@ -68,6 +68,23 @@ module Tokens = struct
 end
 open Tokens
 
+module Ident_class = struct
+  type t =
+    | Prefix_op of string
+    | Infix_op of string
+    | Normal
+
+  (* Refer to:
+     http://caml.inria.fr/pub/docs/manual-ocaml/lex.html#sss:lex-ops-symbols *)
+  let classify s =
+    assert (s <> "");
+    match String.get s 0 with
+    | '!' | '?' | '~' -> Prefix_op s
+    | '$' | '&' | '*' | '+' | '-' | '/' | '=' | '>' | '@' | '^' | '|'
+    | '%' | '<' | '#' -> Infix_op s
+    | _ -> Normal
+end
+
 module Longident : sig
   include module type of struct include Longident end
 
@@ -76,11 +93,9 @@ end = struct
   include Longident
 
   let pp_ident s =
-    match String.get s 0 with
-    | '!' | '?' | '~'
-    | '$' | '&' | '*' | '+' | '-' | '/' | '=' | '>' | '@' | '^' | '|'
-    | '%' | '<' | '#' -> parens (string s)
-    | _ -> string s
+    match Ident_class.classify s with
+    | Normal -> string s
+    | Infix_op _ | Prefix_op _ -> parens (string s)
 
   let rec pp = function
     | Lident s -> pp_ident s
@@ -517,17 +532,9 @@ end = struct
       simple_apply ps exp args
 
   (* TODO: precedence *)
-  type kind = Prefix_op of string | Infix_op of string | Normal
-
   let classify_fun exp =
     match exp.pexp_desc with
-    | Pexp_ident { txt = Lident s; _ } when s <> "" -> begin
-        match String.get s 0 with
-        | '!' | '?' | '~' -> Prefix_op s
-        | '$' | '&' | '*' | '+' | '-' | '/' | '=' | '>' | '@' | '^' | '|'
-        | '%' | '<' | '#' -> Infix_op s
-        | _ -> Normal
-      end
+    | Pexp_ident { txt = Lident s; _ } when s <> "" -> Ident_class.classify s
     | _ -> Normal
 
   let pp ps exp args =
