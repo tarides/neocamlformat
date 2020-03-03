@@ -75,8 +75,15 @@ module Longident : sig
 end = struct
   include Longident
 
+  let pp_ident s =
+    match String.get s 0 with
+    | '!' | '?' | '~'
+    | '$' | '&' | '*' | '+' | '-' | '/' | '=' | '>' | '@' | '^' | '|'
+    | '%' | '<' | '#' -> parens (string s)
+    | _ -> string s
+
   let rec pp = function
-    | Lident s -> string s
+    | Lident s -> pp_ident s
     | Ldot (lid, s) -> pp lid ^^ dot ^^ break 0 ^^ string s
     | Lapply (l1, l2) -> pp l1 ^^ break 0 ^^ parens (pp l2)
 
@@ -467,6 +474,70 @@ end = struct
     | Ppat_open (lid, p) -> pp_open lid p
 end
 
+and Application : sig
+  val pp : Printing_stack.t -> expression -> (arg_label * expression) list ->
+    document
+end = struct
+  let argument ps (lbl, exp) =
+    let suffix lbl =
+      match exp.pexp_desc with
+      | Pexp_ident { txt = Lident id; _ } when lbl = id -> empty
+      | _ -> colon ^^ Expression.pp ps exp
+    in
+    match lbl with
+    | Nolabel -> Expression.pp ps exp
+    | Labelled lbl -> tilde ^^ string lbl ^^ suffix lbl
+    | Optional lbl -> qmark ^^ string lbl ^^ suffix lbl
+
+  (* FIXME: handle infix ops *)
+  let simple_apply ps exp args =
+    let exp = Expression.pp ps exp in
+    let args = separate_map (break 1) (argument ps) args in
+    let doc = prefix ~indent:2 ~spaces:1 exp args in
+    Printing_stack.parenthesize ps doc
+
+  let prefix_op ps (exp, op) = function
+    | (Nolabel, fst_arg) :: args ->
+      let op = string op in
+      let fst_arg = Expression.pp ps fst_arg in
+      let args = separate_map (break 1) (argument ps) args in
+      let doc = prefix ~indent:2 ~spaces:1 (op ^^ fst_arg) args in
+      Printing_stack.parenthesize ps doc
+    | args ->
+      simple_apply ps exp args
+
+  let infix_op ps (exp, op) = function
+    | [ (Nolabel, fst); (Nolabel, snd) ] ->
+      let op = string op in
+      let fst = Expression.pp ps fst in
+      let snd = Expression.pp ps snd in
+      let doc = infix 2 1 op fst snd in
+      Printing_stack.parenthesize ps doc
+    | args ->
+      simple_apply ps exp args
+
+  (* TODO: precedence *)
+  type kind = Prefix_op of string | Infix_op of string | Normal
+
+  let classify_fun exp =
+    match exp.pexp_desc with
+    | Pexp_ident { txt = Lident s; _ } when s <> "" -> begin
+        match String.get s 0 with
+        | '!' | '?' | '~' -> Prefix_op s
+        | '$' | '&' | '*' | '+' | '-' | '/' | '=' | '>' | '@' | '^' | '|'
+        | '%' | '<' | '#' -> Infix_op s
+        | _ -> Normal
+      end
+    | _ -> Normal
+
+  let pp ps exp args =
+    match classify_fun exp with
+    | Normal -> simple_apply ps exp args
+    | Prefix_op op -> prefix_op ps (exp, op) args
+    | Infix_op op -> infix_op ps (exp, op) args
+
+end
+
 and Expression : sig
   val pp : Printing_stack.t -> expression -> document
 end = struct
@@ -481,7 +552,7 @@ end = struct
     | Pexp_function cases -> pp_function ps cases
     | Pexp_fun (params, exp) ->
       pp_fun ps params exp
-    | Pexp_apply (expr, args) -> pp_apply ps expr args
+    | Pexp_apply (expr, args) -> Application.pp ps expr args
     | Pexp_match (arg, cases) -> pp_match ps arg cases
     | Pexp_try (arg, cases) -> pp_try ps arg cases
     | Pexp_tuple exps -> pp_tuple ps exps
@@ -567,24 +638,6 @@ end = struct
     let body = pp ps exp in
     let args = left_assoc_map ~sep:empty ~f:Fun_param.pp params in
     let doc = fun_ ~args ~body in
-    Printing_stack.parenthesize ps doc
-
-  and argument ps (lbl, exp) =
-    let suffix lbl =
-      match exp.pexp_desc with
-      | Pexp_ident { txt = Lident id; _ } when lbl = id -> empty
-      | _ -> colon ^^ pp ps exp
-    in
-    match lbl with
-    | Nolabel -> pp ps exp
-    | Labelled lbl -> tilde ^^ string lbl ^^ suffix lbl
-    | Optional lbl -> qmark ^^ string lbl ^^ suffix lbl
-
-  and pp_apply ps exp args =
-    (* FIXME: handle infix ops *)
-    let exp = pp ps exp in
-    let args = separate_map (break 1) (argument ps) args in
-    let doc = prefix ~indent:2 ~spaces:1 exp args in
     Printing_stack.parenthesize ps doc
 
   and pp_match ps arg case_list =
