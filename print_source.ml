@@ -77,12 +77,16 @@ module Ident_class = struct
   (* Refer to:
      http://caml.inria.fr/pub/docs/manual-ocaml/lex.html#sss:lex-ops-symbols *)
   let classify s =
-    assert (s <> "");
-    match String.get s 0 with
-    | '!' | '?' | '~' -> Prefix_op s
-    | '$' | '&' | '*' | '+' | '-' | '/' | '=' | '>' | '@' | '^' | '|'
-    | '%' | '<' | '#' -> Infix_op s
-    | _ -> Normal
+    match s with
+    | "" -> assert false
+    | ":=" | "or" | "&" | "&&" | "!=" | "mod" | "land" | "lor" | "lxor"
+    | "lsl" | "lsr" | "asr" -> Infix_op s
+    | _ ->
+      match String.get s 0 with
+      | '!' | '?' | '~' -> Prefix_op s
+      | '$' | '&' | '*' | '+' | '-' | '/' | '=' | '>' | '@' | '^' | '|'
+      | '%' | '<' | '#' -> Infix_op s
+      | _ -> Normal
 end
 
 module Longident : sig
@@ -431,6 +435,7 @@ end = struct
 
   and pp_or ps p1 p2 =
     let p1 =
+      (* Not the nicest way of handling this… but the easiest. *)
       (* or-patterns are left-assoc *)
       pp (List.tl ps) p1
     in
@@ -513,6 +518,7 @@ end = struct
 
   let prefix_op ps (exp, op) = function
     | (Nolabel, fst_arg) :: args ->
+      let ps = Printing_stack.Prefix_op :: List.tl ps in
       let op = string op in
       let fst_arg = Expression.pp ps fst_arg in
       let args = separate_map (break 1) (argument ps) args in
@@ -523,10 +529,11 @@ end = struct
 
   let infix_op ps (exp, op) = function
     | [ (Nolabel, fst); (Nolabel, snd) ] ->
-      let op = string op in
+      let ps = Printing_stack.top_is_op ~on_left:true op ps in
       let fst = Expression.pp ps fst in
+      let ps = Printing_stack.top_is_op ~on_left:false op ps in
       let snd = Expression.pp ps snd in
-      let doc = infix 2 1 op fst snd in
+      let doc = infix 2 1 (string op) fst snd in
       Printing_stack.parenthesize ps doc
     | args ->
       simple_apply ps exp args
@@ -814,7 +821,10 @@ end = struct
     group (parens (group (exp ^^ ct_start) ^/^ !^":>" ^/^  ct))
 
   and pp_send ps exp met =
-    let exp = pp ps exp in
+    let exp =
+      let ps = Printing_stack.top_is_op ~on_left:true "#" ps in
+      pp ps exp
+    in
     let met = string met.txt in
     let doc = flow (break 0) [ exp; sharp; met ] in
     Printing_stack.parenthesize ps doc
