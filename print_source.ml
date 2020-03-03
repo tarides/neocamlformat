@@ -1275,6 +1275,10 @@ end = struct
     nest 2 (break 1 ^^ lbls) ^/^
     rbrace
 
+  let has_args = function
+    | Pcstr_tuple [] -> false
+    | _ -> true
+
   let constructor_arguments = function
     | Pcstr_record lbl_decls -> record lbl_decls
     | Pcstr_tuple args ->
@@ -1287,20 +1291,29 @@ end = struct
 
   let gadt_constructor { pcd_name; pcd_args; pcd_res; pcd_attributes; _ } =
     let name = string pcd_name.txt in
-    let args = constructor_arguments pcd_args in
-    let res  = Core_type.pp [] (Option.get pcd_res) in
-    let decl = name ^/^ colon ^/^ args ^/^ arrow ^/^ res in
+    let decl =
+      if has_args pcd_args then
+        let args = constructor_arguments pcd_args in
+        let res  = Core_type.pp [] (Option.get pcd_res) in
+        name ^/^ colon ^/^ args ^/^ arrow ^/^ res 
+      else
+        let res  = Core_type.pp [] (Option.get pcd_res) in
+        name ^/^ colon ^/^ res 
+    in
     Attribute.attach_to_item decl pcd_attributes
 
   let simple_constructor { pcd_name; pcd_args; pcd_attributes; _ } =
     let name = string pcd_name.txt in
-    let args = constructor_arguments pcd_args in
     let decl =
-      group (
-        prefix ~indent:2 ~spaces:1
-          (name ^/^ of_)
-          args
-      )
+      if has_args pcd_args then
+        let args = constructor_arguments pcd_args in
+        group (
+          prefix ~indent:2 ~spaces:1
+            (name ^/^ of_)
+            args
+        )
+      else
+        name
     in
     Attribute.attach_to_item decl pcd_attributes
 
