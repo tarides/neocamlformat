@@ -19,6 +19,7 @@ type elt =
 (* Cf.  http://caml.inria.fr/pub/docs/manual-ocaml/expr.html#ss:precedence-and-associativity *)
 let infix_op ~on_left = function
   | "" -> assert false
+  | "::" -> Cons_constr { on_left }
   | "<-" | ":=" -> Infix_op { on_left; level = 1}
   | "or" | "||" -> Infix_op { on_left; level = 2}
   | "&"  | "&&" -> Infix_op { on_left; level = 3}
@@ -111,7 +112,14 @@ let needs_parens elt parent =
         (* Not necessary: but better style. *)
         true
       | Prefix_op
-      | Expression Pexp_field _ -> true
+      | Expression ( Pexp_field _ 
+                   | Pexp_apply _
+                   | Pexp_construct _
+                   | Pexp_variant _
+                   | Pexp_assert _
+                   | Pexp_lazy _
+                   ) ->
+        true
       | Infix_op { level; _ } -> level >= 6
       | Cons_constr { on_left } -> on_left
       | _ -> false
@@ -179,6 +187,7 @@ let needs_parens elt parent =
                    | Pexp_construct _
                    | Pexp_variant _
                    | Pexp_assert _
+                   | Pexp_lazy _
                    ) ->
         true
       | Expression Pexp_record _
@@ -199,6 +208,7 @@ let needs_parens elt parent =
                    | Pexp_construct _
                    | Pexp_variant _
                    | Pexp_assert _
+                   | Pexp_lazy _
                    ) ->
         true
       | Expression Pexp_record _
@@ -219,6 +229,7 @@ let needs_parens elt parent =
                    | Pexp_construct _
                    | Pexp_variant _
                    | Pexp_assert _
+                   | Pexp_lazy _
                    ) ->
         true
       | Expression Pexp_record _
@@ -239,6 +250,7 @@ let needs_parens elt parent =
                    | Pexp_construct _
                    | Pexp_variant _
                    | Pexp_assert _
+                   | Pexp_lazy _
                    ) ->
         true
       | Expression Pexp_record _
@@ -259,6 +271,7 @@ let needs_parens elt parent =
                    | Pexp_construct _
                    | Pexp_variant _
                    | Pexp_assert _
+                   | Pexp_lazy _
                    )
       | Cons_constr _ ->
         true
@@ -280,6 +293,7 @@ let needs_parens elt parent =
                    | Pexp_construct _
                    | Pexp_variant _
                    | Pexp_assert _
+                   | Pexp_lazy _
                    )
       | Cons_constr _ ->
         true
@@ -302,6 +316,7 @@ let needs_parens elt parent =
                    | Pexp_construct _
                    | Pexp_variant _
                    | Pexp_assert _
+                   | Pexp_lazy _
                    )
       | Cons_constr _ ->
         true
@@ -323,6 +338,7 @@ let needs_parens elt parent =
                    | Pexp_construct _
                    | Pexp_variant _
                    | Pexp_assert _
+                   | Pexp_lazy _
                    )
       | Cons_constr _ ->
         true
@@ -342,6 +358,7 @@ let needs_parens elt parent =
                    | Pexp_construct _
                    | Pexp_variant _
                    | Pexp_assert _
+                   | Pexp_lazy _
                    )
       | Cons_constr _ ->
         true
@@ -360,6 +377,7 @@ let needs_parens elt parent =
                    | Pexp_construct _
                    | Pexp_variant _
                    | Pexp_assert _
+                   | Pexp_lazy _
                    )
       | Cons_constr _ ->
         true
@@ -376,6 +394,7 @@ let needs_parens elt parent =
       | Infix_op _
       | Expression ( Pexp_apply _
                    | Pexp_assert _
+                   | Pexp_lazy _
                    | Pexp_construct _
                    | Pexp_variant _
                    | Pexp_record _
@@ -394,11 +413,13 @@ let needs_parens elt parent =
       | Infix_op _
       | Expression ( Pexp_apply _
                    | Pexp_assert _
+                   | Pexp_lazy _
                    | Pexp_construct _
                    | Pexp_variant _
                    | Pexp_record _
                    | Pexp_array _
                    | Pexp_ifthenelse _
+                   | Pexp_list_lit _
                    | Pexp_sequence _ 
                    | Pexp_send _
                    )
@@ -440,6 +461,7 @@ let needs_parens elt parent =
                    | Pexp_match _
                    | Pexp_try _
                    | Pexp_function _
+                   | Pexp_list_lit _
                    | Pexp_sequence _
                    | Pexp_record _)
       | Prefix_op

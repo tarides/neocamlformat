@@ -218,6 +218,10 @@ and pattern_desc =
            C P              Some P
            C (P1, ..., Pn)  Some (Ppat_tuple [P1; ...; Pn])
          *)
+  | Ppat_list_lit of pattern list
+        (* [ p1 ; p2 ; ... ] *)
+  | Ppat_cons of pattern * pattern
+        (* p1 :: p2 *)
   | Ppat_variant of label * pattern option
         (* `A             (None)
            `A P           (Some P)
@@ -312,6 +316,10 @@ and expression_desc =
            C E              Some E
            C (E1, ..., En)  Some (Pexp_tuple[E1;...;En])
         *)
+  | Pexp_list_lit of expression list
+        (* [ e1 ; e2 ; ... ] *)
+  | Pexp_cons of expression * expression
+        (* e1 :: e2 *)
   | Pexp_variant of label * expression option
         (* `A             (None)
            `A E           (Some E)

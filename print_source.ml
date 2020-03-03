@@ -3,6 +3,7 @@ open Source_tree
 open PPrint
 
 let prefix ~indent:n ~spaces:b l r = prefix n b l r
+let infix ~indent:n ~spaces:b op l r = infix n b op l r
 
 let left_assoc_map ~sep ~f = function
   | [] -> empty
@@ -80,7 +81,7 @@ module Ident_class = struct
     match s with
     | "" -> assert false
     | ":=" | "or" | "&" | "&&" | "!=" | "mod" | "land" | "lor" | "lxor"
-    | "lsl" | "lsr" | "asr" -> Infix_op s
+    | "lsl" | "lsr" | "asr" | "::" -> Infix_op s
     | _ ->
       match String.get s 0 with
       | '!' | '?' | '~' -> Prefix_op s
@@ -391,6 +392,20 @@ end = struct
     in
     Printing_stack.parenthesize ps doc
 
+  and pp_list_literal = function
+    | [] -> brackets empty
+    | lst ->
+      let doc = nest 2 (separate_map (semi ^^ break 1) (pp []) lst) in
+      brackets (break 1 ^^ doc ^^ break 1)
+
+  and pp_cons ps hd tl =
+    let ps = Printing_stack.top_is_op ~on_left:true "::" ps in
+    let hd = pp ps hd in
+    let ps = Printing_stack.top_is_op ~on_left:false "::" ps in
+    let tl = pp ps tl in
+    let doc = infix ~indent:2 ~spaces:1 !^"::" hd tl in
+    Printing_stack.parenthesize ps doc
+
   and pp_construct ps name arg_opt =
     let name = Longident.pp name.txt in
     match arg_opt with
@@ -481,6 +496,8 @@ end = struct
     | Ppat_interval (c1, c2) -> pp_interval c1 c2
     | Ppat_tuple pats -> pp_tuple ps pats
     | Ppat_construct (name, arg) -> pp_construct ps name arg
+    | Ppat_list_lit pats -> pp_list_literal pats
+    | Ppat_cons (hd, tl) -> pp_cons ps hd tl
     | Ppat_variant (tag, arg) -> pp_variant ps tag arg
     | Ppat_record (pats, closed) -> pp_record ps pats closed
     | Ppat_array pats -> pp_array ps pats
@@ -533,7 +550,7 @@ end = struct
       let fst = Expression.pp ps fst in
       let ps = Printing_stack.top_is_op ~on_left:false op ps in
       let snd = Expression.pp ps snd in
-      let doc = infix 2 1 (string op) fst snd in
+      let doc = infix ~indent:2 ~spaces:1 (string op) fst snd in
       Printing_stack.parenthesize ps doc
     | args ->
       simple_apply ps exp args
@@ -570,6 +587,8 @@ end = struct
     | Pexp_match (arg, cases) -> pp_match ps arg cases
     | Pexp_try (arg, cases) -> pp_try ps arg cases
     | Pexp_tuple exps -> pp_tuple ps exps
+    | Pexp_list_lit exps -> pp_list_literal ps exps
+    | Pexp_cons (hd, tl) -> pp_cons ps hd tl
     | Pexp_construct (lid, arg) -> pp_construct ps lid arg
     | Pexp_variant (tag, arg) -> pp_variant ps tag arg
     | Pexp_record (fields, exp) -> pp_record ps fields exp
@@ -690,6 +709,27 @@ end = struct
     let arg  = optional (pp ps) arg_opt in
     let doc  = prefix ~indent:2 ~spaces:1 name arg in
     Printing_stack.parenthesize ps doc
+
+  and pp_cons ps hd tl =
+    let ps = Printing_stack.top_is_op ~on_left:true "::" ps in
+    let hd = Expression.pp ps hd in
+    let ps = Printing_stack.top_is_op ~on_left:false "::" ps in
+    let tl = Expression.pp ps tl in
+    let doc = infix ~indent:2 ~spaces:1 !^"::" hd tl in
+    Printing_stack.parenthesize ps doc
+
+  and pp_list_literal ps es =
+    let doc =
+      match es with
+      | [] -> empty
+      | _ ->
+        nest 2 (
+          break 1 ^^ 
+          separate_map (semi ^^ break 1) (pp ps) es ^^
+          break 1
+        )
+    in
+    brackets doc
 
   and pp_variant ps tag arg_opt =
     let tag = Polymorphic_variant_tag.pp tag in
@@ -959,7 +999,7 @@ end = struct
       in
       pat ^^ params ^^ typ
     in
-    let rhs = Expression.pp [ Printing_stack.Value_binding ] pvb_expr in
+    let rhs = Expression.pp [] pvb_expr in
     let rhs = Attribute.attach attr_kind rhs pvb_attributes in
     lhs, rhs
 end
