@@ -230,9 +230,9 @@ end = struct
     (* FIXME: use n-ary arrow *)
     | Ptyp_arrow (params, ct2) -> pp_arrow ps params ct2
     | Ptyp_tuple lst -> pp_tuple ps lst
-    | Ptyp_constr (name, args) -> pp_constr name args
+    | Ptyp_constr (name, args) -> pp_constr ps name args
     | Ptyp_object (fields, closed) -> pp_object fields closed
-    | Ptyp_class (name, args) -> pp_class name args
+    | Ptyp_class (name, args) -> pp_class ps name args
     | Ptyp_alias (ct, alias) -> pp_alias ps ct alias
     | Ptyp_variant (fields, closed, present) -> pp_variant fields closed present
     | Ptyp_poly (vars, ct) -> pp_poly vars ct
@@ -258,14 +258,14 @@ end = struct
     let tuple = left_assoc_map ~sep:(star ^^ break 1) ~f:(pp ps) l in
     Printing_stack.parenthesize ps tuple
 
-  and pp_constr name args =
+  and pp_constr ps name args =
     let name = Longident.pp name.txt in
     match args with
     | [] -> name
-    | x :: xs -> pp_params x xs ^/^ name
+    | x :: xs -> pp_params ps x xs ^/^ name
 
-  and pp_params first = function
-    | []   -> pp [] first
+  and pp_params ps first = function
+    | []   -> pp ps first
     | rest -> parens (separate_map comma (pp []) (first :: rest))
 
   and pp_object fields closed =
@@ -278,11 +278,11 @@ end = struct
     in
     angles fields
 
-  and pp_class name args =
+  and pp_class ps name args =
     let name = sharp ^^ Longident.pp name.txt in
     match args with
     | [] -> name
-    | x :: xs -> pp_params x xs ^/^ name
+    | x :: xs -> pp_params ps x xs ^/^ name
 
   (* FIXME: not sure parens are ever needed *)
   and pp_alias ps ct alias =

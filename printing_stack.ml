@@ -64,15 +64,18 @@ let needs_parens elt parent =
   | Core_type Ptyp_arrow _
   | Core_type Ptyp_tuple _ -> begin
       match parent with
-      | Core_type (Ptyp_alias _ | Ptyp_arrow _ | Ptyp_tuple _) -> true
+      | Core_type ( Ptyp_constr _ 
+                  | Ptyp_class _
+                  | Ptyp_arrow _ 
+                  | Ptyp_tuple _) -> true
       | _ -> false
     end
   | Core_type Ptyp_alias _ -> begin
       match parent with
-      (* FIXME: # & cstr application *)
-      | Core_type (Ptyp_arrow _ | Ptyp_tuple _)
-      | Value_binding -> true (* FIXME: when do we have value binding? was I
-                                 thinking about Ppat_alias? *)
+      | Core_type ( Ptyp_constr _ 
+                  | Ptyp_class _
+                  | Ptyp_arrow _ 
+                  | Ptyp_tuple _) -> true
       | _ -> false
     end
 
