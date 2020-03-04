@@ -427,7 +427,7 @@ end = struct
     let field = Longident.pp lid.txt in
     match pat.ppat_desc with
     | Ppat_var v when Longident.last lid.txt = v.txt -> field
-    | _ -> field ^/^ equals ^/^ pp ps pat
+    | _ -> group (group (field ^/^ equals) ^/^ pp ps pat)
 
   and pp_record ps pats closed =
     let fields =
@@ -439,7 +439,7 @@ end = struct
       | Closed -> fields
       | Open -> fields ^^ semi ^/^ underscore
     in
-    braces fields
+    group (braces (nest 2 (break 1 ^^ fields) ^^ break 1))
 
   and pp_array ps pats =
     brackets (
