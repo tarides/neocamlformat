@@ -5,6 +5,18 @@ open PPrint
 let prefix ~indent:n ~spaces:b l r = prefix n b l r
 let infix ~indent:n ~spaces:b op l r = infix n b op l r
 
+let docked_enclosed ~left ~right = function
+  | [] -> left ^^ right
+  | x :: xs ->
+    let fmt x = nest 2 (group (break 1 ^^ x)) in
+    let fields =
+      List.fold_left
+        (fun acc elt -> group (acc ^^ semi) ^^ fmt elt)
+        (fmt x) 
+        xs
+    in
+    left ^^ fields ^^ group (break 1 ^^ right)
+
 let left_assoc_map ~sep ~f = function
   | [] -> empty
   | x :: xs ->
@@ -439,13 +451,10 @@ end = struct
     | _ -> group (group (field ^/^ equals) ^/^ pp ps pat)
 
   and pp_record ps pats closed =
-    let fields =
-      flow (semi ^^ break 1) (
-        List.map (pp_record_field ps) pats
-        @ (match closed with Closed -> [] | Open -> [ underscore ])
-      )
-    in
-    flow (break 1)  [ lbrace; nest 2 fields; rbrace ]
+    let fields = List.map (pp_record_field ps) pats in
+    let extra_fields = match closed with Closed -> [] | Open -> [ underscore ] in
+    docked_enclosed ~left:lbrace ~right:rbrace
+      (fields @ extra_fields)
 
   and pp_array ps pats =
     brackets (
