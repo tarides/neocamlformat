@@ -588,7 +588,9 @@ and Expression : sig
   val pp : Printing_stack.t -> expression -> document
 end = struct
   let rec pp ps { pexp_desc; pexp_attributes; _ } =
-    let desc = pp_desc (Printing_stack.Expression pexp_desc :: ps) pexp_desc in
+    let desc =
+      group (pp_desc (Printing_stack.Expression pexp_desc :: ps) pexp_desc)
+    in
     Attribute.attach_to_item desc pexp_attributes
 
   and pp_desc ps = function
@@ -764,9 +766,9 @@ end = struct
     let prefix =
       match updated_record with
       | None -> empty
-      | Some e -> pp ps e ^/^ !^"with" ^^ break 1
+      | Some e -> group (group (break 1 ^^ pp ps e) ^/^ !^"with")
     in
-    braces (prefix ^^ fields)
+    braces (nest 2 (prefix ^/^ fields) ^^ break 1)
 
   and pp_field ps re fld =
     let record = pp ps re in
