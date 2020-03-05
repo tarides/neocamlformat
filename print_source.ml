@@ -13,29 +13,38 @@ let left_assoc_map ~sep ~f = function
 module Binding = struct
   type t = {
     lhs : document;
-    typ : document option;
+    params: document list;
+    constr: document option;
+    coerce: document option;
     rhs : document;
   }
 
-  let simple ~binder kw lhs rhs =
-    prefix ~indent:2 ~spaces:1
-      (group (prefix ~indent:2 ~spaces:1 kw (group (lhs ^/^ binder))))
-      rhs
+  let pp ?(binder=equals) ~keyword { lhs; params; constr; coerce; rhs } =
+    let pre = group (keyword ^^ nest 2 (break 1 ^^ lhs)) in
+    let params =
+      match params with
+      | [] -> empty
+      | params -> nest 4 (break 1 ^^ group (flow (break 1) params))
+    in
+    let with_constraint =
+      match constr with
+      | None -> params
+      | Some constraint_ ->
+        group (params ^^ nest 2 (break 1 ^^ colon))
+        ^^ nest 2 (break 1 ^^ constraint_)
+    in
+    let with_coercion =
+      match coerce with
+      | None -> with_constraint
+      | Some coercion ->
+        group (with_constraint ^^ nest 2 (break 1 ^^ !^":>"))
+        ^^ nest 2 (break 1 ^^ coercion)
+    in
+    let lhs = pre ^^ group (with_coercion ^/^ binder) in
+    lhs ^^ nest 2 (break 1 ^^ rhs)
 
-  let with_constraint ~binder kw lhs typ rhs =
-    nest 2 (
-      group (kw ^/^ (lhs ^^ space ^^ colon)) ^/^
-      typ
-    ) ^/^ binder ^^
-    nest 2 (
-      break 1 ^^ 
-      rhs
-    )
-
-  let pp ?(binder=equals) ~keyword { lhs; rhs; typ } =
-    match typ with
-    | None -> simple ~binder keyword lhs rhs
-    | Some typ -> with_constraint ~binder keyword lhs typ rhs
+  let pp_simple ?binder ~keyword lhs rhs =
+    pp ?binder ~keyword { lhs; params = []; constr = None; coerce = None; rhs}
 end
 
 let module_name = function
@@ -431,15 +440,12 @@ end = struct
 
   and pp_record ps pats closed =
     let fields =
-      separate_map (semi ^^ break 1)
-        (pp_record_field ps) pats
+      flow (semi ^^ break 1) (
+        List.map (pp_record_field ps) pats
+        @ (match closed with Closed -> [] | Open -> [ underscore ])
+      )
     in
-    let fields =
-      match closed with
-      | Closed -> fields
-      | Open -> fields ^^ semi ^/^ underscore
-    in
-    group (braces (nest 2 (break 1 ^^ fields) ^^ break 1))
+    flow (break 1)  [ lbrace; nest 2 fields; rbrace ]
 
   and pp_array ps pats =
     brackets (
@@ -625,9 +631,9 @@ end = struct
   and pp_let ps rf vbs body =
     let vbs =
       List.mapi (fun i vb ->
-        let lhs, rhs = Value_binding.pp Attached_to_item vb in
+        let binding = Value_binding.pp Attached_to_item vb in
         let keyword = if i = 0 then let_ ^^ rec_flag rf else and_ in
-        Binding.pp ~keyword { lhs; rhs; typ = None }
+        Binding.pp ~keyword binding
       ) vbs
     in
     let vbs = separate hardline vbs in
@@ -975,33 +981,24 @@ end = struct
     parens (!^"type" ^/^ string typ.txt)
 
   let pp = function
-    | Term (lbl, default, pat) -> term lbl default pat
-    | Type typ -> newtype typ
+    | Term (lbl, default, pat) -> group (term lbl default pat)
+    | Type typ -> group (newtype typ)
 end
 
 and Value_binding : sig
-  val pp : Attribute.kind -> value_binding -> document * document
+  val pp : Attribute.kind -> value_binding -> Binding.t
 end = struct
 
   let pp attr_kind
       { pvb_pat; pvb_params; pvb_type; pvb_expr; pvb_attributes; _ } =
-    let lhs =
-      let pat = Pattern.pp [ Printing_stack.Value_binding ] pvb_pat in
-      let params =
-        match pvb_params with
-        | [] -> empty
-        | lst -> break 1 ^^ left_assoc_map ~sep:empty ~f:Fun_param.pp lst
-      in
-      let typ =
-        let ty1, ty2 = pvb_type in
-        let pp ty = break 1 ^^ Core_type.pp [] ty in
-        optional pp ty1 ^^ optional pp ty2
-      in
-      pat ^^ params ^^ typ
-    in
+    let pat = Pattern.pp [ Printing_stack.Value_binding ] pvb_pat in
+    let params = List.map Fun_param.pp pvb_params in
+    let constr, coerce = pvb_type in
+    let constr = Option.map (Core_type.pp [ Value_binding ]) constr in
+    let coerce = Option.map (Core_type.pp [ Value_binding ]) coerce in
     let rhs = Expression.pp [] pvb_expr in
     let rhs = Attribute.attach attr_kind rhs pvb_attributes in
-    lhs, rhs
+    { Binding.lhs = pat; params; constr; coerce; rhs }
 end
 
 and Module_expr : sig
@@ -1126,14 +1123,10 @@ end = struct
 
   let pp_raw name params mty me =
     let lhs = module_name name.txt in
-    let lhs =
-      match params with
-      | [] -> lhs
-      | _ -> separate_map (break 1) param params
-    in
-    let typ = Option.map Module_type.pp mty in
+    let params = List.map param params in
+    let constr = Option.map Module_type.pp mty in
     let rhs = Module_expr.pp me in
-    { Binding. lhs; typ; rhs }
+    { Binding. lhs; params; constr; coerce = None; rhs }
 
   (* TODO: proper printing *)
   let pp { pmb_name; pmb_params; pmb_type; pmb_expr; pmb_attributes; _ } =
@@ -1153,8 +1146,7 @@ end = struct
       | None -> kw ^/^ name
       | Some mty ->
         let typ = Module_type.pp mty in
-        Binding.pp ~keyword:kw
-          { lhs = name; rhs = typ; typ = None }
+        Binding.pp_simple ~keyword:kw name typ
     in
     Attribute.attach_to_top_item doc pmtd_attributes
 end
@@ -1173,10 +1165,9 @@ end = struct
   let pp_value rf vbs =
     let vbs =
       List.mapi (fun i vb ->
-        let lhs, rhs = Value_binding.pp Attached_to_structure_item vb in
+        let binding = Value_binding.pp Attached_to_structure_item vb in
         let keyword = if i = 0 then let_ ^^ rec_flag rf else and_ in
-        Binding.pp ~keyword
-          { lhs; rhs; typ = None }
+        Binding.pp ~keyword binding
       ) vbs
     in
     separate (twice hardline) vbs
@@ -1404,7 +1395,7 @@ end = struct
       List.mapi (fun i decl ->
         let lhs, rhs = pp decl in
         let keyword = if i = 0 then !^"type" ^^ rec_flag rf else and_ in
-        Binding.pp ~keyword { lhs; rhs; typ = None }
+        Binding.pp_simple ~keyword lhs rhs
       ) decls
     in
     separate (twice hardline) decls
@@ -1415,7 +1406,7 @@ end = struct
       List.mapi (fun i decl ->
         let lhs, rhs = pp decl in
         let keyword = if i = 0 then !^"type" else and_ in
-        Binding.pp ~binder ~keyword { lhs; rhs; typ = None }
+        Binding.pp_simple ~binder ~keyword lhs rhs
       ) decls
     in
     separate hardline decls
