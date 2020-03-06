@@ -1,5 +1,6 @@
 let fmt_file fn =
   let open Source_parsing in
+  let open Printing in
   let ic = open_in fn in
   let b = Lexing.from_channel ic in
     if Filename.check_suffix fn "mli" then
@@ -17,7 +18,7 @@ let (and+) t1 t2 = Term.(const (fun x y -> (x, y)) $ t1 $ t2)
 let (let*) = Result.bind
 
 let cmd =
-  let open Options in
+  let open Printing.Options in
   let+ record_exp = Record.expression_arg
   and+ record_pat = Record.pattern_arg
   and+ record_all = Record.all_arg
