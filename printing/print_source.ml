@@ -653,12 +653,12 @@ end = struct
     let arg = pp [] arg in
     let cases = cases ps case_list in
     let doc =
-      (* FIXME: the layout is generally different. *)
       group (
         string "try" ^^
-        nest 2 (break 1 ^^ arg) ^/^
-        string "with"
-      ) ^^ cases
+        nest 2 (break 1 ^^ arg)
+      ) ^/^
+      string "with" ^^
+      cases
     in
     Printing_stack.parenthesize ps doc
 
