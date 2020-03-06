@@ -11,6 +11,7 @@ type elt =
   | Expression of expression_desc
   | Value_binding (* FIXME: currently also used for function parameters *)
   | Cons_constr of { on_left: bool }
+  | Pipe of { on_left: bool }
   | Prefix_op
   | Infix_op of { on_left: bool; level: int (* gloups *); }
   | Row_field
@@ -21,6 +22,7 @@ type elt =
 let infix_op ~on_left = function
   | "" -> assert false
   | "::" -> Cons_constr { on_left }
+  | "|" -> Pipe { on_left }
   | "<-" | ":=" -> Infix_op { on_left; level = 1}
   | "or" | "||" -> Infix_op { on_left; level = 2}
   | "&"  | "&&" -> Infix_op { on_left; level = 3}
@@ -139,12 +141,14 @@ let needs_parens elt parent =
       | Value_binding -> true
       | _ -> false
     end
+  | Pipe _
   | Pattern Ppat_or _ -> begin
       match parent with
       | Pattern Ppat_alias _ (* Not necessary: but better style. *)
       | Pattern _ 
       | Value_binding ->
         true
+      | Pipe { on_left } -> not on_left
       | _ -> false
     end
   | Pattern Ppat_alias _ -> begin

@@ -420,9 +420,8 @@ end = struct
 
   and pp_or ps p1 p2 =
     let p1 =
-      (* Not the nicest way of handling this… but the easiest. *)
-      (* or-patterns are left-assoc *)
-      pp (List.tl ps) p1
+      let ps = Printing_stack.top_is_op ~on_left:true "|" ps in
+      pp ps p1
     in
     let p2 = pp ps p2 in
     let or_ = p1 ^/^ pipe ^^ space ^^ p2 in
