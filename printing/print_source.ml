@@ -864,8 +864,8 @@ end = struct
     braces (angles fields)
 
   and pp_letmodule ps name (params, typ, mexp) expr =
-    let binding = Module_binding.pp_raw name params typ mexp in
-    let bind = Binding.pp ~keyword:(group (let_ ^/^ module_)) binding in
+    let binding = Module_binding.pp_raw name params typ mexp [] in
+    let bind = Binding.Module.pp ~keyword:(group (let_ ^/^ module_)) binding in
     let expr =
       let ps = if Printing_stack.will_parenthesize ps then [] else List.tl ps in
       pp ps expr
@@ -1075,9 +1075,10 @@ and Module_binding : sig
     -> functor_parameter list
     -> module_type option
     -> module_expr
-    -> Binding.t
+    -> attributes
+    -> Binding.Module.t
 
-  val pp : module_binding -> Binding.t
+  val pp : module_binding -> Binding.Module.t
 end = struct
   let param = function
     | Unit -> !^"()"
@@ -1090,18 +1091,32 @@ end = struct
         )
       )
 
-  let pp_raw name params mty me =
-    let lhs = module_name name.txt in
-    let params = List.map param params in
-    let constr = Option.map Module_type.pp mty in
-    let rhs = Module_expr.pp me in
-    { Binding. lhs; params; constr; coerce = None; rhs }
+  let pp_mty = function
+    | None -> Binding.Module.None
+    | Some ({ pmty_desc; pmty_attributes; _ } as mty) ->
+      match pmty_desc, pmty_attributes with
+      | Pmty_signature sg, [] -> Binding.Module.Sig (Signature.pp sg)
+      | _ -> Binding.Module.Mty (Module_type.pp mty)
 
-  (* TODO: proper printing *)
+  let pp_me ({ pmod_desc; pmod_attributes; _ } as me) =
+    match pmod_desc, pmod_attributes with
+    | Pmod_structure str, [] -> Binding.Module.Struct (Structure.pp str)
+    | _ -> Binding.Module.Expr (Module_expr.pp me)
+
+  let pp_raw name params mty me attrs =
+    let name = module_name name.txt in
+    let params = List.map param params in
+    let constr = pp_mty mty in
+    let expr = pp_me me in
+    let attributes =
+      separate_map (break 0) (Attribute.pp Attached_to_structure_item) attrs
+    in
+    { Binding.Module. name; params; constr; expr; attributes }
+
   let pp { pmb_name; pmb_params; pmb_type; pmb_expr; pmb_attributes; _ } =
-    let binding = pp_raw pmb_name pmb_params pmb_type pmb_expr in
-    let rhs = Attribute.attach_to_top_item binding.rhs pmb_attributes in
-    { binding with rhs }
+    let binding = pp_raw pmb_name pmb_params pmb_type pmb_expr pmb_attributes in
+    let expr = binding.expr in
+    { binding with expr }
 end
 
 and Module_type_declaration : sig
@@ -1142,13 +1157,13 @@ end = struct
     separate (twice hardline) vbs
 
   let pp_module mb =
-    Binding.pp ~keyword:module_ (Module_binding.pp mb)
+    Binding.Module.pp ~keyword:module_ (Module_binding.pp mb)
 
   let pp_recmodule mbs =
     let mbs =
       List.mapi (fun i mb ->
         let keyword = if i = 0 then group (module_ ^/^ !^"rec") else and_ in
-        Binding.pp ~keyword (Module_binding.pp mb)
+        Binding.Module.pp ~keyword (Module_binding.pp mb)
       ) mbs
     in
     separate (twice hardline) mbs
