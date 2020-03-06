@@ -310,7 +310,11 @@ end
 and Package_type : sig
   val pp : package_type -> document
 end = struct
-  let pp _ = assert false
+  let pp (lid, constrs) =
+    let lid = Longident.pp lid.txt in
+    match constrs with
+    | [] -> lid
+    | _ -> group (lid ^/^ !^"with" ^/^ !^"TODO")
 end
 
 and Row_field : sig
