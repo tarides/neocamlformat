@@ -1,13 +1,10 @@
-pp: main.ml
+build:
 	dune build
-	@-ln -s ./_build/default/main.exe $@
 
-test: pp
-	./pp ./source_tree.mli
-	./pp ./print_source.ml
+test: build
+	dune exec -- neocamlformat ./parsing/source_tree.mli ./printing/print_source.ml
 
 clean:
 	dune clean
-	@- rm pp
 
-.PHONY: clean pp test
+.PHONY: clean build test

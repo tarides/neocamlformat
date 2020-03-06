@@ -1,3 +1,0 @@
-(executable
- (name main)
- (libraries cmdliner compiler-libs.common pprint printing source_parsing))

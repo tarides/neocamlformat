@@ -1,0 +1,4 @@
+(executable
+ (name main)
+ (public_name neocamlformat)
+ (libraries cmdliner pprint printing source_parsing))
