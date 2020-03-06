@@ -2,6 +2,11 @@
   + leading-pipe: always | never | multiline-match
   + compact: always | never | under-application
 
-- normalisation:
+- record
+  - expressions: fit-or-vertical | docked
+  - patterns: fit-or-vertical | docked
+  - all
+
+- normalisations: (should be implemented as AST mappings)
   + merge functions: yes | no
     (i.e. [fun x -> fun y -> ...] => [fun x y -> ...])
