@@ -1,5 +1,5 @@
 - match:
-  + leading-pipe: always | never | multiline-match
+  + leading-pipe: always | never | multiline-match <<= BAD IDEA
   + compact: always | never | under-application
 
 - record

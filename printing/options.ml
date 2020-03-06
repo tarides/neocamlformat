@@ -83,21 +83,42 @@ module Record = struct
 end
 
 module Match = struct
-  let parens_style_choice = ref Parenthesing.Begin_end
+  let parens_style = ref Parenthesing.Begin_end
   let parens_style_cmd =
     let open Arg in
     let info =
       info ~doc:"style of parenthesing to use around match expressions"
         ["match-parens-style" ;"match-parenthezing-style"]
     in
-    parens_style_choice := value & opt Parenthesing.t Begin_end info
+    parens_style := value & opt Parenthesing.t Begin_end info
 
-  let parenthesing_situations_choice = ref Situations.When_needed
+  let parenthesing_situations = ref Situations.When_needed
   let parens_situations_cmd =
     let open Arg in
     let info =
       info ~doc:"when to add parentheses around match expressions"
         ["match-parenthezing"]
     in
-    parenthesing_situations_choice := value & opt Situations.t When_needed info
+    parenthesing_situations := value & opt Situations.t When_needed info
+end
+
+module Cases = struct
+  let body_indent = ref 2
+  let body_indent_cmd =
+    let open Arg in
+    let info =
+      info ~doc:"indentation of match/function cases body"
+        [ "cases-body-indent" ]
+    in
+    body_indent := value & opt int 2 info
+
+  let body_on_separate_line = ref Situations.When_needed
+  let body_on_separate_line_cmd =
+    let open Arg in
+    let info =
+      info ~doc:"when to put the body on a separate line"
+        [ "cases-body-on-separate-line" ]
+    in
+    body_on_separate_line := value & opt Situations.t When_needed info
+
 end

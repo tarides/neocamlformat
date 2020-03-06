@@ -21,6 +21,8 @@ let cmd =
   and+ () = Record.pattern_cmd
   and+ () = Match.parens_style_cmd
   and+ () = Match.parens_situations_cmd
+  and+ () = Cases.body_indent_cmd
+  and+ () = Cases.body_on_separate_line_cmd
   and+ width = Arg.(value & opt int 80 & info ["w"; "width"])
   and+ files = Arg.(value & pos_all file [] & info ~doc:"files to format" [])
   in

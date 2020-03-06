@@ -614,7 +614,10 @@ end = struct
         let guard = pp ps guard in
         lhs ^/^ group (!^"when" ^/^ guard)
     in
-    prefix ~indent:2 ~spaces:1 (group (lhs ^/^ arrow)) rhs
+    let lhs = group (lhs ^^ nest 2 (break 1 ^^ arrow)) in
+    match !Options.Cases.body_on_separate_line with
+    | Always -> lhs ^^ nest !Options.Cases.body_indent (hardline ^^ rhs)
+    | When_needed -> prefix ~indent:!Options.Cases.body_indent ~spaces:1 lhs rhs
 
   and cases ps case_list =
     let cases = separate_map (break 1 ^^ pipe ^^ space) (case ps) case_list in
@@ -647,8 +650,8 @@ end = struct
       ) ^^ cases
     in
     Printing_stack.parenthesize ps 
-      ~situations:!Options.Match.parenthesing_situations_choice
-      ~style:!Options.Match.parens_style_choice
+      ~situations:!Options.Match.parenthesing_situations
+      ~style:!Options.Match.parens_style
       doc
 
   and pp_try ps arg case_list =
