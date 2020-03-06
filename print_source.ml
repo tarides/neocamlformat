@@ -426,7 +426,6 @@ end = struct
       Printing_stack.parenthesize ps (tag ^/^ arg)
 
   and pp_record_field ps (lid, pat) =
-    (* TODO: print the whole lid only once *)
     let field = Longident.pp lid.txt in
     group (
       match pat.ppat_desc with
@@ -744,7 +743,6 @@ end = struct
     Printing_stack.parenthesize ps doc
 
   and record_field (lid, exp) =
-    (* TODO: print the whole lid only once *)
     let fld = Longident.pp lid.txt in
     group (
       match exp.pexp_desc with
