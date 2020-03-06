@@ -359,11 +359,12 @@ end = struct
     in
     Printing_stack.parenthesize ps doc
 
-  and pp_list_literal = function
-    | [] -> brackets empty
-    | lst ->
-      let doc = nest 2 (separate_map (semi ^^ break 1) (pp []) lst) in
-      brackets (break 1 ^^ doc ^^ break 1)
+  and pp_list_literal elts =
+    let elts = List.map (pp []) elts in
+    List_like.pp
+      ~formatting:Docked (* TODO: add an option *)
+      ~left:lbracket ~right:rbracket
+      elts
 
   and pp_cons ps hd tl =
     let ps = Printing_stack.top_is_op ~on_left:true "::" ps in
@@ -399,21 +400,17 @@ end = struct
 
   and pp_record ps pats closed =
     let fields = List.map (pp_record_field ps) pats in
-    let extra_fields = match closed with Closed -> [] | Open -> [ underscore ] in
-    match Options.(Choice.get Record.pattern_choice) with
-    | Docked ->
-      docked_enclosed ~left:lbrace ~right:rbrace
-        (fields @ extra_fields)
-    | Fit_or_vertical ->
-      let fields = separate (semi ^^ break 1) (fields @ extra_fields) in
-      lbrace ^^ nest 2 (break 1 ^^ fields) ^/^ rbrace
+    let extra_fields = match closed with Closed -> [] | Open -> [underscore] in
+    List_like.pp
+      ~formatting:Options.(Choice.get Record.pattern_choice) 
+      ~left:lbrace ~right:rbrace
+      (fields @ extra_fields)
 
   and pp_array ps pats =
-    brackets (
-      pipe ^/^
-      separate_map (semi ^^ break 1) (pp ps) pats ^/^
-      pipe
-    )
+    let pats = List.map (pp ps) pats in
+    (* TODO: add an option *)
+    List_like.pp ~formatting:Docked
+      ~left:(lbracket ^^ pipe) ~right:(pipe ^^ rbracket) pats
 
   and pp_or ps p1 p2 =
     let p1 =
@@ -687,18 +684,12 @@ end = struct
     let doc = infix ~indent:2 ~spaces:1 !^"::" hd tl in
     Printing_stack.parenthesize ps doc
 
-  and pp_list_literal ps es =
-    let doc =
-      match es with
-      | [] -> empty
-      | _ ->
-        nest 2 (
-          break 1 ^^ 
-          separate_map (semi ^^ break 1) (pp ps) es ^^
-          break 1
-        )
-    in
-    brackets doc
+  and pp_list_literal ps elts =
+    let elts = List.map (pp ps) elts in
+    List_like.pp
+      ~formatting:Docked (* TODO: add an option *)
+      ~left:lbracket ~right:rbracket
+      elts
 
   and pp_variant ps tag arg_opt =
     let tag = Polymorphic_variant_tag.pp tag in
@@ -721,12 +712,11 @@ end = struct
       | None -> empty
       | Some e -> group (group (break 1 ^^ pp ps e) ^/^ !^"with")
     in
-    match Options.(Choice.get Record.expression_choice) with
-    | Docked ->
-      docked_enclosed ~left:(group (lbrace ^^ update)) ~right:rbrace fields
-    | Fit_or_vertical ->
-      let fields = separate (semi ^^ break 1) fields in
-      braces (nest 2 (update ^/^ fields) ^^ break 1)
+    List_like.pp
+      ~formatting:Options.(Choice.get Record.expression_choice)
+      ~left:(group (lbrace ^^ update))
+      ~right:rbrace
+      fields
 
   and pp_field ps re fld =
     let record = pp ps re in
@@ -743,14 +733,10 @@ end = struct
       value
 
   and pp_array ps elts =
-    let elements =
-      separate_map
-        (semi ^^ break 1)
-        (pp ps)
-        elts
-    in
-    (* FIXME: empty arrays will have two spaces. *)
-    brackets (pipe ^/^ elements ^/^ pipe)
+    let elts = List.map (pp ps) elts in
+    (* TODO: add an option *)
+    List_like.pp ~formatting:Docked
+      ~left:(lbracket ^^ pipe) ~right:(pipe ^^ rbracket) elts
 
   (* FIXME: change ast to present n-ary [if]s *)
   and pp_if_then_else ps cond then_ else_opt =
