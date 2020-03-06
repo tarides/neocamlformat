@@ -408,7 +408,7 @@ end = struct
     let fields = List.map (pp_record_field ps) pats in
     let extra_fields = match closed with Closed -> [] | Open -> [underscore] in
     List_like.pp
-      ~formatting:Options.(Choice.get Record.pattern_choice) 
+      ~formatting:!Options.Record.pattern
       ~left:lbrace ~right:rbrace
       (fields @ extra_fields)
 
@@ -647,8 +647,8 @@ end = struct
       ) ^^ cases
     in
     Printing_stack.parenthesize ps 
-      ~situations:Options.(Choice.get Match.parenthesing_situations_choice)
-      ~style:Options.(Choice.get Match.parens_style_choice)
+      ~situations:!Options.Match.parenthesing_situations_choice
+      ~style:!Options.Match.parens_style_choice
       doc
 
   and pp_try ps arg case_list =
@@ -715,7 +715,7 @@ end = struct
       | Some e -> group (group (break 1 ^^ pp ps e) ^/^ !^"with")
     in
     List_like.pp
-      ~formatting:Options.(Choice.get Record.expression_choice)
+      ~formatting:!Options.Record.expression
       ~left:(group (lbrace ^^ update))
       ~right:rbrace
       fields

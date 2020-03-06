@@ -15,22 +15,15 @@ open Cmdliner
 let (let+) x f = Term.app (Term.const f) x
 let (and+) t1 t2 = Term.(const (fun x y -> (x, y)) $ t1 $ t2)
 
-let (let*) = Result.bind
-
 let cmd =
   let open Printing.Options in
-  let+ record_exp = Record.expression_arg
-  and+ record_pat = Record.pattern_arg
-  and+ record_all = Record.all_arg
-  and+ match_parens_style = Match.parens_style_arg
-  and+ match_parens_situations = Match.parens_situations_arg
-  and+ width = Arg.(value & opt int 80 & info ["width"])
-  and+ files = Arg.(value & pos_all file [] & info ~doc:"files to format" []) in
-  let* () = Choice.setopts Record.[ expression_choice ] record_exp in
-  let* () = Choice.setopts Record.[ pattern_choice ] record_pat in
-  let* () = Choice.setopts Record.[ expression_choice; pattern_choice ] record_all in
-  let* () = Choice.setopts Match.[ parens_style_choice ] match_parens_style in
-  let* () = Choice.setopts Match.[ parenthesing_situations_choice ] match_parens_situations in
+  let+ () = Record.expression_cmd
+  and+ () = Record.pattern_cmd
+  and+ () = Match.parens_style_cmd
+  and+ () = Match.parens_situations_cmd
+  and+ width = Arg.(value & opt int 80 & info ["w"; "width"])
+  and+ files = Arg.(value & pos_all file [] & info ~doc:"files to format" [])
+  in
   List.iter (fun fn ->
     let doc = fmt_file fn in
     PPrint.ToChannel.pretty 10. width stdout doc;
@@ -39,7 +32,7 @@ let cmd =
   Ok (flush stdout)
 
 let info =
-  Term.info "pp"
+  Term.info "neocamlformat"
 
 let () =
   Term.exit (Term.eval (cmd, info))
