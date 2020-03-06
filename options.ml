@@ -5,6 +5,7 @@ module Choice : sig
 
   val mint : string -> default:'a -> 'a t
 
+  val get : 'a t -> 'a
 (*   val run : 'a t list -> 'a option Term.t -> unit Term.t *)
   val setopts : 'a t list -> 'a option -> (unit, [ `Msg of string ]) result
 end = struct
@@ -17,6 +18,8 @@ end = struct
   let mint name ~default = { name; default; user = None }
 
   type err = Choice_already_made
+
+  let get { user; default; _ } = Option.value user ~default
 
   let set t choice =
     if Option.is_some t.user then

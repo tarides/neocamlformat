@@ -428,15 +428,22 @@ end = struct
   and pp_record_field ps (lid, pat) =
     (* TODO: print the whole lid only once *)
     let field = Longident.pp lid.txt in
-    match pat.ppat_desc with
-    | Ppat_var v when Longident.last lid.txt = v.txt -> field
-    | _ -> group (group (field ^/^ equals) ^/^ pp ps pat)
+    group (
+      match pat.ppat_desc with
+      | Ppat_var v when Longident.last lid.txt = v.txt -> field
+      | _ -> group (field ^/^ equals) ^/^ pp ps pat
+    )
 
   and pp_record ps pats closed =
     let fields = List.map (pp_record_field ps) pats in
     let extra_fields = match closed with Closed -> [] | Open -> [ underscore ] in
-    docked_enclosed ~left:lbrace ~right:rbrace
-      (fields @ extra_fields)
+    match Options.(Choice.get Record.pattern_choice) with
+    | Docked ->
+      docked_enclosed ~left:lbrace ~right:rbrace
+        (fields @ extra_fields)
+    | Fit_or_vertical ->
+      let fields = separate (semi ^^ break 1) (fields @ extra_fields) in
+      lbrace ^^ nest 2 (break 1 ^^ fields) ^/^ rbrace
 
   and pp_array ps pats =
     brackets (
@@ -744,13 +751,18 @@ end = struct
     | _ -> fld ^/^ equals ^/^ pp [ Printing_stack.Record_field ] exp
 
   and pp_record ps fields updated_record =
-    let fields = separate_map (semi ^^ break 1) record_field fields in
-    let prefix =
+    let fields = List.map record_field fields in
+    let update =
       match updated_record with
       | None -> empty
       | Some e -> group (group (break 1 ^^ pp ps e) ^/^ !^"with")
     in
-    braces (nest 2 (prefix ^/^ fields) ^^ break 1)
+    match Options.(Choice.get Record.expression_choice) with
+    | Docked ->
+      docked_enclosed ~left:(group (lbrace ^^ update)) ~right:rbrace fields
+    | Fit_or_vertical ->
+      let fields = separate (semi ^^ break 1) fields in
+      braces (nest 2 (update ^/^ fields) ^^ break 1)
 
   and pp_field ps re fld =
     let record = pp ps re in
