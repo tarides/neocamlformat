@@ -366,7 +366,7 @@ end = struct
   and pp_list_literal elts =
     let elts = List.map (pp []) elts in
     List_like.pp
-      ~formatting:Docked (* TODO: add an option *)
+      ~formatting:Wrap (* TODO: add an option *)
       ~left:lbracket ~right:rbracket
       elts
 
@@ -415,7 +415,7 @@ end = struct
   and pp_array ps pats =
     let pats = List.map (pp ps) pats in
     (* TODO: add an option *)
-    List_like.pp ~formatting:Docked
+    List_like.pp ~formatting:Wrap
       ~left:(lbracket ^^ pipe) ~right:(pipe ^^ rbracket) pats
 
   and pp_or ps p1 p2 =
@@ -687,7 +687,7 @@ end = struct
   and pp_list_literal ps elts =
     let elts = List.map (pp ps) elts in
     List_like.pp
-      ~formatting:Docked (* TODO: add an option *)
+      ~formatting:Wrap (* TODO: add an option *)
       ~left:lbracket ~right:rbracket
       elts
 
@@ -737,7 +737,7 @@ end = struct
   and pp_array ps elts =
     let elts = List.map (pp ps) elts in
     (* TODO: add an option *)
-    List_like.pp ~formatting:Docked
+    List_like.pp ~formatting:Wrap
       ~left:(lbracket ^^ pipe) ~right:(pipe ^^ rbracket) elts
 
   (* FIXME: change ast to present n-ary [if]s *)

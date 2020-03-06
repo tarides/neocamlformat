@@ -22,8 +22,8 @@ module List_like = struct
   let pp ~formatting ~left ~right = function
     | [] -> left ^^ right
     | x :: xs as elts ->
-      match (formatting : Options.Dockable.t) with
-      | Docked -> docked ~left ~right x xs
+      match (formatting : Options.Wrappable.t) with
+      | Wrap -> docked ~left ~right x xs
       | Fit_or_vertical -> fit_or_vertical ~left ~right elts
 end
 

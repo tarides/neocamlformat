@@ -38,21 +38,21 @@ end = struct
   let setopts ts choice = iter_m ~f:(fun t -> setopt t choice) ts
 end
 
-module Dockable = struct
-  type t = Fit_or_vertical | Docked
+module Wrappable = struct
+  type t = Fit_or_vertical | Wrap
 
   let parse = function
     | "fit-or-vertical" -> Ok (Some Fit_or_vertical)
-    | "docked" -> Ok (Some Docked)
+    | "wrap" -> Ok (Some Wrap)
     | s ->
-      let msg = Printf.sprintf "accepted fit-or-vertical | docked, got %S" s in
+      let msg = Printf.sprintf "accepted fit-or-vertical | wrap, got %S" s in
       Error (`Msg msg)
 
   let print ppf t =
     Format.pp_print_string ppf
       (match t with
        | Some Fit_or_vertical -> "fit-or-vertical"
-       | Some Docked -> "docked"
+       | Some Wrap -> "docked"
        | _ -> "default")
 
   let t = Cmdliner.Arg.conv (parse, print)
@@ -108,27 +108,27 @@ end
 
 module Record = struct
   let expression_choice =
-    Choice.mint "record expressions" ~default:Dockable.Fit_or_vertical
+    Choice.mint "record expressions" ~default:Wrappable.Fit_or_vertical
 
   let pattern_choice =
-    Choice.mint "record patterns" ~default:Dockable.Docked
+    Choice.mint "record patterns" ~default:Wrappable.Wrap
 
   open Cmdliner
 
   let expression_arg =
     let open Arg in
     let info = info ~doc:"formatting of record expressions" ["record-expr"] in
-    value & opt Dockable.t None info
+    value & opt Wrappable.t None info
 
   let pattern_arg =
     let open Arg in
     let info = info ~doc:"formatting of record patterns" ["record-patt"] in
-    value & opt Dockable.t None info
+    value & opt Wrappable.t None info
 
   let all_arg =
     let open Arg in
     let info = info ~doc:"formatting of records (in all contexts)" ["record"] in
-    value & opt Dockable.t None info
+    value & opt Wrappable.t None info
 end
 
 module Match = struct

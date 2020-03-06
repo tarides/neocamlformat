@@ -3,8 +3,8 @@
   + compact: always | never | under-application
 
 - record
-  - expressions: fit-or-vertical | docked
-  - patterns: fit-or-vertical | docked
+  - expressions: fit-or-vertical | wrap
+  - patterns: fit-or-vertical | wrap
   - all
 
 - normalisations: (should be implemented as AST mappings)
