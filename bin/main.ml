@@ -22,11 +22,15 @@ let cmd =
   let+ record_exp = Record.expression_arg
   and+ record_pat = Record.pattern_arg
   and+ record_all = Record.all_arg
+  and+ match_parens_style = Match.parens_style_arg
+  and+ match_parens_situations = Match.parens_situations_arg
   and+ width = Arg.(value & opt int 80 & info ["width"])
   and+ files = Arg.(value & pos_all file [] & info ~doc:"files to format" []) in
   let* () = Choice.setopts Record.[ expression_choice ] record_exp in
   let* () = Choice.setopts Record.[ pattern_choice ] record_pat in
   let* () = Choice.setopts Record.[ expression_choice; pattern_choice ] record_all in
+  let* () = Choice.setopts Match.[ parens_style_choice ] match_parens_style in
+  let* () = Choice.setopts Match.[ parenthesing_situations_choice ] match_parens_situations in
   List.iter (fun fn ->
     let doc = fmt_file fn in
     PPrint.ToChannel.pretty 10. width stdout doc;

@@ -58,6 +58,54 @@ module Dockable = struct
   let t = Cmdliner.Arg.conv (parse, print)
 end
 
+module Parenthesing = struct
+  type t = Parens | Begin_end
+
+  let parse = function
+    | "parens"
+    | "parentheses" -> Ok (Some Parens)
+    | "begin-end"
+    | "begin" -> Ok (Some Begin_end)
+    | s ->
+      let msg =
+        Printf.sprintf
+          "accepted parens | parentheses | begin | begin-end, got %S" s
+      in
+      Error (`Msg msg)
+
+  let print ppf t =
+    Format.pp_print_string ppf
+      (match t with
+       | Some Parens -> "parentheses"
+       | Some Begin_end -> "begin-end"
+       | _ -> "default")
+
+  let t = Cmdliner.Arg.conv (parse, print)
+end
+
+module Situations = struct
+  type t = When_needed | Always
+
+  let parse = function
+    | "always" -> Ok (Some Always)
+    | "when-needed" -> Ok (Some When_needed)
+    | s ->
+      let msg =
+        Printf.sprintf
+          "accepted always | when-needed, got %S" s
+      in
+      Error (`Msg msg)
+
+  let print ppf t =
+    Format.pp_print_string ppf
+      (match t with
+       | Some Always -> "always"
+       | Some When_needed -> "when_needed"
+       | _ -> "default")
+
+  let t = Cmdliner.Arg.conv (parse, print)
+end
+
 module Record = struct
   let expression_choice =
     Choice.mint "record expressions" ~default:Dockable.Fit_or_vertical
@@ -81,4 +129,30 @@ module Record = struct
     let open Arg in
     let info = info ~doc:"formatting of records (in all contexts)" ["record"] in
     value & opt Dockable.t None info
+end
+
+module Match = struct
+  let parens_style_choice =
+    Choice.mint "match parenthesing style" ~default:Parenthesing.Begin_end
+
+  let parenthesing_situations_choice =
+    Choice.mint "match parenthesing situations" ~default:Situations.When_needed
+
+  open Cmdliner
+
+  let parens_style_arg =
+    let open Arg in
+    let info =
+      info ~doc:"style of parenthesing to use around match expressions"
+        ["match-parens-style" ;"match-parenthezing-style"]
+    in
+    value & opt Parenthesing.t None info
+
+  let parens_situations_arg =
+    let open Arg in
+    let info =
+      info ~doc:"when to add parentheses around match expressions"
+        ["match-parenthezing"]
+    in
+    value & opt Situations.t None info
 end

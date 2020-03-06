@@ -478,11 +478,22 @@ let needs_parens elt parent =
 
   | _ -> false
 
-let parenthesize t doc =
-  match t with
-  | [] -> assert false
-  | elt :: parent :: _ when needs_parens elt parent -> PPrint.parens doc
-  | _ -> doc
+let parenthesize ?(situations=Options.Situations.When_needed)
+    ?(style=Options.Parenthesing.Parens) t doc =
+  let enclosed =
+    (* FIXME: what about indentation? ... sigh. *)
+    let open PPrint in
+    match style with
+    | Parens -> parens doc
+    | Begin_end -> !^"begin " ^^ doc ^^ hardline ^^ !^"end"
+  in
+  match situations with
+  | Always -> enclosed
+  | When_needed ->
+    match t with
+    | [] -> assert false
+    | elt :: parent :: _ when needs_parens elt parent -> enclosed
+    | _ -> doc
 
 let will_parenthesize t =
   match t with

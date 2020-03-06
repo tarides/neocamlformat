@@ -644,7 +644,10 @@ end = struct
         string "with"
       ) ^^ cases
     in
-    Printing_stack.parenthesize ps doc
+    Printing_stack.parenthesize ps 
+      ~situations:Options.(Choice.get Match.parenthesing_situations_choice)
+      ~style:Options.(Choice.get Match.parens_style_choice)
+      doc
 
   and pp_try ps arg case_list =
     let arg = pp [] arg in
