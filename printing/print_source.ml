@@ -423,11 +423,7 @@ end = struct
     Printing_stack.parenthesize ps or_
 
   and pp_constraint p ct =
-    match p.ppat_desc with
-    | Ppat_unpack mod_name -> pp_unpack mod_name (Some ct)
-    | _ ->
-      (* Are there cases where we don't want parentheses? *)
-      parens (pp [] p ^/^ colon ^/^ Core_type.pp [] ct)
+    parens (pp [] p ^/^ colon ^/^ Core_type.pp [] ct)
 
   and pp_type typ =
     sharp ^^ Longident.pp typ.txt
@@ -439,10 +435,7 @@ end = struct
     let constraint_ =
       match ct with
       | None -> empty
-      | Some ct ->
-        match ct.ptyp_desc with
-        | Ptyp_package pkg -> break 1 ^^ colon ^/^ Package_type.pp pkg
-        | _ -> assert false
+      | Some pkg -> break 1 ^^ colon ^/^ Package_type.pp pkg
     in
     parens (module_ ^/^ module_name mod_name.txt ^^ constraint_)
 
@@ -469,7 +462,7 @@ end = struct
     | Ppat_constraint (p, ct) -> pp_constraint p ct
     | Ppat_type pt -> pp_type pt
     | Ppat_lazy p -> pp_lazy ps p
-    | Ppat_unpack mod_name -> pp_unpack mod_name None
+    | Ppat_unpack (name, typ) -> pp_unpack name typ
     | Ppat_exception p -> pp_exception ps p
     | Ppat_extension ext -> Extension.pp Item ext
     | Ppat_open (lid, p) -> pp_open lid p
@@ -577,7 +570,7 @@ end = struct
     | Pexp_assert exp -> pp_assert ps exp
     | Pexp_lazy exp -> pp_lazy ps exp
     | Pexp_object cl -> pp_object cl
-    | Pexp_pack me -> pp_pack me None
+    | Pexp_pack (me, pkg) -> pp_pack me pkg
     | Pexp_open (lid, exp) -> pp_open lid exp
     | Pexp_letopen (od, exp) -> pp_letopen ps od exp
     | Pexp_letop letop -> pp_letop letop
@@ -806,12 +799,9 @@ end = struct
     )
 
   and pp_constraint exp ct =
-    match exp.pexp_desc with
-    | Pexp_pack me -> pp_pack me (Some ct)
-    | _ ->
-      let exp = pp [] exp in
-      let ct = Core_type.pp [] ct in
-      group (parens (exp ^/^ colon ^/^ ct))
+    let exp = pp [] exp in
+    let ct = Core_type.pp [] ct in
+    group (parens (exp ^/^ colon ^/^ ct))
 
   and pp_coerce exp ct_start ct =
     let exp = pp [] exp in
@@ -880,16 +870,12 @@ end = struct
     )
 
 
-  and pp_pack me constr_opt =
+  and pp_pack me pkg =
     let me = Module_expr.pp me in
     let constraint_ =
-      (* FIXME: factorize with pattern unpack *)
-      match constr_opt with
+      match pkg with
       | None -> empty
-      | Some ct ->
-        match ct.ptyp_desc with
-        | Ptyp_package pkg -> break 1 ^^ colon ^/^ Package_type.pp pkg
-        | _ -> assert false
+      | Some pkg -> break 1 ^^ colon ^/^ Package_type.pp pkg
     in
     parens (module_ ^/^ me ^^ constraint_)
 

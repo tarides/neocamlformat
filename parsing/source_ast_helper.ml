@@ -164,7 +164,7 @@ module Pat = struct
   let constraint_ ?loc ?attrs a b = mk ?loc ?attrs (Ppat_constraint (a, b))
   let type_ ?loc ?attrs a = mk ?loc ?attrs (Ppat_type a)
   let lazy_ ?loc ?attrs a = mk ?loc ?attrs (Ppat_lazy a)
-  let unpack ?loc ?attrs a = mk ?loc ?attrs (Ppat_unpack a)
+  let unpack ?loc ?attrs a = mk ?loc ?attrs (Ppat_unpack (a, None))
   let open_ ?loc ?attrs a b = mk ?loc ?attrs (Ppat_open (a, b))
   let exception_ ?loc ?attrs a = mk ?loc ?attrs (Ppat_exception a)
   let extension ?loc ?attrs a = mk ?loc ?attrs (Ppat_extension a)
@@ -210,7 +210,7 @@ module Exp = struct
   let lazy_ ?loc ?attrs a = mk ?loc ?attrs (Pexp_lazy a)
   let object_ ?loc ?attrs a = mk ?loc ?attrs (Pexp_object a)
   let newtype ?loc ?attrs a b = mk ?loc ?attrs (Pexp_fun ([Type a], b))
-  let pack ?loc ?attrs a = mk ?loc ?attrs (Pexp_pack a)
+  let pack ?loc ?attrs a = mk ?loc ?attrs (Pexp_pack (a, None))
   let open_ ?loc ?attrs a b = mk ?loc ?attrs (Pexp_letopen (a, b))
   let letop ?loc ?attrs let_ ands body =
     mk ?loc ?attrs (Pexp_letop {let_; ands; body})

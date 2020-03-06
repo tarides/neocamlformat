@@ -242,7 +242,7 @@ and pattern_desc =
         (* #tconst *)
   | Ppat_lazy of pattern
         (* lazy P *)
-  | Ppat_unpack of string option loc
+  | Ppat_unpack of string option loc * package_type option
         (* (module P)        Some "P"
            (module _)        None
 
@@ -375,7 +375,7 @@ and expression_desc =
         (* lazy E *)
   | Pexp_object of class_structure
         (* object ... end *)
-  | Pexp_pack of module_expr
+  | Pexp_pack of module_expr * package_type option
         (* (module ME)
 
            (module ME : S) is represented as

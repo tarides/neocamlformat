@@ -2216,9 +2216,15 @@ simple_expr:
   | NEW ext_attributes mkrhs(class_longident)
       { Pexp_new($3), $2 }
   | LPAREN MODULE ext_attributes module_expr RPAREN
-      { Pexp_pack $4, $3 }
+      { Pexp_pack ($4, None), $3 }
   | LPAREN MODULE ext_attributes module_expr COLON package_type RPAREN
-      { Pexp_constraint (ghexp ~loc:$sloc (Pexp_pack $4), $6), $3 }
+      { let ct = $6 in
+        let pkg =
+          match ct.ptyp_desc with
+          | Ptyp_package pkg -> pkg
+          | _ -> assert false
+        in
+        Pexp_pack ($4, Some pkg), $3 }
   | LPAREN MODULE ext_attributes module_expr COLON error
       { unclosed "(" $loc($1) ")" $loc($6) }
 ;
@@ -2305,10 +2311,13 @@ simple_expr:
       { unclosed "[" $loc($3) "]" $loc($5) }
   | od=open_dot_declaration DOT LPAREN MODULE ext_attributes module_expr COLON
     package_type RPAREN
-      { (* TODO: review the location of Pexp_constraint *)
-        let modexp =
-          mkexp_attrs ~loc:$sloc
-            (Pexp_constraint (ghexp ~loc:$sloc (Pexp_pack $6), $8)) $5 in
+      { let ct = $8 in
+        let pkg =
+          match ct.ptyp_desc with
+          | Ptyp_package pkg -> pkg
+          | _ -> assert false
+        in
+        let modexp = mkexp_attrs ~loc:$sloc (Pexp_pack ($6, Some pkg)) $5 in
         Pexp_open(od, modexp) }
   | mod_longident DOT
     LPAREN MODULE ext_attributes module_expr COLON error
@@ -2591,11 +2600,15 @@ simple_pattern_not_ident:
   | simple_delimited_pattern
       { $1 }
   | LPAREN MODULE ext_attributes mkrhs(module_name) RPAREN
-      { mkpat_attrs ~loc:$sloc (Ppat_unpack $4) $3 }
+      { mkpat_attrs ~loc:$sloc (Ppat_unpack ($4, None)) $3 }
   | LPAREN MODULE ext_attributes mkrhs(module_name) COLON package_type RPAREN
-      { mkpat_attrs ~loc:$sloc
-          (Ppat_constraint(mkpat ~loc:$sloc (Ppat_unpack $4), $6))
-          $3 }
+      { let ct = $6 in
+        let pkg =
+          match ct.ptyp_desc with
+          | Ptyp_package pkg -> pkg
+          | _ -> assert false
+        in
+        mkpat_attrs ~loc:$sloc (Ppat_unpack ($4, Some pkg)) $3 }
   | mkpat(simple_pattern_not_ident_)
       { $1 }
 ;
