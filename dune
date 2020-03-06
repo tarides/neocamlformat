@@ -1,9 +1,3 @@
 (executable
  (name main)
- (libraries cmdliner compiler-libs.common pprint menhirLib)
- (modules_without_implementation source_tree))
-
-(ocamllex source_lexer)
-(menhir
-  (modules source_parser)
-  (flags --table))
+ (libraries cmdliner compiler-libs.common pprint source_parsing))

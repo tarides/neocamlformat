@@ -1,4 +1,5 @@
 let fmt_file fn =
+  let open Source_parsing in
   let ic = open_in fn in
   let b = Lexing.from_channel ic in
     if Filename.check_suffix fn "mli" then

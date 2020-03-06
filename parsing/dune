@@ -1,0 +1,9 @@
+(library
+ (name source_parsing)
+ (libraries compiler-libs.common menhirLib)
+ (modules_without_implementation source_tree))
+
+(ocamllex source_lexer)
+(menhir
+  (modules source_parser)
+  (flags --table))

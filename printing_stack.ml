@@ -1,3 +1,4 @@
+open Source_parsing
 open Source_tree
 
 type core_type_elt =

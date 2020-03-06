@@ -18,6 +18,8 @@
 %{
 [@@@ocaml.warning "-9"]
 
+module Source_parsing = struct end
+
 open Asttypes
 open Longident
 open Source_tree
