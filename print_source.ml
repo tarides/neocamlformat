@@ -746,9 +746,11 @@ end = struct
   and record_field (lid, exp) =
     (* TODO: print the whole lid only once *)
     let fld = Longident.pp lid.txt in
-    match exp.pexp_desc with
-    | Pexp_ident { txt = Lident id; _ } when Longident.last lid.txt = id -> fld
-    | _ -> fld ^/^ equals ^/^ pp [ Printing_stack.Record_field ] exp
+    group (
+      match exp.pexp_desc with
+      | Pexp_ident { txt = Lident id; _ } when Longident.last lid.txt = id -> fld
+      | _ -> group (fld ^/^ equals) ^/^ pp [ Printing_stack.Record_field ] exp
+    )
 
   and pp_record ps fields updated_record =
     let fields = List.map record_field fields in
