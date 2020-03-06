@@ -483,7 +483,6 @@ end = struct
     | Labelled lbl -> tilde ^^ string lbl ^^ suffix lbl
     | Optional lbl -> qmark ^^ string lbl ^^ suffix lbl
 
-  (* FIXME: handle infix ops *)
   let simple_apply ps exp args =
     let exp = Expression.pp ps exp in
     let args = separate_map (break 1) (argument ps) args in
@@ -512,7 +511,6 @@ end = struct
     | args ->
       simple_apply ps exp args
 
-  (* TODO: precedence *)
   let classify_fun exp =
     match exp.pexp_desc with
     | Pexp_ident { txt = Lident s; _ } when s <> "" -> Ident_class.classify s
