@@ -399,7 +399,9 @@ end = struct
     group (
       match pat.ppat_desc with
       | Ppat_var v when Longident.last lid.txt = v.txt -> field
-      | _ -> group (field ^/^ equals) ^/^ pp ps pat
+      | _ ->
+        group (field ^/^ equals) ^^
+        nest 2 (break 1 ^^ pp ps pat)
     )
 
   and pp_record ps pats closed =
@@ -700,7 +702,9 @@ end = struct
     group (
       match exp.pexp_desc with
       | Pexp_ident { txt = Lident id; _ } when Longident.last lid.txt = id -> fld
-      | _ -> group (fld ^/^ equals) ^/^ pp [ Printing_stack.Record_field ] exp
+      | _ ->
+        group (fld ^/^ equals) ^^
+        nest 2 (break 1 ^^ pp [ Printing_stack.Record_field ] exp)
     )
 
   and pp_record ps fields updated_record =
