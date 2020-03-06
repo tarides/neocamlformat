@@ -325,7 +325,12 @@ let pat_of_label ~loc lbl =
 let mk_newtypes ~loc newtypes exp =
   let mkexp = mkexp ~loc in
   let newtypes = List.map (fun s -> Type s) newtypes in
-  mkexp (Pexp_fun (newtypes, exp))
+  let params, exp =
+    match exp.pexp_desc with
+    | Pexp_fun (lst, body) -> newtypes @ lst, body
+    | _ -> newtypes, exp
+  in
+  mkexp (Pexp_fun (params, exp))
 
 let wrap_exp_attrs ~loc body (ext, attrs) =
   let ghexp = ghexp ~loc in
