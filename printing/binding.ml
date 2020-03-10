@@ -25,7 +25,7 @@ let pp ?(binder=equals) ~keyword { lhs; params; constr; coerce; rhs } =
   let with_constraint = attach_annot params ~sep:colon constr in
   let with_coercion = attach_annot with_constraint ~sep:!^":>" coerce in
   let lhs = pre ^^ group (with_coercion ^/^ binder) in
-  lhs ^^ nest 2 (break 1 ^^ rhs)
+  group (lhs ^^ nest 2 (break 1 ^^ rhs))
 
 let pp_simple ?binder ~keyword lhs rhs =
   pp ?binder ~keyword { lhs; params = []; constr = None; coerce = None; rhs}
