@@ -33,16 +33,17 @@ let left_assoc_map ~sep ~f = function
     List.fold_left (fun doc elt -> doc ^/^ group (sep ^^ f elt)) (f x) xs
 
 module Two_separated_parts = struct
-  (**
-     {[
-       Foo of
-         bar
-     ]}
+  (** Degrades in the following way:
+      {v
+        Foo of bar
 
-     {[
-       foo =
-         bar
-     ]}
+        Foo of
+          bar
+
+        Foo
+          of
+          bar
+      v}
   *)
   let sep_with_first fst snd ~sep =
     group (
@@ -50,16 +51,17 @@ module Two_separated_parts = struct
       ^^ nest 2 (break 1 ^^ snd)
     )
 
-  (**
-     {[
-       Foo
-         of bar
-     ]}
+  (** Degrades in the following way:
+      {v
+        Foo of bar
 
-     {[
-       foo
-         = bar
-     ]}
+        Foo
+          of bar
+
+        Foo
+          of
+          bar
+      v}
   *)
   let sep_with_second fst snd ~sep =
     group (
