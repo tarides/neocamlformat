@@ -485,11 +485,18 @@ let needs_parens elt parent =
 let parenthesize ?(situations=Options.Situations.When_needed)
     ?(style=Options.Parenthesing.Parens) t doc =
   let enclosed =
-    (* FIXME: what about indentation? ... sigh. *)
     let open PPrint in
     match style with
-    | Parens -> parens doc
-    | Begin_end -> !^"begin " ^^ doc ^^ hardline ^^ !^"end"
+    | Parens ->
+      let indented = nest 1 doc in
+      lparen ^^ indented ^^ rparen
+    | Begin_end ->
+      let indented =
+        match List.hd t with
+        | Expression (Pexp_match _ | Pexp_try _) -> doc
+        | _ -> nest 2 doc
+      in
+      !^"begin " ^^ indented ^^ hardline ^^ !^"end"
   in
   match situations with
   | Always -> enclosed
