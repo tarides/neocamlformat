@@ -75,6 +75,8 @@ end = struct
     | Lapply (l1, l2) -> pp l1 ^^ break 0 ^^ parens (pp l2)
 
   let pp lid = hang 2 (pp lid)
+
+  let () = Constructor_decl.pp_longident := pp
 end
 
 module Constant : sig
@@ -140,6 +142,8 @@ end = struct
 
   let attach_to_item doc =
     attach Attached_to_item doc
+
+  let () = Constructor_decl.attach_attributes := attach_to_item
 
   let attach_to_top_item doc =
     attach Attached_to_structure_item doc
@@ -293,6 +297,8 @@ end = struct
 
   and pp_package pkg =
     parens (module_ ^/^ Package_type.pp pkg)
+
+  let () = Constructor_decl.pp_core_type := pp
 end
 
 and Object_field : sig
@@ -1230,8 +1236,36 @@ end = struct
     Attribute.attach_to_top_item doc vd.pval_attributes
 end
 
+and Type_extension : sig
+  val pp : type_extension -> document
+end = struct
+  let constructors cstrs =
+    let cstrs =
+      separate_map (break 1 ^^ pipe ^^ space)
+        Constructor_decl.pp_extension cstrs
+    in
+    let prefix = ifflat empty (pipe ^^ space) in
+    prefix ^^ cstrs
+
+  let pp { ptyext_path; ptyext_params; ptyext_constructors; ptyext_private;
+           ptyext_attributes; _ } =
+    let path = Longident.pp ptyext_path.txt in
+    let params = Type_declaration.pp_params ptyext_params in
+    let lhs = group (params ^^ path) in
+    let constructors = constructors ptyext_constructors in
+    let rhs =
+      match ptyext_private with
+      | Public -> constructors
+      | Private -> group (!^"private" ^/^ constructors)
+    in
+    let rhs = Attribute.attach_to_top_item rhs ptyext_attributes in
+    Binding.pp_simple ~keyword:!^"type" ~binder:!^"+=" lhs rhs
+end
+
 and Type_declaration : sig
   val pp : type_declaration -> document * document
+
+  val pp_params : (core_type * variance) list -> document
 
   val pp_decl : rec_flag -> type_declaration list -> document
 
@@ -1273,55 +1307,12 @@ end = struct
     nest 2 (break 1 ^^ lbls) ^/^
     rbrace
 
-  let has_args = function
-    | Pcstr_tuple [] -> false
-    | _ -> true
-
-  let constructor_arguments = function
-    | Pcstr_record lbl_decls -> record lbl_decls
-    | Pcstr_tuple args ->
-      let printing_stack =
-        (* morally equivalent to: *)
-        [ Printing_stack.Core_type (Ptyp_tuple args) ]
-      in
-      separate_map (break 1 ^^ star ^^ break 1)
-        (Core_type.pp printing_stack) args
-
-  let gadt_constructor { pcd_name; pcd_args; pcd_res; pcd_attributes; _ } =
-    let name = string pcd_name.txt in
-    let decl =
-      if has_args pcd_args then
-        let args = constructor_arguments pcd_args in
-        let res  = Core_type.pp [] (Option.get pcd_res) in
-        name ^/^ colon ^/^ args ^/^ arrow ^/^ res 
-      else
-        let res  = Core_type.pp [] (Option.get pcd_res) in
-        name ^/^ colon ^/^ res 
-    in
-    Attribute.attach_to_item decl pcd_attributes
-
-  let simple_constructor { pcd_name; pcd_args; pcd_attributes; _ } =
-    let name = string pcd_name.txt in
-    let decl =
-      if has_args pcd_args then
-        let args = constructor_arguments pcd_args in
-        group (
-          prefix ~indent:2 ~spaces:1
-            (name ^/^ of_)
-            args
-        )
-      else
-        name
-    in
-    Attribute.attach_to_item decl pcd_attributes
-
-  let constructor cstr =
-    match cstr.pcd_res with
-    | None -> simple_constructor cstr
-    | Some _ -> gadt_constructor cstr
+  let () = Constructor_decl.pp_record := record
 
   let variant cstrs =
-    let cstrs = separate_map (break 1 ^^ pipe ^^ space) constructor cstrs in
+    let cstrs =
+      separate_map (break 1 ^^ pipe ^^ space) Constructor_decl.pp_decl cstrs
+    in
     let prefix = ifflat empty (pipe ^^ space) in
     prefix ^^ cstrs
 
