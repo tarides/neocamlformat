@@ -129,8 +129,45 @@ end = struct
       | Attached_to_item -> "@"
     )
 
-  let pp kind { attr_name; attr_payload; attr_loc = _ } =
+  let pp_attr kind attr_name attr_payload =
     brackets (ats kind ^^ string attr_name.txt ^^ Payload.pp attr_payload)
+
+  (* :/ *)
+  let pp_doc = function
+    | PStr [
+        { pstr_desc =
+            Pstr_eval ({ pexp_desc =
+                           Pexp_constant Pconst_string (s, None); _ }, []); _ }
+      ] ->
+      let doc = separate hardline (lines s) in
+      !^"(**" ^^ doc ^^ !^"*)"
+    | _ -> assert false
+
+  let pp kind { attr_name; attr_payload; attr_loc = _ } =
+    match attr_name.txt with
+    | "ocaml.doc" ->
+      assert (kind <> Free_floating);
+      pp_doc attr_payload
+    | "ocaml.text" ->
+      (*
+         The following is not true in cases like:
+         {[
+           type a = Foo | Bar
+
+           (** Haha! *)
+
+           and b = { x : int }
+         ]}
+
+         TODO? handle docstring before the call to [pp], i.e. directly in
+         [attach]. So in cases like this… we don't attach (that is: we don't
+         indent)?
+
+      assert (kind = Free_floating);
+      *)
+      pp_doc attr_payload
+    | _ ->
+      pp_attr kind attr_name attr_payload
 
   let attach kind doc = function
     | [] -> doc
