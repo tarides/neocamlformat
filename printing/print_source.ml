@@ -575,7 +575,7 @@ end = struct
     | Pexp_setinstvar (lbl, exp) -> pp_setinstvar ps lbl exp
     | Pexp_override fields -> pp_override fields
     | Pexp_letmodule (name, mb, body) -> pp_letmodule ps name mb body
-    | Pexp_letexception (exn, exp) -> pp_letexception exn exp
+    | Pexp_letexception (exn, exp) -> pp_letexception ps exn exp
     | Pexp_assert exp -> pp_assert ps exp
     | Pexp_lazy exp -> pp_lazy ps exp
     | Pexp_object cl -> pp_object cl
@@ -866,8 +866,18 @@ end = struct
     let doc = bind ^/^ in_ ^/^ expr in
     Printing_stack.parenthesize ps doc
 
-  and pp_letexception _exn _exp =
-    assert false
+  and pp_letexception ps exn exp =
+    let exn = Constructor_decl.pp_extension exn in
+    let exp =
+      let ps = if Printing_stack.will_parenthesize ps then [] else List.tl ps in
+      pp ps exp
+    in
+    let doc =
+      group (prefix ~indent:2 ~spaces:1 !^"let exception"
+               (group (exn ^/^ !^"in")))
+      ^^ exp
+    in
+    Printing_stack.parenthesize ps doc
 
   and pp_assert ps exp =
     let exp = pp ps exp in
@@ -1173,8 +1183,8 @@ end = struct
     | Pstr_value (rf, vbs) -> pp_value rf vbs
     | Pstr_primitive vd -> Value_description.pp vd
     | Pstr_type (rf, tds) -> Type_declaration.pp_decl rf tds
-    | Pstr_typext _ -> assert false
-    | Pstr_exception _ -> assert false
+    | Pstr_typext te -> Type_extension.pp te
+    | Pstr_exception exn -> Type_exception.pp exn
     | Pstr_module mb -> pp_module mb
     | Pstr_recmodule mbs -> pp_recmodule mbs
     | Pstr_modtype mtd -> Module_type_declaration.pp mtd
@@ -1206,6 +1216,8 @@ end = struct
     | Psig_value vd -> Value_description.pp vd
     | Psig_type (rf, decls) -> Type_declaration.pp_decl rf decls
     | Psig_typesubst decls -> Type_declaration.pp_subst decls
+    | Psig_typext te -> Type_extension.pp te
+    | Psig_exception exn -> Type_exception.pp exn
     | Psig_modtype mtd -> Module_type_declaration.pp mtd
     | Psig_open od -> Open_description.pp od
     | Psig_include incl -> pp_include incl
@@ -1260,6 +1272,15 @@ end = struct
     in
     let rhs = Attribute.attach_to_top_item rhs ptyext_attributes in
     Binding.pp_simple ~keyword:!^"type" ~binder:!^"+=" lhs rhs
+end
+
+and Type_exception : sig
+  val pp : type_exception -> document
+end = struct
+  let pp { ptyexn_constructor; ptyexn_attributes; _ } =
+    let cstr = Constructor_decl.pp_extension ptyexn_constructor in
+    let doc = group (prefix ~spaces:1 ~indent:2 !^"exception" cstr) in
+    Attribute.attach_to_top_item doc ptyexn_attributes
 end
 
 and Type_declaration : sig
