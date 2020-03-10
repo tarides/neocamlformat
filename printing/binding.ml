@@ -9,27 +9,21 @@ type t = {
   rhs : document;
 }
 
+let pp_params = function
+  | [] -> empty
+  | params -> nest 4 (break 1 ^^ group (flow (break 1) params))
+
+let attach_annot doc ~sep annot =
+  match annot with
+  | None -> doc
+  | Some annot ->
+    group (doc ^^ nest 2 (break 1 ^^ sep)) ^^ nest 2 (break 1 ^^ annot)
+
 let pp ?(binder=equals) ~keyword { lhs; params; constr; coerce; rhs } =
   let pre = group (keyword ^^ nest 2 (break 1 ^^ lhs)) in
-  let params =
-    match params with
-    | [] -> empty
-    | params -> nest 4 (break 1 ^^ group (flow (break 1) params))
-  in
-  let with_constraint =
-    match constr with
-    | None -> params
-    | Some constraint_ ->
-      group (params ^^ nest 2 (break 1 ^^ colon))
-      ^^ nest 2 (break 1 ^^ constraint_)
-  in
-  let with_coercion =
-    match coerce with
-    | None -> with_constraint
-    | Some coercion ->
-      group (with_constraint ^^ nest 2 (break 1 ^^ !^":>"))
-      ^^ nest 2 (break 1 ^^ coercion)
-  in
+  let params = pp_params params in
+  let with_constraint = attach_annot params ~sep:colon constr in
+  let with_coercion = attach_annot with_constraint ~sep:!^":>" coerce in
   let lhs = pre ^^ group (with_coercion ^/^ binder) in
   lhs ^^ nest 2 (break 1 ^^ rhs)
 
@@ -50,11 +44,7 @@ module Module = struct
 
   let pp ~keyword { name; params; constr; expr; attributes } =
     let pre = group (keyword ^^ nest 2 (break 1 ^^ name)) in
-    let params =
-      match params with
-      | [] -> empty
-      | params -> nest 4 (break 1 ^^ group (flow (break 1) params))
-    in
+    let params = pp_params params in
     let with_constraint, binder =
       match constr with
       | None -> params, equals
@@ -71,10 +61,7 @@ module Module = struct
         in
         doc, !^"end ="
       | Mty constraint_ ->
-        let doc =
-          group (params ^^ nest 2 (break 1 ^^ colon))
-          ^^ nest 2 (break 1 ^^ constraint_)
-        in
+        let doc = attach_annot params ~sep:colon (Some constraint_) in
         doc, equals
     in
     let binder, rhs =
