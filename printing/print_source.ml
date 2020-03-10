@@ -640,7 +640,7 @@ end = struct
       let ps = if Printing_stack.will_parenthesize ps then [] else List.tl ps in
       pp ps body
     in
-    Printing_stack.parenthesize ps (group (vbs ^/^ in_) ^/^ body)
+    Printing_stack.parenthesize ps (group (vbs ^/^ in_) ^^ hardline ^^ body)
 
   and rec_flag = function
     | Recursive -> string " rec"
