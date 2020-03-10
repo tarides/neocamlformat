@@ -2,6 +2,7 @@ open Source_parsing
 open Source_tree
 open Location
 open PPrint
+
 open Custom_combinators
 
 (******************************************************)
@@ -30,8 +31,7 @@ let constructor_arguments = function
       (* morally equivalent to: *)
       [ Printing_stack.Core_type (Ptyp_tuple args) ]
     in
-    separate_map (break 1 ^^ star ^^ break 1)
-      (!pp_core_type printing_stack) args
+    left_assoc_map ~sep:(star ^^ break 1) ~f:(!pp_core_type printing_stack) args
 
 let gadt_constructor name args res_ty attributes =
   let name = string name.txt in
@@ -39,10 +39,16 @@ let gadt_constructor name args res_ty attributes =
     if has_args args then
       let args = constructor_arguments args in
       let res  = !pp_core_type [] (Option.get res_ty) in
-      name ^/^ colon ^/^ args ^/^ !^"->" ^/^ res 
+      group (
+        name ^^
+        nest 2 (
+          break 1 ^^ group (colon ^^ nest 2 (break 1 ^^ args))
+          ^/^ group (!^"->" ^^ nest 2 (break 1 ^^ res))
+        )
+      )
     else
       let res  = !pp_core_type [] (Option.get res_ty) in
-      name ^/^ colon ^/^ res 
+      Two_separated_parts.sep_with_second name res ~sep:colon
   in
   !attach_attributes decl attributes
 
@@ -51,11 +57,7 @@ let simple_constructor name args attributes =
   let decl =
     if has_args args then
       let args = constructor_arguments args in
-      group (
-        prefix ~indent:2 ~spaces:1
-          (name ^/^ !^"of")
-          args
-      )
+      Two_separated_parts.sep_with_first name args ~sep:!^"of"
     else
       name
   in
@@ -68,12 +70,8 @@ let pp_constructor name args res_ty attributes =
 
 let pp_rebind name rebound attributes =
   let name = string name.txt in
-  let decl =
-    group (
-      group (name ^^ nest 2 (break 1 ^^ equals))
-      ^^ nest 2 (break 1 ^^ !pp_longident rebound.txt)
-    )
-  in
+  let rebound = !pp_longident rebound.txt in
+  let decl = Two_separated_parts.sep_with_first name rebound ~sep:equals in
   !attach_attributes decl attributes
 
 let pp_decl { pcd_name; pcd_args; pcd_res; pcd_attributes; _ } =

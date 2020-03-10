@@ -31,3 +31,39 @@ let left_assoc_map ~sep ~f = function
   | [] -> empty
   | x :: xs ->
     List.fold_left (fun doc elt -> doc ^/^ group (sep ^^ f elt)) (f x) xs
+
+module Two_separated_parts = struct
+  (**
+     {[
+       Foo of
+         bar
+     ]}
+
+     {[
+       foo =
+         bar
+     ]}
+  *)
+  let sep_with_first fst snd ~sep =
+    group (
+      group (fst ^^ nest 2 (break 1 ^^ sep))
+      ^^ nest 2 (break 1 ^^ snd)
+    )
+
+  (**
+     {[
+       Foo
+         of bar
+     ]}
+
+     {[
+       foo
+         = bar
+     ]}
+  *)
+  let sep_with_second fst snd ~sep =
+    group (
+      fst ^^
+      nest 2 (break 1 ^^ group (sep ^/^ snd))
+    )
+end

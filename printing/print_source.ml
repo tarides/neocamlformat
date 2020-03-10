@@ -1332,7 +1332,8 @@ end = struct
 
   let variant cstrs =
     let cstrs =
-      separate_map (break 1 ^^ pipe ^^ space) Constructor_decl.pp_decl cstrs
+      separate_map (break 1 ^^ pipe ^^ space)
+        (fun c -> nest 2 (Constructor_decl.pp_decl c)) cstrs
     in
     let prefix = ifflat empty (pipe ^^ space) in
     prefix ^^ cstrs
