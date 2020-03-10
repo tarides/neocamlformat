@@ -881,7 +881,7 @@ end = struct
 
   and pp_assert ps exp =
     let exp = pp ps exp in
-    !^"assert" ^/^ exp
+    prefix ~indent:2 ~spaces:1 !^"assert" exp
 
   and pp_lazy ps exp =
     let exp = pp ps exp in
