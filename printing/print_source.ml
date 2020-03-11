@@ -1,15 +1,19 @@
 open Source_parsing
 open Asttypes
 open Source_tree
-open PPrint
+
+open Document
+open struct type document = Document.t end
 
 open Custom_combinators
 
-let module_name = function
-  | None -> underscore
-  | Some name -> string name
+let module_name ~loc = function
+  | None -> underscore ~loc
+  | Some name -> string ~loc name
 
 module Tokens = struct
+  open PPrint
+
   let pipe = char '|'
 
   let and_ = string "and"
@@ -64,13 +68,13 @@ end = struct
 
   let pp_ident s =
     match Ident_class.classify s.txt with
-    | Normal -> string s.txt
-    | Infix_op _ | Prefix_op _ -> parens (string s.txt)
+    | Normal -> str s
+    | Infix_op _ | Prefix_op _ -> parens (str s)
 
   let rec pp = function
     | Lident s -> pp_ident s
-    | Ldot (lid, s) -> pp lid ^^ dot ^^ break 0 ^^ string s.txt
-    | Lapply (l1, l2) -> pp l1 ^^ break 0 ^^ parens (pp l2)
+    | Ldot (lid, s) -> concat (pp lid) ~sep:PPrint.(dot ^^ break 0) (str s)
+    | Lapply (l1, l2) -> concat (pp l1) ~sep:(break 0) (parens (pp l2))
 
   let pp lid = hang 2 (pp lid)
 
@@ -78,31 +82,36 @@ end = struct
 end
 
 module Constant : sig
-  val pp : constant -> document
+  val pp : loc:Location.t -> constant -> document
 end = struct
-  let pp_string_lit s = arbitrary_string (String.escaped s)
-  let pp_quoted_string ~delim s =
-    let delim = string delim in
+  let pp_string_lit ~loc s = arbitrary_string ~loc (String.escaped s)
+  let pp_quoted_string ~loc ~delim s =
+    let delim = PPrint.string delim in
     braces (
-      enclose (delim ^^ pipe) (pipe ^^ delim)
-        (arbitrary_string s)
+      enclose ~before:PPrint.(delim ^^ pipe) ~after:PPrint.(pipe ^^ delim)
+        (arbitrary_string ~loc s)
     )
 
-  let pp = function
+  let pp ~loc = function
     | Pconst_float (nb, suffix_opt)
     | Pconst_integer (nb, suffix_opt) ->
+      let nb =
+        match suffix_opt with
+        | None -> nb
+        | Some s -> nb ^ (String.make 1 s)
+      in
       (* FIXME? nb might start with a minus… which might implying parenthesing
          is required in some contexts. *)
-      string nb ^^ optional char suffix_opt
-    | Pconst_char c                   -> squotes (char c)
-    | Pconst_string (s, None)         -> dquotes (pp_string_lit s)
-    | Pconst_string (s, Some delim)   -> pp_quoted_string ~delim s
+      string ~loc nb
+    | Pconst_char c                   -> squotes (char ~loc c)
+    | Pconst_string (s, None)         -> dquotes (pp_string_lit ~loc s)
+    | Pconst_string (s, Some delim)   -> pp_quoted_string ~loc ~delim s
 end
 
 module Polymorphic_variant_tag : sig
-  val pp : label -> document
+  val pp : label loc -> document
 end = struct
-  let pp tag = bquote ^^ string tag
+  let pp tag = string ~loc:tag.loc ("`" ^ tag.txt)
 end
 
 module rec Attribute : sig
@@ -123,15 +132,16 @@ end = struct
     | Attached_to_item
 
   let ats kind =
-    string (
-      match kind with
-      | Free_floating -> "@@@"
-      | Attached_to_structure_item -> "@@"
-      | Attached_to_item -> "@"
-    )
+    match kind with
+    | Free_floating -> "@@@"
+    | Attached_to_structure_item -> "@@"
+    | Attached_to_item -> "@"
 
   let pp_attr kind attr_name attr_payload =
-    brackets (ats kind ^^ string attr_name.txt ^^ Payload.pp attr_payload)
+    brackets (
+      string ~loc:attr_name.loc (ats kind ^ attr_name.txt)
+      ^^ Payload.pp attr_payload
+    )
 
   (* :/ *)
   let pp_doc = function
@@ -366,7 +376,7 @@ and Row_field : sig
 end = struct
   let pp_desc = function
     | Rinherit ct -> Core_type.pp [] ct
-    | Rtag (tag, true, []) -> Polymorphic_variant_tag.pp tag.txt
+    | Rtag (tag, true, []) -> Polymorphic_variant_tag.pp tag
     | Rtag (tag, has_empty_constr, params) ->
       let sep = break 1 ^^ ampersand ^^ break 1 in
       let params = separate_map sep (Core_type.pp [ Row_field ]) params in

@@ -1,21 +1,18 @@
 open Source_parsing
 open Source_tree
-open Location
-open PPrint
-
-open Custom_combinators
+open Document
 
 (******************************************************)
 (* Waiting for: https://github.com/ocaml/RFCs/pull/11 *)
 (******************************************************)
 
-let pp_record : (label_declaration list -> document) ref =
+let pp_record : (label_declaration list -> t) ref =
   ref (fun _ -> assert false)
-let pp_core_type : (Printing_stack.t -> core_type -> document) ref =
+let pp_core_type : (Printing_stack.t -> core_type -> t) ref =
   ref (fun _ _ -> assert false)
-let attach_attributes : (document -> attributes -> document) ref =
+let attach_attributes : (t -> attributes -> t) ref =
   ref (fun _ _ -> assert false)
-let pp_longident : (Long_ident.t -> document) ref =
+let pp_longident : (Long_ident.t -> t) ref =
   ref (fun _ -> assert false)
 
 (******************************************************)
@@ -25,25 +22,29 @@ let has_args = function
   | _ -> true
 
 let constructor_arguments = function
+  | Pcstr_tuple [] -> assert false (* [has_args] was called *)
   | Pcstr_record lbl_decls -> !pp_record lbl_decls
-  | Pcstr_tuple args ->
+  | Pcstr_tuple (a1 :: args) ->
     let printing_stack =
       (* morally equivalent to: *)
       [ Printing_stack.Core_type (Ptyp_tuple args) ]
     in
-    left_assoc_map ~sep:(star ^^ break 1) ~f:(!pp_core_type printing_stack) args
+    left_assoc_map ~sep:PPrint.(star ^^ break 1)
+      ~f:(!pp_core_type printing_stack) a1 args
 
 let gadt_constructor name args res_ty attributes =
-  let name = string name.txt in
+  let name = str name in
   let decl =
     if has_args args then
       let args = constructor_arguments args in
       let res  = !pp_core_type [] (Option.get res_ty) in
+      let colon = string ~loc:(loc_between name args) ":" in
+      let arrow = string ~loc:(loc_between args res) "->" in
       group (
         name ^^
         nest 2 (
-          break 1 ^^ group (colon ^^ nest 2 (break 1 ^^ args))
-          ^/^ group (!^"->" ^^ nest 2 (break 1 ^^ res))
+          break_before (group (colon ^^ nest 2 (break_before args)))
+          ^/^ group (arrow ^^ nest 2 (break_before res))
         )
       )
     else
@@ -53,7 +54,7 @@ let gadt_constructor name args res_ty attributes =
   !attach_attributes decl attributes
 
 let simple_constructor name args attributes =
-  let name = string name.txt in
+  let name = str name in
   let decl =
     if has_args args then
       let args = constructor_arguments args in
@@ -69,7 +70,7 @@ let pp_constructor name args res_ty attributes =
   | Some _ -> gadt_constructor name args res_ty attributes
 
 let pp_rebind name rebound attributes =
-  let name = string name.txt in
+  let name = str name in
   let rebound = !pp_longident rebound in
   let decl = Two_separated_parts.sep_with_first name rebound ~sep:equals in
   !attach_attributes decl attributes
