@@ -130,7 +130,6 @@ let mkpatvar ~loc name =
 let ghexp ~loc d = Exp.mk ~loc:(ghost_loc loc) d
 let ghpat ~loc d = Pat.mk ~loc:(ghost_loc loc) d
 let ghtyp ~loc d = Typ.mk ~loc:(ghost_loc loc) d
-let ghloc ~loc d = { txt = d; loc = ghost_loc loc }
 let ghstr ~loc d = Str.mk ~loc:(ghost_loc loc) d
 let ghsig ~loc d = Sig.mk ~loc:(ghost_loc loc) d
 
@@ -193,91 +192,33 @@ let expecting loc nonterm =
 let not_expecting loc nonterm =
     raise Syntaxerr.(Error(Not_expecting(make_loc loc, nonterm)))
 
-let dotop ~left ~right ~assign ~ext ~multi =
-  let assign = if assign then "<-" else "" in
-  let mid = if multi then ";.." else "" in
-  String.concat "" ["."; ext; left; mid; right; assign]
-let paren = "(",")"
-let brace = "{", "}"
-let bracket = "[", "]"
 let lident x =  Lident x
 let ldot x y = Ldot(x,y)
-let dotop_fun ~loc dotop =
-  (* We could use ghexp here, but sticking to mkexp for parser.mly
-     compatibility. TODO improve parser.mly *)
-  mkexp ~loc (Pexp_ident (ghloc ~loc dotop))
-
-let multi_indices ~loc = function
-  | [a] -> false, a
-  | l -> true, mkexp ~loc (Pexp_array l)
-
-let index_get ~loc get_fun array index =
-  let args = [Nolabel, array; Nolabel, index] in
-   mkexp ~loc (Pexp_apply(get_fun, args))
-
-let index_set ~loc set_fun array index value =
-  let args = [Nolabel, array; Nolabel, index; Nolabel, value] in
-   mkexp ~loc (Pexp_apply(set_fun, args))
 
 let dotop_get ~loc path (left,right) ext array index =
-  let multi, index = multi_indices ~loc index in
-  index_get ~loc
-    (dotop_fun ~loc (path @@ dotop ~left ~right ~ext ~multi ~assign:false))
-    array index
+  let desc =
+    Pexp_dotop_get
+      { accessed = array; op = path ext; left; right; indices = index }
+  in
+  mkexp ~loc desc
 
 let dotop_set ~loc path (left,right) ext array index value=
-  let multi, index = multi_indices ~loc index in
-  index_set ~loc
-    (dotop_fun ~loc (path @@ dotop ~left ~right ~ext ~multi ~assign:true))
-    array index value
+  let desc =
+    Pexp_dotop_set
+      { accessed = array; op = path ext; left; right; indices = index; value }
+  in
+  mkexp ~loc desc
 
-
-let bigarray_function ~loc str name =
-  ghloc ~loc (Ldot(Ldot(Lident "Bigarray", str), name))
 
 let bigarray_untuplify = function
     { pexp_desc = Pexp_tuple explist; pexp_loc = _ } -> explist
   | exp -> [exp]
 
 let bigarray_get ~loc arr arg =
-  let mkexp, ghexp = mkexp ~loc, ghexp ~loc in
-  let bigarray_function = bigarray_function ~loc in
-  let get = if !Clflags.unsafe then "unsafe_get" else "get" in
-  match bigarray_untuplify arg with
-    [c1] ->
-      mkexp(Pexp_apply(ghexp(Pexp_ident(bigarray_function "Array1" get)),
-                       [Nolabel, arr; Nolabel, c1]))
-  | [c1;c2] ->
-      mkexp(Pexp_apply(ghexp(Pexp_ident(bigarray_function "Array2" get)),
-                       [Nolabel, arr; Nolabel, c1; Nolabel, c2]))
-  | [c1;c2;c3] ->
-      mkexp(Pexp_apply(ghexp(Pexp_ident(bigarray_function "Array3" get)),
-                       [Nolabel, arr; Nolabel, c1; Nolabel, c2; Nolabel, c3]))
-  | coords ->
-      mkexp(Pexp_apply(ghexp(Pexp_ident(bigarray_function "Genarray" "get")),
-                       [Nolabel, arr; Nolabel, ghexp(Pexp_array coords)]))
+  mkexp ~loc (Pexp_bigarray_get (arr, bigarray_untuplify arg))
 
 let bigarray_set ~loc arr arg newval =
-  let mkexp, ghexp = mkexp ~loc, ghexp ~loc in
-  let bigarray_function = bigarray_function ~loc in
-  let set = if !Clflags.unsafe then "unsafe_set" else "set" in
-  match bigarray_untuplify arg with
-    [c1] ->
-      mkexp(Pexp_apply(ghexp(Pexp_ident(bigarray_function "Array1" set)),
-                       [Nolabel, arr; Nolabel, c1; Nolabel, newval]))
-  | [c1;c2] ->
-      mkexp(Pexp_apply(ghexp(Pexp_ident(bigarray_function "Array2" set)),
-                       [Nolabel, arr; Nolabel, c1;
-                        Nolabel, c2; Nolabel, newval]))
-  | [c1;c2;c3] ->
-      mkexp(Pexp_apply(ghexp(Pexp_ident(bigarray_function "Array3" set)),
-                       [Nolabel, arr; Nolabel, c1;
-                        Nolabel, c2; Nolabel, c3; Nolabel, newval]))
-  | coords ->
-      mkexp(Pexp_apply(ghexp(Pexp_ident(bigarray_function "Genarray" "set")),
-                       [Nolabel, arr;
-                        Nolabel, ghexp(Pexp_array coords);
-                        Nolabel, newval]))
+  mkexp ~loc (Pexp_bigarray_set (arr, bigarray_untuplify arg, newval))
 
 let lapply ~loc p1 p2 =
   if !Clflags.applicative_functors
@@ -2059,20 +2000,26 @@ expr:
   | simple_expr DOT LBRACE expr RBRACE LESSMINUS expr
       { bigarray_set ~loc:$sloc $1 $4 $7 }
   | simple_expr DOTOP LBRACKET expr_semi_list RBRACKET LESSMINUS expr
-      { dotop_set ~loc:$sloc lident bracket $2 $1 $4 $7 }
+      { dotop_set ~loc:$sloc lident 
+          (mkrhs "[" $loc($3), mkrhs "]" $loc($5)) $2 $1 $4 $7 }
   | simple_expr DOTOP LPAREN expr_semi_list RPAREN LESSMINUS expr
-      { dotop_set ~loc:$sloc lident paren $2 $1 $4 $7 }
+      { dotop_set ~loc:$sloc lident 
+          (mkrhs "(" $loc($3), mkrhs ")" $loc($5)) $2 $1 $4 $7 }
   | simple_expr DOTOP LBRACE expr_semi_list RBRACE LESSMINUS expr
-      { dotop_set ~loc:$sloc lident brace $2 $1 $4 $7 }
+      { dotop_set ~loc:$sloc lident 
+          (mkrhs "{" $loc($3), mkrhs "}" $loc($5)) $2 $1 $4 $7 }
   | simple_expr DOT mod_longident DOTOP LBRACKET expr_semi_list RBRACKET
       LESSMINUS expr
-      { dotop_set ~loc:$sloc (ldot $3) bracket $4 $1 $6 $9 }
+      { dotop_set ~loc:$sloc (ldot $3)
+          (mkrhs "[" $loc($5), mkrhs "]" $loc($7)) $4 $1 $6 $9 }
   | simple_expr DOT mod_longident DOTOP LPAREN expr_semi_list RPAREN
       LESSMINUS expr
-      { dotop_set ~loc:$sloc (ldot $3) paren $4 $1 $6 $9  }
+      { dotop_set ~loc:$sloc (ldot $3)
+          (mkrhs "(" $loc($5), mkrhs ")" $loc($7)) $4 $1 $6 $9 }
   | simple_expr DOT mod_longident DOTOP LBRACE expr_semi_list RBRACE
       LESSMINUS expr
-      { dotop_set ~loc:$sloc (ldot $3) brace $4 $1 $6 $9 }
+      { dotop_set ~loc:$sloc (ldot $3)
+          (mkrhs "{" $loc($5), mkrhs "}" $loc($7)) $4 $1 $6 $9 }
   | expr attribute
       { Exp.attr $1 $2 }
   | UNDERSCORE
@@ -2157,29 +2104,35 @@ simple_expr:
   | simple_expr DOT LBRACKET seq_expr error
       { unclosed "[" $loc($3) "]" $loc($5) }
   | simple_expr DOTOP LBRACKET expr_semi_list RBRACKET
-      { dotop_get ~loc:$sloc lident bracket $2 $1 $4 }
+      { dotop_get ~loc:$sloc lident
+          (mkrhs "[" $loc($3), mkrhs "]" $loc($5)) $2 $1 $4 }
   | simple_expr DOTOP LBRACKET expr_semi_list error
       { unclosed "[" $loc($3) "]" $loc($5) }
   | simple_expr DOTOP LPAREN expr_semi_list RPAREN
-      { dotop_get ~loc:$sloc lident paren $2 $1 $4  }
+      { dotop_get ~loc:$sloc lident
+          (mkrhs "(" $loc($3), mkrhs ")" $loc($5)) $2 $1 $4 }
   | simple_expr DOTOP LPAREN expr_semi_list error
       { unclosed "(" $loc($3) ")" $loc($5) }
   | simple_expr DOTOP LBRACE expr_semi_list RBRACE
-      { dotop_get ~loc:$sloc lident brace $2 $1 $4 }
+      { dotop_get ~loc:$sloc lident
+          (mkrhs "{" $loc($3), mkrhs "}" $loc($5)) $2 $1 $4 }
   | simple_expr DOTOP LBRACE expr error
       { unclosed "{" $loc($3) "}" $loc($5) }
   | simple_expr DOT mod_longident DOTOP LBRACKET expr_semi_list RBRACKET
-      { dotop_get ~loc:$sloc (ldot $3) bracket $4 $1 $6  }
+      { dotop_get ~loc:$sloc (ldot $3)
+          (mkrhs "[" $loc($5), mkrhs "]" $loc($7)) $4 $1 $6  }
   | simple_expr DOT
     mod_longident DOTOP LBRACKET expr_semi_list error
       { unclosed "[" $loc($5) "]" $loc($7) }
   | simple_expr DOT mod_longident DOTOP LPAREN expr_semi_list RPAREN
-      { dotop_get ~loc:$sloc (ldot $3) paren $4 $1 $6 }
+      { dotop_get ~loc:$sloc (ldot $3)
+          (mkrhs "(" $loc($5), mkrhs ")" $loc($7)) $4 $1 $6  }
   | simple_expr DOT
     mod_longident DOTOP LPAREN expr_semi_list error
       { unclosed "(" $loc($5) ")" $loc($7) }
   | simple_expr DOT mod_longident DOTOP LBRACE expr_semi_list RBRACE
-      { dotop_get ~loc:$sloc (ldot $3) brace $4 $1 $6  }
+      { dotop_get ~loc:$sloc (ldot $3)
+          (mkrhs "{" $loc($5), mkrhs "}" $loc($7)) $4 $1 $6  }
   | simple_expr DOT
     mod_longident DOTOP LBRACE expr_semi_list error
       { unclosed "{" $loc($5) "}" $loc($7) }

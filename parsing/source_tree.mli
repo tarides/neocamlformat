@@ -392,10 +392,28 @@ and expression_desc =
         (* [%id] *)
   | Pexp_unreachable
         (* . *)
+    (* FIXME: factorize? *)
   | Pexp_array_get of expression * expression
   | Pexp_array_set of expression * expression * expression
   | Pexp_string_get of expression * expression
   | Pexp_string_set of expression * expression * expression
+  | Pexp_bigarray_get of expression * expression list
+  | Pexp_bigarray_set of expression * expression list * expression
+  | Pexp_dotop_get of {
+      accessed: expression;
+      op: Longident.t;
+      left: string loc;
+      right: string loc;
+      indices: expression list;
+    }
+  | Pexp_dotop_set of {
+      accessed: expression;
+      op: Longident.t;
+      left: string loc;
+      right: string loc;
+      indices: expression list;
+      value: expression;
+    }
 
 
 and case =   (* (P -> E) or (P when E0 -> E) *)

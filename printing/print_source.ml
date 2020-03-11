@@ -630,6 +630,10 @@ end = struct
     | Pexp_array_set _
     | Pexp_string_get _
     | Pexp_string_set _
+    | Pexp_bigarray_get _
+    | Pexp_bigarray_set _
+    | Pexp_dotop_get _
+    | Pexp_dotop_set _
       ->
       assert false
 
