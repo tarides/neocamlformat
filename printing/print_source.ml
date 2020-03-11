@@ -92,7 +92,10 @@ end = struct
 
   let pp = function
     | Pconst_float (nb, suffix_opt)
-    | Pconst_integer (nb, suffix_opt) -> string nb ^^ optional char suffix_opt
+    | Pconst_integer (nb, suffix_opt) ->
+      (* FIXME? nb might start with a minus… which might implying parenthesing
+         is required in some contexts. *)
+      string nb ^^ optional char suffix_opt
     | Pconst_char c                   -> squotes (char c)
     | Pconst_string (s, None)         -> dquotes (pp_string_lit s)
     | Pconst_string (s, Some delim)   -> pp_quoted_string ~delim s
