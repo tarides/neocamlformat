@@ -1914,15 +1914,15 @@ labeled_simple_pattern:
       { (Optional (fst $3), $4, snd $3) }
   | QUESTION label_var
       { (Optional (fst $2), None, snd $2) }
-  | OPTLABEL LPAREN let_pattern opt_default RPAREN
+  | mkrhs(OPTLABEL) LPAREN let_pattern opt_default RPAREN
       { (Optional $1, $4, $3) }
-  | OPTLABEL pattern_var
+  | mkrhs(OPTLABEL) pattern_var
       { (Optional $1, None, $2) }
   | TILDE LPAREN label_let_pattern RPAREN
       { (Labelled (fst $3), None, snd $3) }
   | TILDE label_var
       { (Labelled (fst $2), None, snd $2) }
-  | LABEL simple_pattern
+  | mkrhs(LABEL) simple_pattern
       { (Labelled $1, None, $2) }
   | simple_pattern
       { (Nolabel, None, $1) }
@@ -1949,7 +1949,7 @@ label_let_pattern:
 ;
 %inline label_var:
     mkrhs(LIDENT)
-      { ($1.Location.txt, mkpat ~loc:$sloc (Ppat_var $1)) }
+      { ($1, mkpat ~loc:$sloc (Ppat_var $1)) }
 ;
 let_pattern:
     pattern
@@ -2258,15 +2258,15 @@ simple_expr:
 labeled_simple_expr:
     simple_expr %prec below_HASH
       { (Nolabel, $1) }
-  | LABEL simple_expr %prec below_HASH
+  | mkrhs(LABEL) simple_expr %prec below_HASH
       { (Labelled $1, $2) }
   | TILDE label = LIDENT
       { let loc = $loc(label) in
-        (Labelled label, mkexpvar ~loc label) }
+        (Labelled (mkrhs label loc), mkexpvar ~loc label) }
   | QUESTION label = LIDENT
       { let loc = $loc(label) in
-        (Optional label, mkexpvar ~loc label) }
-  | OPTLABEL simple_expr %prec below_HASH
+        (Optional (mkrhs label loc), mkexpvar ~loc label) }
+  | mkrhs(OPTLABEL) simple_expr %prec below_HASH
       { (Optional $1, $2) }
 ;
 %inline lident_list:
@@ -3090,9 +3090,9 @@ function_type:
     { $1 }
 ;
 %inline arg_label:
-  | label = optlabel
+  | label = mkrhs(optlabel)
       { Optional label }
-  | label = LIDENT COLON
+  | label = mkrhs(LIDENT) COLON
       { Labelled label }
   | /* empty */
       { Nolabel }

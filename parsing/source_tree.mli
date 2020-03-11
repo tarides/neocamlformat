@@ -22,6 +22,11 @@
 
 open Asttypes
 
+type arg_label =
+    Nolabel
+  | Labelled of string loc (*  label:T -> ... *)
+  | Optional of string loc (* ?label:T -> ... *)
+
 type constant =
     Pconst_integer of string * char option
   (* 3 3l 3L 3n

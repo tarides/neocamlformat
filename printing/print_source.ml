@@ -144,21 +144,25 @@ end = struct
     )
 
   (* :/ *)
-  let pp_doc = function
+  let pp_doc ~loc = function
     | PStr [
         { pstr_desc =
             Pstr_eval ({ pexp_desc =
                            Pexp_constant Pconst_string (s, None); _ }, []); _ }
       ] ->
-      let doc = separate hardline (lines s) in
-      !^"(**" ^^ doc ^^ !^"*)"
+      let doc =
+        let open PPrint in
+        let doc = separate hardline (lines s) in
+        !^"(**" ^^ doc ^^ !^"*)"
+      in
+      Location.mkloc doc loc
     | _ -> assert false
 
-  let pp kind { attr_name; attr_payload; attr_loc = _ } =
+  let pp kind { attr_name; attr_payload; attr_loc } =
     match attr_name.txt with
     | "ocaml.doc" ->
       assert (kind <> Free_floating);
-      pp_doc attr_payload
+      pp_doc attr_payload ~loc:attr_loc
     | "ocaml.text" ->
       (*
          The following is not true in cases like:
@@ -176,7 +180,7 @@ end = struct
 
       assert (kind = Free_floating);
       *)
-      pp_doc attr_payload
+      pp_doc attr_payload ~loc:attr_loc
     | _ ->
       pp_attr kind attr_name attr_payload
 
@@ -237,16 +241,15 @@ end
 and Core_type : sig
   val pp : Printing_stack.t -> core_type -> document
 end = struct
-  let pp_var v = squote ^^ string v
+  let pp_var ~loc v = string ~loc ("'" ^ v)
 
   let rec pp ps ct =
     let ps = Printing_stack.Core_type ct.ptyp_desc :: ps in
-    group (pp_desc ps ct.ptyp_desc)
+    group (pp_desc ~loc:ct.ptyp_loc ps ct.ptyp_desc)
 
-  and pp_desc ps = function
-    | Ptyp_any -> underscore
-    | Ptyp_var v -> pp_var v
-    (* FIXME: use n-ary arrow *)
+  and pp_desc ~loc ps = function
+    | Ptyp_any -> underscore ~loc
+    | Ptyp_var v -> pp_var ~loc v
     | Ptyp_arrow (params, ct2) -> pp_arrow ps params ct2
     | Ptyp_tuple lst -> pp_tuple ps lst
     | Ptyp_constr (name, args) -> pp_constr ps name args
@@ -262,20 +265,28 @@ end = struct
     let ct = pp ps ct in
     match arg_label with
     | Nolabel -> ct
-    | Labelled l -> string l ^^ colon ^^ break 0 ^^ ct
-    | Optional l -> qmark ^^ string l ^^ colon ^^ break 0 ^^ ct
+    | Labelled l -> concat (str l) ~sep:PPrint.(colon ^^ break 0) ct
+    | Optional l ->
+      let opt_label = string ~loc:l.loc ("?" ^ l.txt) in
+      concat opt_label ct ~sep:PPrint.(colon ^^ break 0)
 
   and pp_arrow ps params res =
     let params =
-      left_assoc_map ~sep:(arrow ^^ space) ~f:(pp_param ps) params
+      match params with
+      | [] -> assert false
+      | x :: xs ->
+        left_assoc_map ~sep:PPrint.(arrow ^^ space) ~f:(pp_param ps) x xs
     in
     let res = pp (List.tl ps) res in
+    let arrow = string ~loc:(loc_between params res) "->" in
     let doc = params ^/^ group (arrow ^/^ res) in
     Printing_stack.parenthesize ps doc
 
-  and pp_tuple ps l =
-    let tuple = left_assoc_map ~sep:(star ^^ break 1) ~f:(pp ps) l in
-    Printing_stack.parenthesize ps tuple
+  and pp_tuple ps = function
+    | [] -> assert false
+    | x :: xs ->
+      let doc = left_assoc_map ~sep:PPrint.(star ^^ break 1) ~f:(pp ps) x xs in
+      Printing_stack.parenthesize ps doc
 
   and pp_constr ps name args =
     let name = Longident.pp name in

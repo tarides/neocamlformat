@@ -39,12 +39,10 @@ let concat ?(sep=empty) t1 t2 =
   { txt = t1.txt ^^ sep ^^ t2.txt
   ; loc = merge_locs t1.loc t2.loc }
 
-let left_assoc_map ~sep ~f first rest =
-  List.fold_left (fun t elt ->
-    let elt = f elt in 
-    let txt = t.txt ^/^ group (sep ^^ elt.txt) in
-    { txt ; loc = merge_locs t.loc elt.loc }
-  ) (f first) rest
+let separate sep doc docs =
+  match docs with
+  | [] -> doc
+  | _ -> List.fold_left (concat ~sep) doc docs
 
 let break_before t =
   { t with txt = break 1 ^^ t.txt }
@@ -104,3 +102,10 @@ let group t = { t with txt = group t.txt }
 let nest n t = { t with txt = nest n t.txt }
 
 let hang n t = { t with txt = hang n t.txt }
+
+let left_assoc_map ~sep ~f first rest =
+  List.fold_left (fun t elt ->
+    let elt = f elt in 
+    let sep = { txt = sep; loc = loc_between t elt } in
+    t ^/^ group (sep ^^ elt)
+  ) (f first) rest
