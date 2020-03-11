@@ -27,7 +27,7 @@ open Source_tree
 type 'a with_loc = 'a Location.loc
 type loc = Location.t
 
-type lid = Longident.t with_loc
+type lid = Long_ident.t
 type str = string with_loc
 type str_opt = string option with_loc
 type attrs = attribute list

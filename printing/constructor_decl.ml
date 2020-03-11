@@ -15,7 +15,7 @@ let pp_core_type : (Printing_stack.t -> core_type -> document) ref =
   ref (fun _ _ -> assert false)
 let attach_attributes : (document -> attributes -> document) ref =
   ref (fun _ _ -> assert false)
-let pp_longident : (Longident.t -> document) ref =
+let pp_longident : (Long_ident.t -> document) ref =
   ref (fun _ -> assert false)
 
 (******************************************************)
@@ -70,7 +70,7 @@ let pp_constructor name args res_ty attributes =
 
 let pp_rebind name rebound attributes =
   let name = string name.txt in
-  let rebound = !pp_longident rebound.txt in
+  let rebound = !pp_longident rebound in
   let decl = Two_separated_parts.sep_with_first name rebound ~sep:equals in
   !attach_attributes decl attributes
 

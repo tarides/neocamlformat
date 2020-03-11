@@ -58,20 +58,18 @@ module Ident_class = struct
 end
 
 module Longident : sig
-  include module type of struct include Longident end
-
-  val pp : Longident.t -> document
+  val pp : Long_ident.t -> document
 end = struct
-  include Longident
+  open Long_ident
 
   let pp_ident s =
-    match Ident_class.classify s with
-    | Normal -> string s
-    | Infix_op _ | Prefix_op _ -> parens (string s)
+    match Ident_class.classify s.txt with
+    | Normal -> string s.txt
+    | Infix_op _ | Prefix_op _ -> parens (string s.txt)
 
   let rec pp = function
     | Lident s -> pp_ident s
-    | Ldot (lid, s) -> pp lid ^^ dot ^^ break 0 ^^ string s
+    | Ldot (lid, s) -> pp lid ^^ dot ^^ break 0 ^^ string s.txt
     | Lapply (l1, l2) -> pp l1 ^^ break 0 ^^ parens (pp l2)
 
   let pp lid = hang 2 (pp lid)
@@ -270,7 +268,7 @@ end = struct
     Printing_stack.parenthesize ps tuple
 
   and pp_constr ps name args =
-    let name = Longident.pp name.txt in
+    let name = Longident.pp name in
     match args with
     | [] -> name
     | x :: xs -> pp_params ps x xs ^/^ name
@@ -290,7 +288,7 @@ end = struct
     angles fields
 
   and pp_class ps name args =
-    let name = sharp ^^ Longident.pp name.txt in
+    let name = sharp ^^ Longident.pp name in
     match args with
     | [] -> name
     | x :: xs -> pp_params ps x xs ^/^ name
@@ -357,7 +355,7 @@ and Package_type : sig
   val pp : package_type -> document
 end = struct
   let pp (lid, constrs) =
-    let lid = Longident.pp lid.txt in
+    let lid = Longident.pp lid in
     match constrs with
     | [] -> lid
     | _ -> group (lid ^/^ !^"with" ^/^ !^"TODO")
@@ -425,7 +423,7 @@ end = struct
     Printing_stack.parenthesize ps doc
 
   and pp_construct ps name arg_opt =
-    let name = Longident.pp name.txt in
+    let name = Longident.pp name in
     match arg_opt with
     | None -> name
     | Some p ->
@@ -441,10 +439,10 @@ end = struct
       Printing_stack.parenthesize ps (tag ^/^ arg)
 
   and pp_record_field ps (lid, pat) =
-    let field = Longident.pp lid.txt in
+    let field = Longident.pp lid in
     group (
       match pat.ppat_desc with
-      | Ppat_var v when Longident.last lid.txt = v.txt -> field
+      | Ppat_var v when (Long_ident.last lid).txt = v.txt -> field
       | _ ->
         group (field ^/^ equals) ^^
         nest 2 (break 1 ^^ pp ps pat)
@@ -477,7 +475,7 @@ end = struct
     parens (pp [] p ^/^ colon ^/^ Core_type.pp [] ct)
 
   and pp_type typ =
-    sharp ^^ Longident.pp typ.txt
+    sharp ^^ Longident.pp typ
 
   and pp_lazy ps p =
     Printing_stack.parenthesize ps (lazy_ ^/^  pp ps p)
@@ -493,8 +491,8 @@ end = struct
   and pp_exception ps p =
     exception_ ^/^ pp ps p
 
-  and pp_open lid_loc p =
-    Longident.pp lid_loc.txt ^^ dot ^^ parens (break 0 ^^ pp [] p)
+  and pp_open lid p =
+    Longident.pp lid ^^ dot ^^ parens (break 0 ^^ pp [] p)
 
   and pp_desc ps = function
     | Ppat_any -> underscore
@@ -526,7 +524,7 @@ end = struct
   let argument ps (lbl, exp) =
     let suffix lbl =
       match exp.pexp_desc with
-      | Pexp_ident { txt = Lident id; _ } when lbl = id -> empty
+      | Pexp_ident Lident id when lbl = id.txt -> empty
       | _ -> colon ^^ Expression.pp ps exp
     in
     match lbl with
@@ -564,7 +562,7 @@ end = struct
 
   let classify_fun exp =
     match exp.pexp_desc with
-    | Pexp_ident { txt = Lident s; _ } when s <> "" -> Ident_class.classify s
+    | Pexp_ident Lident s when s.txt <> "" -> Ident_class.classify s.txt
     | _ -> Normal
 
   let pp ps exp args =
@@ -639,7 +637,7 @@ end = struct
 
   and pp_ident id =
     (* FIXME: move the grouping to [Longident.pp] *)
-    group (Longident.pp id.txt)
+    group (Longident.pp id)
 
   and pp_let ps rf vbs body =
     let vbs =
@@ -730,7 +728,7 @@ end = struct
     Printing_stack.parenthesize ps doc
 
   and pp_construct ps lid arg_opt =
-    let name = Longident.pp lid.txt in
+    let name = Longident.pp lid in
     let arg  = optional (pp ps) arg_opt in
     let doc  = prefix ~indent:2 ~spaces:1 name arg in
     Printing_stack.parenthesize ps doc
@@ -757,10 +755,10 @@ end = struct
     Printing_stack.parenthesize ps doc
 
   and record_field (lid, exp) =
-    let fld = Longident.pp lid.txt in
+    let fld = Longident.pp lid in
     group (
       match exp.pexp_desc with
-      | Pexp_ident { txt = Lident id; _ } when Longident.last lid.txt = id -> fld
+      | Pexp_ident Lident id when (Long_ident.last lid).txt = id.txt -> fld
       | _ ->
         group (fld ^/^ equals) ^^
         nest 2 (break 1 ^^ pp [ Printing_stack.Record_field ] exp)
@@ -781,7 +779,7 @@ end = struct
 
   and pp_field ps re fld =
     let record = pp ps re in
-    let field = Longident.pp fld.txt in
+    let field = Longident.pp fld in
     flow (break 0) [
       record; dot; field
     ]
@@ -889,7 +887,7 @@ end = struct
     Printing_stack.parenthesize ps doc
 
   and pp_new lid =
-    Longident.pp lid.txt
+    Longident.pp lid
 
   and pp_setinstvar ps lbl exp =
     let lbl = string lbl.txt in
@@ -958,7 +956,7 @@ end = struct
     parens (module_ ^/^ me ^^ constraint_)
 
   and pp_open lid exp =
-    let lid = Longident.pp lid.txt in
+    let lid = Longident.pp lid in
     let exp = pp [] exp in
     lid ^^ dot ^^ parens (break 0 ^^ exp ^^ break 0)
 
@@ -1028,7 +1026,7 @@ end = struct
     Attribute.attach_to_item doc pmod_attributes
 
   and pp_desc = function
-    | Pmod_ident lid -> Longident.pp lid.txt
+    | Pmod_ident lid -> Longident.pp lid
     | Pmod_structure str -> pp_structure str
     | Pmod_functor (Unit, me) -> pp_generative_functor me
     | Pmod_functor (Named (param, mty), me) ->
@@ -1078,7 +1076,7 @@ end = struct
     Attribute.attach_to_item (pp_desc pmty_desc) pmty_attributes
 
   and pp_desc = function
-    | Pmty_ident lid -> Longident.pp lid.txt
+    | Pmty_ident lid -> Longident.pp lid
     | Pmty_signature sg -> pp_signature sg
     | Pmty_functor (Unit, mty) -> pp_generative_functor mty
     | Pmty_functor (Named (param, pmty), mty) ->
@@ -1312,7 +1310,7 @@ end = struct
 
   let pp { ptyext_path; ptyext_params; ptyext_constructors; ptyext_private;
            ptyext_attributes; _ } =
-    let path = Longident.pp ptyext_path.txt in
+    let path = Longident.pp ptyext_path in
     let params = Type_declaration.pp_params ptyext_params in
     let lhs = group (params ^^ path) in
     let constructors = constructors ptyext_constructors in
@@ -1453,7 +1451,7 @@ and Open_description : sig
   val pp : open_description -> document
 end = struct
   let pp { popen_expr; popen_override; popen_attributes; _ } =
-    let expr = Longident.pp popen_expr.txt in
+    let expr = Longident.pp popen_expr in
     let over =
       match popen_override with
       | Override -> bang
