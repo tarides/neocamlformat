@@ -625,6 +625,13 @@ end = struct
     | Pexp_letop letop -> pp_letop letop
     | Pexp_extension ext -> Extension.pp Item ext
     | Pexp_unreachable -> dot
+      (* TODO *)
+    | Pexp_array_get _
+    | Pexp_array_set _
+    | Pexp_string_get _
+    | Pexp_string_set _
+      ->
+      assert false
 
   and pp_ident id =
     (* FIXME: move the grouping to [Longident.pp] *)

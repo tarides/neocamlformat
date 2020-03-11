@@ -207,20 +207,6 @@ let dotop_fun ~loc dotop =
      compatibility. TODO improve parser.mly *)
   mkexp ~loc (Pexp_ident (ghloc ~loc dotop))
 
-let array_function ~loc str name =
-  ghloc ~loc (Ldot(Lident str,
-                   (if !Clflags.unsafe then "unsafe_" ^ name else name)))
-
-let array_get_fun ~loc =
-  ghexp ~loc (Pexp_ident(array_function ~loc "Array" "get"))
-let string_get_fun ~loc =
-  ghexp ~loc (Pexp_ident(array_function ~loc "String" "get"))
-
-let array_set_fun ~loc =
-  ghexp ~loc (Pexp_ident(array_function ~loc "Array" "set"))
-let string_set_fun ~loc =
-  ghexp ~loc (Pexp_ident(array_function ~loc "String" "set"))
-
 let multi_indices ~loc = function
   | [a] -> false, a
   | l -> true, mkexp ~loc (Pexp_array l)
@@ -233,16 +219,12 @@ let index_set ~loc set_fun array index value =
   let args = [Nolabel, array; Nolabel, index; Nolabel, value] in
    mkexp ~loc (Pexp_apply(set_fun, args))
 
-let array_get ~loc = index_get ~loc (array_get_fun ~loc)
-let string_get ~loc = index_get ~loc (string_get_fun ~loc)
 let dotop_get ~loc path (left,right) ext array index =
   let multi, index = multi_indices ~loc index in
   index_get ~loc
     (dotop_fun ~loc (path @@ dotop ~left ~right ~ext ~multi ~assign:false))
     array index
 
-let array_set ~loc = index_set ~loc (array_set_fun ~loc)
-let string_set ~loc = index_set ~loc (string_set_fun ~loc)
 let dotop_set ~loc path (left,right) ext array index value=
   let multi, index = multi_indices ~loc index in
   index_set ~loc
@@ -2071,9 +2053,9 @@ expr:
   | simple_expr DOT mkrhs(label_longident) LESSMINUS expr
       { mkexp ~loc:$sloc (Pexp_setfield($1, $3, $5)) }
   | simple_expr DOT LPAREN seq_expr RPAREN LESSMINUS expr
-      { array_set ~loc:$sloc $1 $4 $7 }
+      { mkexp ~loc:$sloc (Pexp_array_set($1, $4, $7)) }
   | simple_expr DOT LBRACKET seq_expr RBRACKET LESSMINUS expr
-      { string_set ~loc:$sloc $1 $4 $7 }
+      { mkexp ~loc:$sloc (Pexp_string_set($1, $4, $7)) }
   | simple_expr DOT LBRACE expr RBRACE LESSMINUS expr
       { bigarray_set ~loc:$sloc $1 $4 $7 }
   | simple_expr DOTOP LBRACKET expr_semi_list RBRACKET LESSMINUS expr
@@ -2167,11 +2149,11 @@ simple_expr:
   | LPAREN seq_expr type_constraint RPAREN
       { mkexp_constraint ~loc:$sloc $2 $3 }
   | simple_expr DOT LPAREN seq_expr RPAREN
-      { array_get ~loc:$sloc $1 $4 }
+      { mkexp ~loc:$sloc (Pexp_array_get ($1, $4)) }
   | simple_expr DOT LPAREN seq_expr error
       { unclosed "(" $loc($3) ")" $loc($5) }
   | simple_expr DOT LBRACKET seq_expr RBRACKET
-      { string_get ~loc:$sloc $1 $4 }
+      { mkexp ~loc:$sloc (Pexp_string_get ($1, $4)) }
   | simple_expr DOT LBRACKET seq_expr error
       { unclosed "[" $loc($3) "]" $loc($5) }
   | simple_expr DOTOP LBRACKET expr_semi_list RBRACKET

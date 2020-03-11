@@ -392,6 +392,11 @@ and expression_desc =
         (* [%id] *)
   | Pexp_unreachable
         (* . *)
+  | Pexp_array_get of expression * expression
+  | Pexp_array_set of expression * expression * expression
+  | Pexp_string_get of expression * expression
+  | Pexp_string_set of expression * expression * expression
+
 
 and case =   (* (P -> E) or (P when E0 -> E) *)
     {
