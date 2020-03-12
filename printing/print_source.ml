@@ -322,19 +322,14 @@ end = struct
     | rest -> parens (separate_map comma ~f:(pp []) first rest)
 
   and pp_object ~loc fields closed =
-    let semi_sep = PPrint.(semi ^^ break 1) in
-    let fields = List.rev_map Object_field.pp fields in
+    let fields = List.map Object_field.pp fields in
     let fields =
       match closed with
       | OClosed -> fields
       | OOpen loc -> fields @ [ string ~loc ".." ]
     in
-    let fields =
-      match fields with
-      | [] -> empty ~loc
-      | f :: fs -> separate semi_sep f fs
-    in
-    angles fields
+    List_like.pp ~loc ~formatting:Wrap ~left:langle ~right:rangle
+      fields
 
   and pp_class ps name args =
     let name = sharp ++ Longident.pp name in
