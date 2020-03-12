@@ -496,7 +496,7 @@ let parenthesize ?(situations=Options.Situations.When_needed)
         | Expression (Pexp_match _ | Pexp_try _) -> doc
         | _ -> nest 2 doc
       in
-      enclose ~before:PPrint.(!^"begin") ~after:PPrint.(hardline ^^ !^"end")
+      enclose ~before:PPrint.(!^"begin ") ~after:PPrint.(hardline ^^ !^"end")
         indented
   in
   match situations with
