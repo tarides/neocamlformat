@@ -132,3 +132,34 @@ let left_assoc_map ~sep ~f first rest =
     let sep = { txt = sep; loc = loc_between t elt } in
     t ^/^ group (sep ^^ elt)
   ) (f first) rest
+
+module List_like = struct
+  let docked ~left ~right x xs =
+    let fmt x = nest 2 (group (break_before x)) in
+    let fields =
+      List.fold_left
+        (fun acc elt ->
+           let elt = fmt elt in
+           let semi = token_between acc elt ";" in
+           group (acc ^^ semi) ^^ fmt elt)
+        (fmt x) 
+        xs
+    in
+    let txt =
+      let open PPrint in
+      left ^^ fields.txt ^^ group (break 1 ^^ right)
+    in
+    { txt; loc = fields.loc }
+
+  let fit_or_vertical ~left ~right x xs  =
+    let fields = separate PPrint.(semi ^^ break 1) x xs in
+    let txt = PPrint.(left ^^ nest 2 ( break 1 ^^ fields.txt) ^/^ right) in
+    { txt; loc = fields.loc }
+
+  let pp ~loc ~formatting ~left ~right = function
+    | [] -> { txt = PPrint.(left ^^ right); loc }
+    | x :: xs ->
+      match (formatting : Options.Wrappable.t) with
+      | Wrap -> docked ~left ~right x xs
+      | Fit_or_vertical -> fit_or_vertical ~left ~right x xs
+end
