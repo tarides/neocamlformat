@@ -27,6 +27,10 @@ type arg_label =
   | Labelled of string loc (*  label:T -> ... *)
   | Optional of string loc (* ?label:T -> ... *)
 
+type obj_closed_flag =
+  | OClosed
+  | OOpen of Location.t
+
 type constant =
     Pconst_integer of string * char option
   (* 3 3l 3L 3n
@@ -110,7 +114,7 @@ and core_type_desc =
            T tconstr
            (T1, ..., Tn) tconstr
          *)
-  | Ptyp_object of object_field list * closed_flag
+  | Ptyp_object of object_field list * obj_closed_flag
         (* < l1:T1; ...; ln:Tn >     (flag = Closed)
            < l1:T1; ...; ln:Tn; .. > (flag = Open)
          *)
@@ -119,7 +123,7 @@ and core_type_desc =
            T #tconstr
            (T1, ..., Tn) #tconstr
          *)
-  | Ptyp_alias of core_type * string
+  | Ptyp_alias of core_type * string loc
         (* T as 'a *)
   | Ptyp_variant of row_field list * closed_flag * label list option
         (* [ `A|`B ]         (flag = Closed; labels = None)

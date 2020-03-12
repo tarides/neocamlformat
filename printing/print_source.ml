@@ -138,10 +138,8 @@ end = struct
     | Attached_to_item -> "@"
 
   let pp_attr kind attr_name attr_payload =
-    brackets (
-      string ~loc:attr_name.loc (ats kind ^ attr_name.txt)
-      ^^ Payload.pp attr_payload
-    )
+    let tag = string ~loc:attr_name.loc (ats kind ^ attr_name.txt) in
+    brackets (Payload.pp_after ~tag attr_payload)
 
   (* :/ *)
   let pp_doc ~loc = function
@@ -186,10 +184,10 @@ end = struct
 
   let attach kind doc = function
     | [] -> doc
-    | attrs ->
+    | attr :: attrs ->
       group (
         prefix ~indent:2 ~spaces:1 doc 
-          (separate_map (break 0) (pp kind) attrs)
+          (separate_map (PPrint.break 0) ~f:(pp kind) attr attrs)
       )
 
   let attach_to_item doc =
@@ -212,30 +210,49 @@ end = struct
     | Structure_item
     | Item
 
-  let percents kind =
-    string (
-      match kind with
-      | Structure_item -> "%%"
-      | Item -> "%"
-    )
+  let percents = function
+    | Structure_item -> "%%"
+    | Item -> "%"
 
-  let pp kind ({ Location.txt = ext_name; _ }, ext_payload) =
-    brackets (percents kind ^^ string ext_name ^^ Payload.pp ext_payload)
+  let pp kind ({ Location.txt = ext_name; loc }, ext_payload) =
+    let tag = string ~loc (percents kind ^ ext_name) in
+    brackets (Payload.pp_after ~tag ext_payload)
 end
 
 and Payload : sig
-  val pp : payload -> document
+  val pp_after : tag:document -> payload -> document
 end = struct
-  let pp = function
-    | PStr st -> nest 2 (break 1 ^^ Structure.pp st)
-    | PSig sg -> nest 2 (colon ^/^ Signature.pp sg)
-    | PTyp ct -> nest 2 (colon ^/^ Core_type.pp [] ct)
-    | PPat (p, None) -> nest 2 (qmark ^/^ Pattern.pp [] p)
-    | PPat (p, Some e) ->
-      nest 2 (
-        qmark ^/^ Pattern.pp [] p ^/^
-        group (!^"when" ^/^ Expression.pp [] e)
-      )
+  let psig tag sg =
+    let sg = Signature.pp sg in
+    let colon = token_between tag sg ":" in
+    tag ^^ nest 2 (colon ^/^ sg)
+
+  let ptyp tag ct =
+    let ct = Core_type.pp [] ct in
+    let colon = token_between tag ct ":" in
+    tag ^^ nest 2 (colon ^/^ ct)
+
+  let ppat tag p =
+    let p = Pattern.pp [] p in
+    let qmark = token_between tag p "?" in
+    tag ^^ nest 2 (qmark ^/^ p)
+
+  let ppat_guard tag p e =
+    let p = Pattern.pp [] p in
+    let e = Expression.pp [] e in
+    let qmark = token_between tag p "?" in
+    let when_ = token_between p e "when" in
+    tag ^^ nest 2 (
+      qmark ^/^ p ^/^
+      group (when_ ^/^ e)
+    )
+
+  let pp_after ~tag = function
+    | PStr st -> nest 2 (break_before @@ Structure.pp st)
+    | PSig sg -> psig tag sg
+    | PTyp ct -> ptyp tag ct
+    | PPat (p, None) -> ppat tag p
+    | PPat (p, Some e) -> ppat_guard tag p e
 end
 
 and Core_type : sig
@@ -253,7 +270,7 @@ end = struct
     | Ptyp_arrow (params, ct2) -> pp_arrow ps params ct2
     | Ptyp_tuple lst -> pp_tuple ps lst
     | Ptyp_constr (name, args) -> pp_constr ps name args
-    | Ptyp_object (fields, closed) -> pp_object fields closed
+    | Ptyp_object (fields, closed) -> pp_object ~loc fields closed
     | Ptyp_class (name, args) -> pp_class ps name args
     | Ptyp_alias (ct, alias) -> pp_alias ps ct alias
     | Ptyp_variant (fields, closed, present) -> pp_variant fields closed present
@@ -278,7 +295,7 @@ end = struct
         left_assoc_map ~sep:PPrint.(arrow ^^ space) ~f:(pp_param ps) x xs
     in
     let res = pp (List.tl ps) res in
-    let arrow = string ~loc:(loc_between params res) "->" in
+    let arrow = token_between params res "->" in
     let doc = params ^/^ group (arrow ^/^ res) in
     Printing_stack.parenthesize ps doc
 
@@ -296,29 +313,36 @@ end = struct
 
   and pp_params ps first = function
     | []   -> pp ps first
-    | rest -> parens (separate_map comma (pp []) (first :: rest))
+    | rest -> parens (separate_map comma ~f:(pp []) first rest)
 
-  and pp_object fields closed =
-    let semi_sep = semi ^^ break 1 in
-    let fields = separate_map semi_sep Object_field.pp fields in
+  and pp_object ~loc fields closed =
+    let semi_sep = PPrint.(semi ^^ break 1) in
+    let fields = List.rev_map Object_field.pp fields in
     let fields =
       match closed with
-      | Closed -> fields
-      | Open -> fields ^^ semi_sep ^^ underscore
+      | OClosed -> fields
+      | OOpen loc -> fields @ [ string ~loc ".." ]
+    in
+    let fields =
+      match fields with
+      | [] -> empty ~loc
+      | f :: fs -> separate semi_sep f fs
     in
     angles fields
 
   and pp_class ps name args =
-    let name = sharp ^^ Longident.pp name in
+    let name = sharp ++ Longident.pp name in
     match args with
     | [] -> name
     | x :: xs -> pp_params ps x xs ^/^ name
 
-  (* FIXME: not sure parens are ever needed *)
   and pp_alias ps ct alias =
+    let ct = pp ps ct in
+    let alias = pp_var ~loc:alias.loc alias.txt in
+    let as_ = token_between ct alias "as" in
     (* TODO: hang & ident one linebreak *)
-    let alias = pp ps ct ^/^ as_ ^/^ pp_var alias in
-    Printing_stack.parenthesize ps alias
+    let doc = ct ^/^ as_ ^/^ alias in
+    Printing_stack.parenthesize ps doc
 
   and pp_variant fields closed present =
         (* [ `A|`B ]         (flag = Closed; labels = None)

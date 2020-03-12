@@ -1,5 +1,4 @@
 open PPrint
-open Custom_combinators
 
 type t = {
   lhs : document;
@@ -73,5 +72,5 @@ module Module = struct
         binder, nest 2 (break 1 ^^ doc)
     in
     let doc = pre ^^ group (with_constraint ^/^ binder) ^^ rhs in
-    group (prefix ~indent:2 ~spaces:1 doc attributes)
+    group (prefix 2 1 doc attributes)
 end

@@ -11,6 +11,9 @@ let loc_between t1 t2 =
 
 type t = document loc
 
+let empty ~loc =
+  { txt = empty; loc }
+
 let str s = { s with txt = string s.txt }
 
 let arbitrary_string ~loc x =
@@ -25,17 +28,31 @@ let char ~loc c =
 let underscore ~loc : t=
   { txt = underscore; loc }
 
-let parens (t : t) = { t with txt = parens t.txt }
+let token_between x1 x2 tok =
+  let loc = loc_between x1 x2 in
+  string ~loc tok
+
+(* FIXME: do I really want to keep this?
+   Currently it's being used for:
+   - class paths in core types: #A.t, which can contain
+   comments: #(*foo*)A.t
+*)
+let (++) doc t =
+  { txt = doc ^^ t.txt
+  ; loc = t.loc }
+
+let angles (t : t) = { t with txt = angles t.txt }
 let braces (t : t) = { t with txt = braces t.txt }
-let squotes (t : t) = { t with txt = squotes t.txt }
-let dquotes (t : t) = { t with txt = dquotes t.txt }
 let brackets (t : t) = { t with txt = brackets t.txt }
+let dquotes (t : t) = { t with txt = dquotes t.txt }
+let parens (t : t) = { t with txt = parens t.txt }
+let squotes (t : t) = { t with txt = squotes t.txt }
 
 let enclose ~before ~after t =
   let txt = before ^^ t.txt ^^ after in
   { t with txt }
 
-let concat ?(sep=empty) t1 t2 =
+let concat ?(sep=PPrint.empty) t1 t2 =
   { txt = t1.txt ^^ sep ^^ t2.txt
   ; loc = merge_locs t1.loc t2.loc }
 
@@ -44,8 +61,11 @@ let separate sep doc docs =
   | [] -> doc
   | _ -> List.fold_left (concat ~sep) doc docs
 
-let break_before t =
-  { t with txt = break 1 ^^ t.txt }
+let separate_map sep ~f doc docs =
+  separate sep (f doc) (List.map f docs)
+
+let break_before ?(spaces=1) t =
+  { t with txt = break spaces ^^ t.txt }
 
 module Two_separated_parts = struct
   (** Degrades in the following way:
@@ -102,6 +122,9 @@ let group t = { t with txt = group t.txt }
 let nest n t = { t with txt = nest n t.txt }
 
 let hang n t = { t with txt = hang n t.txt }
+
+let prefix ~indent ~spaces x y =
+  group (x ^^ nest indent (break_before ~spaces y))
 
 let left_assoc_map ~sep ~f first rest =
   List.fold_left (fun t elt ->

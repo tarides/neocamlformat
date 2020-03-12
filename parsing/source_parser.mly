@@ -3059,7 +3059,7 @@ alias_type:
     function_type
       { $1 }
   | mktyp(
-      ty = alias_type AS QUOTE tyvar = ident
+      ty = alias_type AS QUOTE tyvar = mkrhs(ident)
         { Ptyp_alias(ty, tyvar) }
     )
     { $1 }
@@ -3137,7 +3137,7 @@ atomic_type:
     | LESS meth_list GREATER
         { let (f, c) = $2 in Ptyp_object (f, c) }
     | LESS GREATER
-        { Ptyp_object ([], Closed) }
+        { Ptyp_object ([], OClosed) }
     | tys = actual_type_parameters
       HASH
       cid = class_longident
@@ -3226,12 +3226,12 @@ meth_list:
       { let (f, c) = tail in (head :: f, c) }
   | head = field_semi
   | head = inherit_field SEMI
-      { [head], Closed }
+      { [head], OClosed }
   | head = field
   | head = inherit_field
-      { [head], Closed }
+      { [head], OClosed }
   | DOTDOT
-      { [], Open }
+      { [], OOpen (make_loc $sloc) }
 ;
 %inline field:
   mkrhs(label) COLON poly_type_no_attr attributes
