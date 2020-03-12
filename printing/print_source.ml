@@ -1186,26 +1186,40 @@ end
 and Fun_param : sig
   val pp : fun_param -> document
 end = struct
-  let term lbl default pat =
-    let suffix lbl =
-      match pat.ppat_desc with
-      | Ppat_var v when lbl = v.txt -> empty
-      | _ -> colon ^^ Pattern.pp [ Printing_stack.Value_binding ] pat
+  let build_simple_label prefix_token lbl pat =
+    let pre = prefix_token ++ str lbl in
+    match pat.ppat_desc with
+    | Ppat_var v when lbl.txt = v.txt -> pre
+    | _ -> 
+      let pat = Pattern.pp [ Printing_stack.Value_binding ] pat in
+      let colon = token_between pre pat ":" in
+      pre ^^ colon ^^ pat
+
+  let build_optional_with_default lbl def pat =
+    let pat_def =
+      let pat = Pattern.pp [ Printing_stack.Value_binding ] pat in
+      let def = Expression.pp [ Printing_stack.Value_binding ] def in
+      parens (group (concat pat def ~sep:equals))
     in
+    let rhs =
+      match pat.ppat_desc with
+      | Ppat_var v when lbl.txt = v.txt -> pat_def
+      | _ -> concat (str lbl) pat_def ~sep:colon
+    in
+    qmark ++ rhs
+
+
+  let term lbl default pat =
     match lbl with
     | Nolabel -> Pattern.pp [ Printing_stack.Value_binding ] pat
-    | Labelled lbl -> tilde ^^ string lbl ^^ suffix lbl
+    | Labelled lbl -> build_simple_label tilde lbl pat
     | Optional lbl ->
       match default with
-      | None -> qmark ^^ string lbl ^^ suffix lbl
-      | Some def ->
-        (* TODO: punning *)
-        let pat = Pattern.pp [] pat in
-        let exp = Expression.pp [ Printing_stack.Value_binding ] def in
-        qmark ^^ string lbl ^^ colon ^^ parens (group (pat ^/^ equals ^/^ exp))
+      | None -> build_simple_label qmark lbl pat
+      | Some def -> build_optional_with_default lbl def pat
 
   let newtype typ =
-    parens (!^"type" ^/^ string typ.txt)
+    parens (!^"type" ++ str typ)
 
   let pp = function
     | Term (lbl, default, pat) -> group (term lbl default pat)
@@ -1225,6 +1239,10 @@ end = struct
     let coerce = Option.map (Core_type.pp [ Value_binding ]) coerce in
     let rhs = Expression.pp [] pvb_expr in
     let rhs = Attribute.attach attr_kind rhs pvb_attributes in
+    let params =
+      let loc = { pat.loc with loc_start = pat.loc.loc_end } in
+      { txt = params; loc }
+    in
     { Binding.lhs = pat; params; constr; coerce; rhs }
 end
 
@@ -1249,9 +1267,8 @@ end = struct
   and pp_structure str =
     let str = Structure.pp str in
     group (
-      string "struct" ^^
-      nest 2 (break 1 ^^ str) ^/^
-      string "end"
+      enclose ~before:!^"struct" ~after:PPrint.(break 1 ^^ !^"end")
+        (nest 2 (break_before str))
     )
 
   and pp_generative_functor me =

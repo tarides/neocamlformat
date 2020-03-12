@@ -1008,7 +1008,7 @@ parse_pattern:
 (* Functor arguments appear in module expressions and module types. *)
 
 %inline functor_args:
-  reversed_nonempty_llist(functor_arg)
+  nonempty_llist(functor_arg)
     { $1 }
     (* Produce a reversed list on purpose;
        later processed using [fold_left]. *)
@@ -1017,10 +1017,10 @@ parse_pattern:
 functor_arg:
     (* An anonymous and untyped argument. *)
     LPAREN RPAREN
-      { Unit }
+      { mkrhs Unit $sloc }
   | (* An argument accompanied with an explicit type. *)
     LPAREN x = mkrhs(module_name) COLON mty = module_type RPAREN
-      { Named (x, mty) }
+      { mkrhs (Named (x, mty)) $sloc }
 ;
 
 module_name:
@@ -1048,9 +1048,7 @@ module_expr:
       { unclosed "struct" $loc($1) "end" $loc($4) }
   | FUNCTOR attrs = attributes args = functor_args MINUSGREATER me = module_expr
       { wrap_mod_attrs ~loc:$sloc attrs (
-          List.fold_left (fun acc arg ->
-            mkmod ~loc:$sloc (Pmod_functor (arg, acc))
-          ) me args
+          mkmod ~loc:$sloc (Pmod_functor (args, me))
         ) }
   | me = paren_module_expr
       { me }
@@ -1339,9 +1337,7 @@ module_type:
     MINUSGREATER mty = module_type
       %prec below_WITH
       { wrap_mty_attrs ~loc:$sloc attrs (
-          List.fold_left (fun acc arg ->
-            mkmty ~loc:$sloc (Pmty_functor (arg, acc))
-          ) mty args
+          mkmty ~loc:$sloc (Pmty_functor (args, mty))
         ) }
   | MODULE TYPE OF attributes module_expr %prec below_LBRACKETAT
       { mkmty ~loc:$sloc ~attrs:$4 (Pmty_typeof $5) }
@@ -1356,7 +1352,8 @@ module_type:
         { Pmty_ident $1 }
     | module_type MINUSGREATER module_type
         %prec below_WITH
-        { Pmty_functor(Named (mknoloc None, $1), $3) }
+        { let param = mkrhs (Named (mknoloc None, $1)) $loc($1) in
+          Pmty_functor([ param ], $3) }
     | module_type WITH separated_nonempty_llist(AND, with_constraint)
         { Pmty_with($1, $3) }
 /*  | LPAREN MODULE mod_longident RPAREN
@@ -1447,7 +1444,7 @@ module_declaration_body:
       { mty }
   | mkmty(
       arg = functor_arg body = module_declaration_body
-        { Pmty_functor(arg, body) }
+        { Pmty_functor([ arg ], body) }
     )
     { $1 }
 ;

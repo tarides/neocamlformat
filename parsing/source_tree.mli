@@ -372,7 +372,7 @@ and expression_desc =
         (* {< x1 = E1; ...; Xn = En >} *)
   | Pexp_letmodule of
       string option loc *
-      (functor_parameter list * module_type option * module_expr) * expression
+      (functor_parameter loc list * module_type option * module_expr) * expression
         (* let module M = ME in E *)
   | Pexp_letexception of extension_constructor * expression
         (* let exception C in E *)
@@ -762,7 +762,7 @@ and module_type_desc =
         (* S *)
   | Pmty_signature of signature
         (* sig ... end *)
-  | Pmty_functor of functor_parameter * module_type
+  | Pmty_functor of functor_parameter loc list * module_type
         (* functor(X : MT1) -> MT2 *)
   | Pmty_with of module_type * with_constraint list
         (* MT with ... *)
@@ -914,7 +914,7 @@ and module_expr_desc =
         (* X *)
   | Pmod_structure of structure
         (* struct ... end *)
-  | Pmod_functor of functor_parameter * module_expr
+  | Pmod_functor of functor_parameter loc list * module_expr
         (* functor(X : MT1) -> ME *)
   | Pmod_apply of module_expr * module_expr
         (* ME1(ME2) *)
@@ -982,7 +982,7 @@ and value_binding =
 and module_binding =
     {
      pmb_name: string option loc;
-     pmb_params: functor_parameter list;
+     pmb_params: functor_parameter loc list;
      pmb_type: module_type option;
      pmb_expr: module_expr;
      pmb_attributes: attributes;

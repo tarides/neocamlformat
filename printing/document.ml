@@ -38,6 +38,7 @@ let token_between x1 x2 tok =
    comments: [#(*foo*)A.t]
    - ppat_types: #foo, which can contain comments [# (*foo*) foo]
    - the [if] token...
+   - Pexp_newtypes
 *)
 let (++) doc t =
   { txt = doc ^^ t.txt
