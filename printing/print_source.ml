@@ -5,8 +5,6 @@ open Source_tree
 open Document
 open struct type document = Document.t end
 
-open Custom_combinators
-
 let module_name ~loc = function
   | None -> underscore ~loc
   | Some name -> string ~loc name
@@ -42,19 +40,19 @@ open Tokens
 
 module Ident_class = struct
   type t =
-    | Prefix_op of string
-    | Infix_op of string
+    | Prefix_op of string loc
+    | Infix_op of string loc
     | Normal
 
   (* Refer to:
      http://caml.inria.fr/pub/docs/manual-ocaml/lex.html#sss:lex-ops-symbols *)
   let classify s =
-    match s with
+    match s.txt with
     | "" -> assert false
     | ":=" | "or" | "&" | "&&" | "!=" | "mod" | "land" | "lor" | "lxor"
     | "lsl" | "lsr" | "asr" | "::" -> Infix_op s
     | _ ->
-      match String.get s 0 with
+      match String.get s.txt 0 with
       | '!' | '?' | '~' -> Prefix_op s
       | '$' | '&' | '*' | '+' | '-' | '/' | '=' | '>' | '@' | '^' | '|'
       | '%' | '<' | '#' -> Infix_op s
@@ -67,7 +65,7 @@ end = struct
   open Long_ident
 
   let pp_ident s =
-    match Ident_class.classify s.txt with
+    match Ident_class.classify s with
     | Normal -> str s
     | Infix_op _ | Prefix_op _ -> parens (str s)
 
@@ -461,9 +459,9 @@ end
 and Pattern : sig
   val pp : Printing_stack.t -> pattern -> document
 end = struct
-  let rec pp ps { ppat_desc; ppat_attributes; _ } =
+  let rec pp ps { ppat_desc; ppat_attributes; ppat_loc; _ } =
     let ps = Printing_stack.Pattern ppat_desc :: ps in
-    let desc = pp_desc ps ppat_desc in
+    let desc = pp_desc ~loc:ppat_loc ps ppat_desc in
     Attribute.attach_to_item desc ppat_attributes
 
   and pp_alias ps pat alias =
@@ -489,9 +487,9 @@ end = struct
     in
     Printing_stack.parenthesize ps doc
 
-  and pp_list_literal elts =
+  and pp_list_literal ~loc elts =
     let elts = List.map (pp []) elts in
-    List_like.pp
+    List_like.pp ~loc
       ~formatting:Wrap (* TODO: add an option *)
       ~left:lbracket ~right:rbracket
       elts
@@ -501,7 +499,8 @@ end = struct
     let hd = pp ps hd in
     let ps = Printing_stack.top_is_op ~on_left:false "::" ps in
     let tl = pp ps tl in
-    let doc = infix ~indent:2 ~spaces:1 !^"::" hd tl in
+    let cons = token_between hd tl "::" in
+    let doc = infix ~indent:2 ~spaces:1 cons hd tl in
     Printing_stack.parenthesize ps doc
 
   and pp_construct ps name arg_opt =
@@ -526,23 +525,29 @@ end = struct
       match pat.ppat_desc with
       | Ppat_var v when (Long_ident.last lid).txt = v.txt -> field
       | _ ->
+        let pat = pp ps pat in
+        let equals = token_between field pat "=" in
         group (field ^/^ equals) ^^
-        nest 2 (break 1 ^^ pp ps pat)
+        nest 2 (break_before pat)
     )
 
-  and pp_record ps pats closed =
+  and pp_record ~loc ps pats closed =
     let fields = List.map (pp_record_field ps) pats in
-    let extra_fields = match closed with Closed -> [] | Open -> [underscore] in
-    List_like.pp
+    let extra_fields =
+      match closed with
+      | OClosed -> []
+      | OOpen loc -> [underscore ~loc]
+    in
+    List_like.pp ~loc
       ~formatting:!Options.Record.pattern
       ~left:lbrace ~right:rbrace
       (fields @ extra_fields)
 
-  and pp_array ps pats =
+  and pp_array ~loc ps pats =
     let pats = List.map (pp ps) pats in
     (* TODO: add an option *)
-    List_like.pp ~formatting:Wrap
-      ~left:(lbracket ^^ pipe) ~right:(pipe ^^ rbracket) pats
+    List_like.pp ~loc ~formatting:Wrap
+      ~left:PPrint.(lbracket ^^ pipe) ~right:PPrint.(pipe ^^ rbracket) pats
 
   and pp_or ps p1 p2 =
     let p1 =
@@ -550,51 +555,63 @@ end = struct
       pp ps p1
     in
     let p2 = pp ps p2 in
-    let or_ = p1 ^/^ pipe ^^ space ^^ p2 in
+    let pipe = token_between p1 p2 "| " in
+    let or_ = p1 ^/^ pipe ^^ p2 in
     Printing_stack.parenthesize ps or_
 
   and pp_constraint p ct =
-    parens (pp [] p ^/^ colon ^/^ Core_type.pp [] ct)
+    let p = pp [] p in
+    let ct = Core_type.pp [] ct in
+    let colon = token_between p ct ":" in
+    parens (p ^/^ colon ^/^ ct)
 
   and pp_type typ =
-    sharp ^^ Longident.pp typ
+    sharp ++ Longident.pp typ
 
-  and pp_lazy ps p =
-    Printing_stack.parenthesize ps (lazy_ ^/^  pp ps p)
+  and pp_lazy ~loc ps p =
+    let lazy_ = string ~loc "lazy" in
+    Printing_stack.parenthesize ps (lazy_ ^/^ pp ps p)
 
   and pp_unpack mod_name ct =
-    let constraint_ =
+    let mod_name = module_name ~loc:mod_name.loc mod_name.txt in
+    let with_constraint =
       match ct with
-      | None -> empty
-      | Some pkg -> break 1 ^^ colon ^/^ Package_type.pp pkg
+      | None -> mod_name
+      | Some pkg ->
+        let constr = Package_type.pp pkg in
+        let colon = token_between mod_name constr ":" in
+        mod_name ^/^ colon ^/^ constr
     in
-    parens (module_ ^/^ module_name mod_name.txt ^^ constraint_)
+    enclose ~before:PPrint.(!^"(module") ~after:PPrint.(!^")")
+      with_constraint
 
-  and pp_exception ps p =
-    exception_ ^/^ pp ps p
+  and pp_exception ~loc ps p =
+    string ~loc "exception" ^/^ pp ps p
 
   and pp_open lid p =
-    Longident.pp lid ^^ dot ^^ parens (break 0 ^^ pp [] p)
+    let p = pp [] p in
+    let lid = Longident.pp lid in
+    concat lid (parens (break_before ~spaces:0 p)) ~sep:PPrint.dot
 
-  and pp_desc ps = function
-    | Ppat_any -> underscore
-    | Ppat_var v -> string v.txt
+  and pp_desc ~loc ps = function
+    | Ppat_any -> underscore ~loc
+    | Ppat_var v -> str v
     | Ppat_alias (pat, alias) -> pp_alias ps pat alias
-    | Ppat_constant c -> Constant.pp c
+    | Ppat_constant c -> Constant.pp ~loc c
     | Ppat_interval (c1, c2) -> pp_interval c1 c2
     | Ppat_tuple pats -> pp_tuple ps pats
     | Ppat_construct (name, arg) -> pp_construct ps name arg
-    | Ppat_list_lit pats -> pp_list_literal pats
+    | Ppat_list_lit pats -> pp_list_literal ~loc pats
     | Ppat_cons (hd, tl) -> pp_cons ps hd tl
     | Ppat_variant (tag, arg) -> pp_variant ps tag arg
-    | Ppat_record (pats, closed) -> pp_record ps pats closed
-    | Ppat_array pats -> pp_array ps pats
+    | Ppat_record (pats, closed) -> pp_record ~loc ps pats closed
+    | Ppat_array pats -> pp_array ~loc ps pats
     | Ppat_or (p1, p2) -> pp_or ps p1 p2
     | Ppat_constraint (p, ct) -> pp_constraint p ct
     | Ppat_type pt -> pp_type pt
-    | Ppat_lazy p -> pp_lazy ps p
+    | Ppat_lazy p -> pp_lazy ~loc ps p
     | Ppat_unpack (name, typ) -> pp_unpack name typ
-    | Ppat_exception p -> pp_exception ps p
+    | Ppat_exception p -> pp_exception ~loc ps p
     | Ppat_extension ext -> Extension.pp Item ext
     | Ppat_open (lid, p) -> pp_open lid p
 end
@@ -604,107 +621,114 @@ and Application : sig
     document
 end = struct
   let argument ps (lbl, exp) =
-    let suffix lbl =
+    let suffix ~prefix lbl =
+      let pre = prefix ++ str lbl in
       match exp.pexp_desc with
-      | Pexp_ident Lident id when lbl = id.txt -> empty
-      | _ -> colon ^^ Expression.pp ps exp
+      | Pexp_ident Lident id when lbl.txt = id.txt -> pre
+      | _ -> concat pre (Expression.pp ps exp) ~sep:PPrint.colon
     in
     match lbl with
     | Nolabel -> Expression.pp ps exp
-    | Labelled lbl -> tilde ^^ string lbl ^^ suffix lbl
-    | Optional lbl -> qmark ^^ string lbl ^^ suffix lbl
+    | Labelled lbl -> suffix ~prefix:tilde lbl
+    | Optional lbl -> suffix ~prefix:qmark lbl
 
-  let simple_apply ps exp args =
+  let simple_apply ps exp arg args =
     let exp = Expression.pp ps exp in
-    let args = separate_map (break 1) (argument ps) args in
+    let args = separate_map (break 1) ~f:(argument ps) arg args in
     let doc = prefix ~indent:2 ~spaces:1 exp args in
     Printing_stack.parenthesize ps doc
 
-  let prefix_op ps (exp, op) = function
-    | (Nolabel, fst_arg) :: args ->
+  let prefix_op ps (exp, op) arg args =
+    match fst arg with
+    | Nolabel ->
       let ps = Printing_stack.Prefix_op :: List.tl ps in
-      let op = string op in
-      let fst_arg = Expression.pp ps fst_arg in
-      let args = separate_map (break 1) (argument ps) args in
-      let doc = prefix ~indent:2 ~spaces:1 (op ^^ fst_arg) args in
+      let op = str op in
+      let args = separate_map (break 1) ~f:(argument ps) arg args in
+      let doc = nest 2 (op ^^ args) in
       Printing_stack.parenthesize ps doc
-    | args ->
-      simple_apply ps exp args
+    | _ ->
+      simple_apply ps exp arg args
 
-  let infix_op ps (exp, op) = function
-    | [ (Nolabel, fst); (Nolabel, snd) ] ->
-      let ps = Printing_stack.top_is_op ~on_left:true op ps in
+  let infix_op ps (exp, op) arg args =
+    match arg, args with
+    | (Nolabel, fst), [ (Nolabel, snd) ] ->
+      let ps = Printing_stack.top_is_op ~on_left:true op.txt ps in
       let fst = Expression.pp ps fst in
-      let ps = Printing_stack.top_is_op ~on_left:false op ps in
+      let ps = Printing_stack.top_is_op ~on_left:false op.txt ps in
       let snd = Expression.pp ps snd in
-      let doc = infix ~indent:2 ~spaces:1 (string op) fst snd in
+      let doc = infix ~indent:2 ~spaces:1 (str op) fst snd in
       Printing_stack.parenthesize ps doc
-    | args ->
-      simple_apply ps exp args
+    | _ ->
+      simple_apply ps exp arg args
 
   let classify_fun exp =
     match exp.pexp_desc with
-    | Pexp_ident Lident s when s.txt <> "" -> Ident_class.classify s.txt
+    | Pexp_ident Lident s when s.txt <> "" -> Ident_class.classify s
     | _ -> Normal
 
-  let pp ps exp args =
-    match classify_fun exp with
-    | Normal -> simple_apply ps exp args
-    | Prefix_op op -> prefix_op ps (exp, op) args
-    | Infix_op op -> infix_op ps (exp, op) args
+  let pp ps exp = function
+    | [] ->
+      (* An application node without arguments? That can't happen. *)
+      assert false
+    | arg :: args ->
+      match classify_fun exp with
+      | Normal -> simple_apply ps exp arg args
+      | Prefix_op op -> prefix_op ps (exp, op) arg args
+      | Infix_op op -> infix_op ps (exp, op) arg args
 
 end
 
 and Expression : sig
   val pp : Printing_stack.t -> expression -> document
 end = struct
-  let rec pp ps { pexp_desc; pexp_attributes; _ } =
+  let rec pp ps { pexp_desc; pexp_attributes; pexp_loc; _ } =
     let desc =
-      group (pp_desc (Printing_stack.Expression pexp_desc :: ps) pexp_desc)
+      let ps = Printing_stack.Expression pexp_desc :: ps in
+      group (pp_desc ~loc:pexp_loc ps pexp_desc)
     in
     Attribute.attach_to_item desc pexp_attributes
 
-  and pp_desc ps = function
+  and pp_desc ~loc ps = function
     | Pexp_ident id -> pp_ident id
-    | Pexp_constant c -> Constant.pp c
+    | Pexp_constant c -> Constant.pp ~loc c
     | Pexp_let (rf, vbs, body) -> pp_let ps rf vbs body
     | Pexp_function cases -> pp_function ps cases
     | Pexp_fun (params, exp) ->
-      pp_fun ps params exp
+      pp_fun ~loc ps params exp
     | Pexp_apply (expr, args) -> Application.pp ps expr args
     | Pexp_match (arg, cases) -> pp_match ps arg cases
     | Pexp_try (arg, cases) -> pp_try ps arg cases
     | Pexp_tuple exps -> pp_tuple ps exps
-    | Pexp_list_lit exps -> pp_list_literal ps exps
+    | Pexp_list_lit exps -> pp_list_literal ~loc ps exps
     | Pexp_cons (hd, tl) -> pp_cons ps hd tl
-    | Pexp_construct (lid, arg) -> pp_construct ps lid arg
-    | Pexp_variant (tag, arg) -> pp_variant ps tag arg
-    | Pexp_record (fields, exp) -> pp_record ps fields exp
+    | Pexp_construct (lid, arg) -> pp_construct ~loc ps lid arg
+    | Pexp_variant (tag, arg) -> pp_variant ~loc ps tag arg
+    | Pexp_record (fields, exp) -> pp_record ~loc ps fields exp
     | Pexp_field (exp, fld) -> pp_field ps exp fld
     | Pexp_setfield (exp, fld, val_) -> pp_setfield ps exp fld val_
-    | Pexp_array elts -> pp_array ps elts
+    | Pexp_array elts -> pp_array ~loc ps elts
     | Pexp_ifthenelse (cond, then_, else_) ->
-      pp_if_then_else ps cond then_ else_
+      pp_if_then_else ~loc ps cond then_ else_
     | Pexp_sequence (e1, e2) -> pp_sequence ps e1 e2
-    | Pexp_while (cond, body) -> pp_while cond body
-    | Pexp_for (it, start, stop, dir, body) -> pp_for it start stop dir body
+    | Pexp_while (cond, body) -> pp_while ~loc cond body
+    | Pexp_for (it, start, stop, dir, body) -> pp_for ~loc it start stop dir body
     | Pexp_constraint (e, ct) -> pp_constraint e ct
     | Pexp_coerce (e, ct_start, ct) -> pp_coerce e ct_start ct
     | Pexp_send (e, meth) -> pp_send ps e meth
     | Pexp_new lid -> pp_new lid
     | Pexp_setinstvar (lbl, exp) -> pp_setinstvar ps lbl exp
-    | Pexp_override fields -> pp_override fields
-    | Pexp_letmodule (name, mb, body) -> pp_letmodule ps name mb body
-    | Pexp_letexception (exn, exp) -> pp_letexception ps exn exp
-    | Pexp_assert exp -> pp_assert ps exp
-    | Pexp_lazy exp -> pp_lazy ps exp
+    | Pexp_override fields -> pp_override ~loc fields
+    | Pexp_letmodule (name, mb, body) -> pp_letmodule ~loc ps name mb body
+    | Pexp_letexception (exn, exp) -> pp_letexception ~loc ps exn exp
+    | Pexp_assert exp -> pp_assert ~loc ps exp
+    | Pexp_lazy exp -> pp_lazy ~loc ps exp
     | Pexp_object cl -> pp_object cl
     | Pexp_pack (me, pkg) -> pp_pack me pkg
     | Pexp_open (lid, exp) -> pp_open lid exp
-    | Pexp_letopen (od, exp) -> pp_letopen ps od exp
+    | Pexp_letopen (od, exp) -> pp_letopen ~loc ps od exp
     | Pexp_letop letop -> pp_letop letop
     | Pexp_extension ext -> Extension.pp Item ext
-    | Pexp_unreachable -> dot
+    | Pexp_unreachable -> string ~loc "."
       (* TODO *)
     | Pexp_array_get _
     | Pexp_array_set _
@@ -725,20 +749,28 @@ end = struct
     let vbs =
       List.mapi (fun i vb ->
         let binding = Value_binding.pp Attached_to_item vb in
-        let keyword = if i = 0 then let_ ^^ rec_flag rf else and_ in
+        let keyword = if i = 0 then "let" ^ rec_flag rf else "and" in
+        let keyword =
+          (* FIXME: pvb_loc should be pvb_start_loc *)
+          let loc =
+            { vb.pvb_loc with loc_end = vb.pvb_pat.ppat_loc.loc_start }
+          in
+          string ~loc keyword
+        in
         Binding.pp ~keyword binding
       ) vbs
     in
-    let vbs = separate hardline vbs in
+    let vbs = separate hardline (List.hd vbs) (List.tl vbs) in
     let body =
       let ps = if Printing_stack.will_parenthesize ps then [] else List.tl ps in
       pp ps body
     in
-    Printing_stack.parenthesize ps (group (vbs ^/^ in_) ^^ hardline ^^ body)
+    let in_ = token_between vbs body "in" in
+    Printing_stack.parenthesize ps (group (vbs ^/^ in_) ^^ hardline ++ body)
 
   and rec_flag = function
-    | Recursive -> string " rec"
-    | Nonrecursive -> empty
+    | Recursive -> " rec"
+    | Nonrecursive -> ""
 
   and case ps { pc_lhs; pc_guard; pc_rhs } =
     let lhs = Pattern.pp [] pc_lhs in
@@ -748,70 +780,97 @@ end = struct
       | None -> lhs
       | Some guard ->
         let guard = pp ps guard in
-        lhs ^/^ group (!^"when" ^/^ guard)
+        let when_ = token_between lhs guard "when" in
+        lhs ^/^ group (when_ ^/^ guard)
     in
-    let lhs = group (lhs ^^ nest 2 (break 1 ^^ arrow)) in
+    let arrow = token_between lhs rhs "->" in
+    let lhs = group (lhs ^^ nest 2 (break_before arrow)) in
     match !Options.Cases.body_on_separate_line with
-    | Always -> lhs ^^ nest !Options.Cases.body_indent (hardline ^^ rhs)
+    | Always -> lhs ^^ nest !Options.Cases.body_indent (hardline ++ rhs)
     | When_needed -> prefix ~indent:!Options.Cases.body_indent ~spaces:1 lhs rhs
 
-  and cases ps case_list =
-    let cases = separate_map (break 1 ^^ pipe ^^ space) (case ps) case_list in
-    let prefix = ifflat empty (hardline ^^ pipe) in
-    prefix ^^ space ^^ cases
+  and cases ps c cs =
+    let cases =
+      separate_map PPrint.(break 1 ^^ pipe ^^ space) ~f:(case ps) c cs
+    in
+    let prefix =
+      let open PPrint in
+      ifflat empty (hardline ^^ pipe) ^^ space
+    in
+    prefix ++ cases
 
-  and pp_function ps case_list =
-    let doc = !^"function" ^^ (cases ps) case_list in
-    Printing_stack.parenthesize ps doc
+  and pp_function ps = function
+    | [] -> assert false (* always at least one case *)
+    | c :: cs ->
+      let doc = !^"function" ++ cases ps c cs in
+      Printing_stack.parenthesize ps doc
 
-  and fun_ ~args ~body =
+  and fun_ ~loc ~args ~body =
+    let fun_ =
+      let loc = { loc with Location.loc_end = args.loc.loc_start } in
+      string ~loc "fun"
+    in
+    let arrow = token_between args body "->" in
     prefix ~indent:2 ~spaces:1
-      (group ((prefix ~indent:2 ~spaces:1 !^"fun" args) ^/^ arrow))
+      (group ((prefix ~indent:2 ~spaces:1 fun_ args) ^/^ arrow))
       body
 
-  and pp_fun ps params exp =
-    let body = pp ps exp in
-    let args = left_assoc_map ~sep:empty ~f:Fun_param.pp params in
-    let doc = fun_ ~args ~body in
-    Printing_stack.parenthesize ps doc
+  and pp_fun ~loc ps params exp =
+    match params with
+    | [] -> assert false
+    | param :: params ->
+      let body = pp ps exp in
+      let args = left_assoc_map ~sep:PPrint.empty ~f:Fun_param.pp param params in
+      let doc = fun_ ~loc ~args ~body in
+      Printing_stack.parenthesize ps doc
 
-  and pp_match ps arg case_list =
-    let arg = pp [] arg in
-    let cases = cases ps case_list in
-    let doc =
-      group (
-        string "match" ^^
-        nest 2 (break 1 ^^ arg) ^/^
-        string "with"
-      ) ^^ cases
-    in
-    Printing_stack.parenthesize ps 
-      ~situations:!Options.Match.parenthesing_situations
-      ~style:!Options.Match.parens_style
-      doc
+  and pp_match ps arg = function
+    | [] -> assert false (* always at least one case *)
+    | c :: cs ->
+      let arg = pp [] arg in
+      let cases = cases ps c cs in
+      let with_ = token_between arg cases "with" in
+      let doc =
+        group (
+          (* FIXME: location for match. *)
+          !^"match" ++
+          nest 2 (break_before arg) ^/^
+          with_
+        ) ^^ cases
+      in
+      Printing_stack.parenthesize ps 
+        ~situations:!Options.Match.parenthesing_situations
+        ~style:!Options.Match.parens_style
+        doc
 
-  and pp_try ps arg case_list =
-    let arg = pp [] arg in
-    let cases = cases ps case_list in
-    let doc =
-      group (
-        string "try" ^^
-        nest 2 (break 1 ^^ arg)
-      ) ^/^
-      string "with" ^^
-      cases
-    in
-    Printing_stack.parenthesize ps doc
+  and pp_try ps arg = function
+    | [] -> assert false
+    | c :: cs ->
+      let arg = pp [] arg in
+      let cases = cases ps c cs in
+      let with_ = token_between arg cases "with" in
+      let doc =
+        group (
+          (* FIXME: location for try *)
+          !^"try" ++
+          nest 2 (break_before arg)
+        ) ^/^
+        with_ ^^
+        cases
+      in
+      Printing_stack.parenthesize ps doc
 
-  and pp_tuple ps exps =
-    let doc =
-      group (separate_map (comma ^^ break 1) (pp ps) exps)
-    in
-    Printing_stack.parenthesize ps doc
+  and pp_tuple ps = function
+    | [] -> assert false
+    | exp :: exps ->
+      let doc =
+        group (separate_map PPrint.(comma ^^ break 1) ~f:(pp ps) exp exps)
+      in
+      Printing_stack.parenthesize ps doc
 
-  and pp_construct ps lid arg_opt =
+  and pp_construct ~loc ps lid arg_opt =
     let name = Longident.pp lid in
-    let arg  = optional (pp ps) arg_opt in
+    let arg  = optional ~loc (pp ps) arg_opt in
     let doc  = prefix ~indent:2 ~spaces:1 name arg in
     Printing_stack.parenthesize ps doc
 
@@ -820,19 +879,20 @@ end = struct
     let hd = Expression.pp ps hd in
     let ps = Printing_stack.top_is_op ~on_left:false "::" ps in
     let tl = Expression.pp ps tl in
-    let doc = infix ~indent:2 ~spaces:1 !^"::" hd tl in
+    let cons = token_between hd tl "::" in
+    let doc = infix ~indent:2 ~spaces:1 cons hd tl in
     Printing_stack.parenthesize ps doc
 
-  and pp_list_literal ps elts =
+  and pp_list_literal ~loc ps elts =
     let elts = List.map (pp ps) elts in
-    List_like.pp
+    List_like.pp ~loc
       ~formatting:Wrap (* TODO: add an option *)
       ~left:lbracket ~right:rbracket
       elts
 
-  and pp_variant ps tag arg_opt =
+  and pp_variant ~loc ps tag arg_opt =
     let tag = Polymorphic_variant_tag.pp tag in
-    let arg  = optional (pp ps) arg_opt in
+    let arg  = optional ~loc (pp ps) arg_opt in
     let doc  = prefix ~indent:2 ~spaces:1 tag arg in
     Printing_stack.parenthesize ps doc
 
@@ -842,62 +902,75 @@ end = struct
       match exp.pexp_desc with
       | Pexp_ident Lident id when (Long_ident.last lid).txt = id.txt -> fld
       | _ ->
-        group (fld ^/^ equals) ^^
-        nest 2 (break 1 ^^ pp [ Printing_stack.Record_field ] exp)
+        let exp = pp [ Printing_stack.Record_field ] exp in
+        let equals = token_between fld exp "=" in
+        group (fld ^/^ equals) ^^ nest 2 (break_before exp)
     )
 
-  and pp_record ps fields updated_record =
+  and pp_record ~loc ps fields updated_record =
     let fields = List.map record_field fields in
-    let update =
-      match updated_record with
-      | None -> empty
-      | Some e -> group (group (break 1 ^^ pp ps e) ^/^ !^"with")
-    in
-    List_like.pp
-      ~formatting:!Options.Record.expression
-      ~left:(group (lbrace ^^ update))
-      ~right:rbrace
-      fields
+    match updated_record with
+    | None ->
+      List_like.pp ~loc
+        ~formatting:!Options.Record.expression
+        ~left:lbrace
+        ~right:rbrace
+        fields
+    | Some e ->
+      let update = pp ps e in
+      let fields =
+        List_like.pp_fields ~formatting:!Options.Record.expression
+          (List.hd fields) (List.tl fields)
+      in
+      let with_ = token_between update fields "with" in
+      enclose ~before:lbrace ~after:PPrint.(break 1 ^^ rbrace)
+        (group (group (break_before update) ^/^ with_) ^/^ fields)
 
   and pp_field ps re fld =
     let record = pp ps re in
     let field = Longident.pp fld in
-    flow (break 0) [
-      record; dot; field
-    ]
+    let dot = token_between record field "." in
+    flow (break 0) record [ dot; field ]
 
   and pp_setfield ps re fld val_ =
     let field = pp_field ps re fld in
     let value = pp (List.tl ps) val_ in
+    let larrow = token_between field value "<-" in
     prefix ~indent:2 ~spaces:1
       (group (field ^/^ larrow))
       value
 
-  and pp_array ps elts =
+  and pp_array ~loc ps elts =
     let elts = List.map (pp ps) elts in
     (* TODO: add an option *)
-    List_like.pp ~formatting:Wrap
-      ~left:(lbracket ^^ pipe) ~right:(pipe ^^ rbracket) elts
+    List_like.pp ~loc ~formatting:Wrap
+      ~left:PPrint.(lbracket ^^ pipe)
+      ~right:PPrint.(pipe ^^ rbracket) elts
 
   (* FIXME: change ast to present n-ary [if]s *)
-  and pp_if_then_else ps cond then_ else_opt =
-    let cond = pp [] cond in
-    let then_ = pp ps then_ in
+  and pp_if_then_else ~loc ps cond then_ else_opt =
+    let if_ =
+      let cond = pp [] cond in
+      let then_branch = pp ps then_ in
+      let then_ = token_between cond then_branch "then" in
+      group (
+        (* FIXME! ++ is not ok *)
+        !^"if" ++
+        nest 2 (break_before cond) ^/^
+        then_
+      ) ^^ 
+      nest 2 (break_before then_branch)
+    in
     let else_ =
-      optional (fun e ->
-        break 1 ^^ !^"else" ^^
-        nest 2 (break 1 ^^ pp ps e)
+      let loc = { loc with Location.loc_start = if_.loc.loc_end } in
+      optional ~loc (fun e ->
+        let else_branch = pp ps e in
+        let else_ = token_between if_ else_branch "else" in
+        break_before else_ ^^
+        nest 2 (break_before else_branch)
       ) else_opt
     in
-    group (
-      group (
-        string "if" ^^
-        nest 2 (break 1 ^^ cond) ^/^
-        string "then"
-      ) ^^ 
-      nest 2 (break 1 ^^ then_) ^^
-      else_
-    )
+    group (if_ ^^ else_)
 
   and pp_sequence ps e1 e2 =
     let e1 = pp ps e1 in
@@ -905,150 +978,205 @@ end = struct
       let ps = if Printing_stack.will_parenthesize ps then [] else List.tl ps in
       pp ps e2
     in
+    let semi = token_between e1 e2 ";" in
     let doc = e1 ^^ semi ^/^ e2 in
     Printing_stack.parenthesize ps doc
 
-  and pp_while cond body =
+  and pp_while ~(loc:Location.t) cond body =
     let cond = pp [] cond in
     let body = pp [] body in
+    let do_ = token_between cond body "do" in
+    let loc_start = { loc with loc_end = cond.loc.loc_start } in
+    let loc_end = { loc with loc_start = body.loc.loc_end } in
     group (
       group (
-        string "while" ^^
-        nest 2 (break 1 ^^ cond) ^/^
-        string "do"
+        string ~loc:loc_start "while" ^^
+        nest 2 (break_before cond) ^/^
+        do_
       ) ^^
-      nest 2 (break 1 ^^ body) ^/^
-      string "done"
+      nest 2 (break_before body) ^/^
+      string ~loc:loc_end "done"
     ) 
 
-  and pp_for it start stop dir body =
+  and pp_for ~(loc:Location.t) it start stop dir body =
     let it = Pattern.pp [ Printing_stack.Value_binding ] it in
     let start = pp [] start in
+    let equals = token_between it start "=" in
     let stop = pp [] stop in
     let dir =
-      match dir with
-      | Upto -> !^"to"
-      | Downto -> !^"downto"
+      token_between start stop
+        (match dir with
+         | Upto -> "to"
+         | Downto -> "downto")
     in
     let body = pp [] body in
+    let do_ = token_between stop body "do" in
+    let loc_start = { loc with loc_end = it.loc.loc_start } in
+    let loc_end = { loc with loc_start = body.loc.loc_end } in
     group (
       group (
-        string "for" ^^
+        string ~loc:loc_start "for" ^^
         nest 2 (
-          break 1 ^^
-          group (it ^/^ equals ^/^ start) ^/^
+          break_before (group (it ^/^ equals ^/^ start)) ^/^
           dir ^/^
           stop
         ) ^/^
-        string "do"
+        do_
       ) ^^
-      nest 2 (break 1 ^^ body) ^/^
-      string "done"
+      nest 2 (break_before body) ^/^
+      string ~loc:loc_end "done"
     )
 
   and pp_constraint exp ct =
     let exp = pp [] exp in
     let ct = Core_type.pp [] ct in
+    let colon = token_between exp ct ":" in
     group (parens (exp ^/^ colon ^/^ ct))
 
   and pp_coerce exp ct_start ct =
     let exp = pp [] exp in
-    let ct_start =
-      optional (fun ct -> break 1 ^^ colon ^/^ Core_type.pp [] ct) ct_start
-    in
     let ct = Core_type.pp [] ct in
-    group (parens (group (exp ^^ ct_start) ^/^ !^":>" ^/^  ct))
+    let ct_start =
+      let loc = { exp.loc with loc_start = exp.loc.loc_end } in
+      optional ~loc (fun ct ->
+        let ct = Core_type.pp [] ct in
+        let colon = token_between exp ct ":" in
+        break_before colon ^/^ ct
+      ) ct_start
+    in
+    let coerce = token_between ct_start ct ":>" in
+    group (parens (group (exp ^^ ct_start) ^/^ coerce ^/^  ct))
 
   and pp_send ps exp met =
     let exp =
       let ps = Printing_stack.top_is_op ~on_left:true "#" ps in
       pp ps exp
     in
-    let met = string met.txt in
-    let doc = flow (break 0) [ exp; sharp; met ] in
+    let met = str met in
+    let sharp = token_between exp met "#" in
+    let doc = flow (break 0) exp [ sharp; met ] in
     Printing_stack.parenthesize ps doc
 
   and pp_new lid =
     Longident.pp lid
 
   and pp_setinstvar ps lbl exp =
-    let lbl = string lbl.txt in
+    let lbl = str lbl in
     let exp = pp (List.tl ps) exp in
-    (* FIXME: parens? *)
-    lbl ^/^ larrow ^/^ exp
+    let larrow = token_between lbl exp "<-" in
+    let doc = lbl ^/^ larrow ^/^ exp in
+    Printing_stack.parenthesize ps doc
 
   and obj_field_override (lbl, exp) =
-    let fld = string lbl.txt in
+    let fld = str lbl in
     let exp = pp [ Printing_stack.Record_field ] exp in
+    let equals = token_between fld exp "=" in
     fld ^/^ equals ^/^ exp
 
-  and pp_override fields =
-    let fields = separate_map (semi ^^ break 1) obj_field_override fields in
-    (* FIXME: breaking, indent, blablabla *)
-    braces (angles fields)
+  and pp_override ~loc fields =
+    List_like.pp ~loc
+      ~formatting:!Options.Record.expression
+      ~left:PPrint.(lbrace ^^ langle)
+      ~right:PPrint.(rangle ^^ rbrace)
+      (List.map obj_field_override fields)
 
-  and pp_letmodule ps name (params, typ, mexp) expr =
+  and pp_letmodule ~loc ps name (params, typ, mexp) expr =
     let binding = Module_binding.pp_raw name params typ mexp [] in
-    let bind = Binding.Module.pp ~keyword:(group (let_ ^/^ module_)) binding in
+    let bind =
+      let keyword = 
+        let loc = { loc with loc_end = name.loc.loc_start } in
+        string ~loc "let module"
+      in
+      Binding.Module.pp ~keyword binding
+    in
     let expr =
       let ps = if Printing_stack.will_parenthesize ps then [] else List.tl ps in
       pp ps expr
     in
+    let in_ = token_between bind expr "in" in
     let doc = bind ^/^ in_ ^/^ expr in
     Printing_stack.parenthesize ps doc
 
-  and pp_letexception ps exn exp =
+  and pp_letexception ~(loc:Location.t) ps exn exp =
     let exn = Constructor_decl.pp_extension exn in
     let exp =
       let ps = if Printing_stack.will_parenthesize ps then [] else List.tl ps in
       pp ps exp
     in
+    let keyword = 
+      let loc = { loc with loc_end = exn.loc.loc_start } in
+      string ~loc "let exception"
+    in
+    let in_ = token_between exn exp "in" in
     let doc =
-      group (prefix ~indent:2 ~spaces:1 !^"let exception"
-               (group (exn ^/^ !^"in")))
+      group (prefix ~indent:2 ~spaces:1 keyword
+               (group (exn ^/^ in_)))
       ^^ exp
     in
     Printing_stack.parenthesize ps doc
 
-  and pp_assert ps exp =
+  and pp_assert ~(loc:Location.t) ps exp =
     let exp = pp ps exp in
-    prefix ~indent:2 ~spaces:1 !^"assert" exp
+    let assert_ = 
+      let loc = { loc with loc_end = exp.loc.loc_start } in
+      string ~loc "assert"
+    in
+    let doc = prefix ~indent:2 ~spaces:1 assert_ exp in
+    Printing_stack.parenthesize ps doc
 
-  and pp_lazy ps exp =
+  and pp_lazy ~(loc:Location.t) ps exp =
     let exp = pp ps exp in
-    let doc = lazy_ ^/^ exp in
+    let lazy_ = 
+      let loc = { loc with loc_end = exp.loc.loc_start } in
+      string ~loc "lazy"
+    in
+    let doc = prefix ~indent:2 ~spaces:1 lazy_ exp in
     Printing_stack.parenthesize ps doc
 
   and pp_object cl =
     let cl = Class_structure.pp cl in
     group (
-      string "object" ^^
-      nest 2 (break 1 ^^ cl) ^/^
-      string "end"
+      enclose ~before:!^"object" ~after:PPrint.(break 1 ^^ !^"end")
+        (nest 2 (break_before cl))
     )
 
 
   and pp_pack me pkg =
     let me = Module_expr.pp me in
-    let constraint_ =
+    let with_constraint =
       match pkg with
-      | None -> empty
-      | Some pkg -> break 1 ^^ colon ^/^ Package_type.pp pkg
+      | None -> me
+      | Some pkg ->
+        let constr = Package_type.pp pkg in
+        let colon = token_between me constr ":" in
+        me ^/^ colon ^/^ constr
     in
-    parens (module_ ^/^ me ^^ constraint_)
+    enclose ~before:PPrint.(!^"(module") ~after:PPrint.(!^")")
+      with_constraint
 
   and pp_open lid exp =
     let lid = Longident.pp lid in
     let exp = pp [] exp in
-    lid ^^ dot ^^ parens (break 0 ^^ exp ^^ break 0)
+    let dot = token_between lid exp "." in
+    let exp =
+      enclose exp
+        ~before:PPrint.(lparen ^^ break 0)
+        ~after:PPrint.(break 0 ^^ rparen)
+    in
+    lid ^^ dot ^^ exp
 
-  and pp_letopen ps od exp =
+  and pp_letopen ~(loc:Location.t) ps od exp =
     let od = Open_declaration.pp Attached_to_item od in
     let exp =
       let ps = if Printing_stack.will_parenthesize ps then [] else List.tl ps in
       pp ps exp
     in
-    let doc = !^"let " ^^ od ^^ !^" in" ^/^ exp in
+    let in_ = token_between od exp "in" in
+    let let_ = 
+      let loc = { loc with loc_end = od.loc.loc_start } in
+      string ~loc "let"
+    in
+    let doc = group (let_ ^^ od ^^ in_) ^/^ exp in
     Printing_stack.parenthesize ps doc
 
   and pp_letop _ =

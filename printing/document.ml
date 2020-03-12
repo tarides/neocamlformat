@@ -35,7 +35,9 @@ let token_between x1 x2 tok =
 (* FIXME: do I really want to keep this?
    Currently it's being used for:
    - class paths in core types: #A.t, which can contain
-   comments: #(*foo*)A.t
+   comments: [#(*foo*)A.t]
+   - ppat_types: #foo, which can contain comments [# (*foo*) foo]
+   - the [if] token...
 *)
 let (++) doc t =
   { txt = doc ^^ t.txt
@@ -123,8 +125,15 @@ let nest n t = { t with txt = nest n t.txt }
 
 let hang n t = { t with txt = hang n t.txt }
 
+let optional ~loc f = function
+  | None -> empty ~loc
+  | Some d -> f d
+
 let prefix ~indent ~spaces x y =
   group (x ^^ nest indent (break_before ~spaces y))
+
+let infix ~indent ~spaces op x y =
+  prefix ~indent ~spaces (concat x ~sep:PPrint.(blank spaces) op) y
 
 let left_assoc_map ~sep ~f first rest =
   List.fold_left (fun t elt ->
@@ -133,28 +142,39 @@ let left_assoc_map ~sep ~f first rest =
     t ^/^ group (sep ^^ elt)
   ) (f first) rest
 
+let flow_map sep f first rest =
+  List.fold_left (fun t elt ->
+    let elt = f elt in
+    let sep = { txt = sep; loc = loc_between t elt } in
+    t ^^ group (sep ^^ elt)
+  ) (f first) rest
+
+let flow sep first rest =
+  flow_map sep (fun x -> x) first rest
+
 module List_like = struct
-  let docked ~left ~right x xs =
+  let docked_fields x xs =
     let fmt x = nest 2 (group (break_before x)) in
-    let fields =
-      List.fold_left
-        (fun acc elt ->
-           let elt = fmt elt in
-           let semi = token_between acc elt ";" in
-           group (acc ^^ semi) ^^ fmt elt)
-        (fmt x) 
-        xs
-    in
-    let txt =
-      let open PPrint in
-      left ^^ fields.txt ^^ group (break 1 ^^ right)
-    in
-    { txt; loc = fields.loc }
+    List.fold_left
+      (fun acc elt ->
+          let elt = fmt elt in
+          let semi = token_between acc elt ";" in
+          group (acc ^^ semi) ^^ fmt elt)
+      (fmt x) 
+      xs
+
+  let docked ~left ~right x xs =
+    let fields = docked_fields x xs in
+    enclose ~before:left ~after:PPrint.(group (break 1 ^^ right))
+      fields
+
+  let fit_or_vertical_fields x xs =
+    let fields = separate PPrint.(semi ^^ break 1) x xs in
+    nest 2 (break_before fields)
 
   let fit_or_vertical ~left ~right x xs  =
-    let fields = separate PPrint.(semi ^^ break 1) x xs in
-    let txt = PPrint.(left ^^ nest 2 ( break 1 ^^ fields.txt) ^/^ right) in
-    { txt; loc = fields.loc }
+    let fields = fit_or_vertical_fields x xs in
+    enclose ~before:left ~after:PPrint.(break 1 ^^ right) fields
 
   let pp ~loc ~formatting ~left ~right = function
     | [] -> { txt = PPrint.(left ^^ right); loc }
@@ -162,4 +182,9 @@ module List_like = struct
       match (formatting : Options.Wrappable.t) with
       | Wrap -> docked ~left ~right x xs
       | Fit_or_vertical -> fit_or_vertical ~left ~right x xs
+
+  let pp_fields ~formatting x xs =
+    match (formatting : Options.Wrappable.t) with
+    | Wrap -> docked_fields x xs
+    | Fit_or_vertical -> fit_or_vertical_fields x xs
 end
