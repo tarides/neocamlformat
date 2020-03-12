@@ -4,11 +4,17 @@ let fmt_file fn =
   let ic = open_in fn in
   let b = Lexing.from_channel ic in
     if Filename.check_suffix fn "mli" then
-      let sg = Parse_source.interface b in
-      Print_source.Signature.pp sg
+      match Parse_source.interface b with
+      | [] -> PPrint.empty
+      | si :: sg ->
+        let doc = Print_source.Signature.pp_nonempty si sg in
+        doc.txt
     else
-      let st = Parse_source.implementation b in
-      Print_source.Structure.pp st
+      match Parse_source.implementation b with
+      | [] -> PPrint.empty
+      | si :: st ->
+        let doc = Print_source.Structure.pp_nonempty si st in
+        doc.txt
 
 open Cmdliner
 

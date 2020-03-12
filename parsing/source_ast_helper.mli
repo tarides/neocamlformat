@@ -195,7 +195,7 @@ module Exp:
 module Val:
   sig
     val mk: ?loc:loc -> ?attrs:attrs -> ?docs:docs ->
-      ?prim:string list -> str -> core_type -> value_description
+      ?prim:string with_loc list -> str -> core_type -> value_description
   end
 
 (** Type declarations *)
@@ -204,7 +204,7 @@ module Type:
     val mk: ?loc:loc -> ?attrs:attrs -> ?docs:docs -> ?text:text ->
       ?params:(core_type * variance) list ->
       ?cstrs:(core_type * core_type * loc) list ->
-      ?kind:type_kind -> ?priv:private_flag -> ?manifest:core_type -> str ->
+      ?kind:type_kind -> ?priv:Location.t -> ?manifest:core_type -> str ->
       type_declaration
 
     val constructor: ?loc:loc -> ?attrs:attrs -> ?info:info ->
@@ -218,7 +218,7 @@ module Type:
 module Te:
   sig
     val mk: ?loc:loc -> ?attrs:attrs -> ?docs:docs ->
-      ?params:(core_type * variance) list -> ?priv:private_flag ->
+      ?params:(core_type * variance) list -> ?priv:Location.t ->
       lid -> extension_constructor list -> type_extension
 
     val mk_exception: ?loc:loc -> ?attrs:attrs -> ?docs:docs ->

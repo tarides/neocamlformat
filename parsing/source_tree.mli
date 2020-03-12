@@ -455,7 +455,7 @@ and value_description =
     {
      pval_name: string loc;
      pval_type: core_type;
-     pval_prim: string list;
+     pval_prim: string loc list;
      pval_attributes: attributes;  (* ... [@@id1] [@@id2] *)
      pval_loc: Location.t;
     }
@@ -475,7 +475,7 @@ and type_declaration =
      ptype_cstrs: (core_type * core_type * Location.t) list;
            (* ... constraint T1=T1'  ... constraint Tn=Tn' *)
      ptype_kind: type_kind;
-     ptype_private: private_flag;   (* = private ... *)
+     ptype_private: Location.t option;   (* = private ... *)
      ptype_manifest: core_type option;  (* = T *)
      ptype_attributes: attributes;   (* ... [@@id1] [@@id2] *)
      ptype_loc: Location.t;
@@ -496,7 +496,7 @@ and type_kind =
   | Ptype_variant of constructor_declaration list
   | Ptype_record of label_declaration list
         (* Invariant: non-empty list *)
-  | Ptype_open
+  | Ptype_open of Location.t
 
 and label_declaration =
     {
@@ -540,7 +540,7 @@ and type_extension =
      ptyext_path: Long_ident.t;
      ptyext_params: (core_type * variance) list;
      ptyext_constructors: extension_constructor list;
-     ptyext_private: private_flag;
+     ptyext_private: Location.t option;
      ptyext_loc: Location.t;
      ptyext_attributes: attributes;   (* ... [@@id1] [@@id2] *)
     }

@@ -418,7 +418,7 @@ let package_type_of_module_type pmty =
           err loc "parametrized types are not supported";
         if ptyp.ptype_cstrs <> [] then
           err loc "constrained types are not supported";
-        if ptyp.ptype_private <> Public then
+        if ptyp.ptype_private <> None then
           err loc "private types are not supported";
 
         (* restrictions below are checked by the 'with_constraint' rule *)
@@ -1703,10 +1703,12 @@ method_:
       { (label, private_, Cfk_virtual ty), attrs }
   | override_flag attributes private_flag mkrhs(label) strict_binding
       { let params, typ, e = $5 in
-        ($4, $3, Cfk_concrete ($1, params, typ, e)), $2 }
+        let priv = match $3 with None -> Public | Some _ -> Private in
+        ($4, priv, Cfk_concrete ($1, params, typ, e)), $2 }
   | override_flag attributes private_flag mkrhs(label)
     COLON poly_type EQUAL seq_expr
-      { ($4, $3, Cfk_concrete ($1, [], (Some $6, None), $8)), $2 }
+      { let priv = match $3 with None -> Public | Some _ -> Private in
+        ($4, priv, Cfk_concrete ($1, [], (Some $6, None), $8)), $2 }
   | override_flag attributes private_flag mkrhs(label) COLON TYPE lident_list
     DOT core_type EQUAL seq_expr
       { let newtypes = $7 in
@@ -1715,7 +1717,8 @@ method_:
           ghtyp ~loc:($startpos($7), $endpos($9))
             (Ptyp_poly(newtypes, (* don't varify constructors *) core_type))
         in
-        ($4, $3, Cfk_concrete ($1, [], (Some typ, None), $11)), $2 }
+        let priv = match $3 with None -> Public | Some _ -> Private in
+        ($4, priv, Cfk_concrete ($1, [], (Some typ, None), $11)), $2 }
 ;
 
 /* Class types */
@@ -2725,7 +2728,7 @@ generic_type_declaration(flag, kind):
       let attrs = attrs1 @ attrs2 in
       let loc = make_loc $sloc in
       (flag, ext),
-      Type.mk id ~params ~cstrs ~kind ~priv ?manifest ~attrs ~loc ~docs
+      Type.mk id ~params ~cstrs ~kind ?priv ?manifest ~attrs ~loc ~docs
     }
 ;
 %inline generic_and_type_declaration(kind):
@@ -2742,7 +2745,7 @@ generic_type_declaration(flag, kind):
       let attrs = attrs1 @ attrs2 in
       let loc = make_loc $sloc in
       let text = symbol_text $symbolstartpos in
-      Type.mk id ~params ~cstrs ~kind ~priv ?manifest ~attrs ~loc ~docs ~text
+      Type.mk id ~params ~cstrs ~kind ?priv ?manifest ~attrs ~loc ~docs ~text
     }
 ;
 %inline constraints:
@@ -2764,7 +2767,7 @@ nonempty_type_kind:
   | oty = type_synonym
     priv = inline_private_flag
     DOTDOT
-      { (Ptype_open, priv, oty) }
+      { (Ptype_open (make_loc $loc($3)), priv, oty) }
   | oty = type_synonym
     priv = inline_private_flag
     LBRACE ls = label_declarations RBRACE
@@ -2776,7 +2779,7 @@ nonempty_type_kind:
 ;
 type_kind:
     /*empty*/
-      { (Ptype_abstract, Public, None) }
+      { (Ptype_abstract, None, None) }
   | EQUAL nonempty_type_kind
       { $2 }
 ;
@@ -2941,7 +2944,7 @@ label_declaration_semi:
   attrs2 = post_item_attributes
     { let docs = symbol_docs $sloc in
       let attrs = attrs1 @ attrs2 in
-      Te.mk tid cs ~params ~priv ~attrs ~docs,
+      Te.mk tid cs ~params ?priv ~attrs ~docs,
       ext }
 ;
 %inline extension_constructor(opening):
@@ -2979,7 +2982,7 @@ with_constraint:
               ~params:$2
               ~cstrs:$6
               ~manifest:$5
-              ~priv:$4
+              ?priv:$4
               ~loc:(make_loc $sloc))) }
     /* used label_longident instead of type_longident to disallow
        functor applications in type path */
@@ -2998,8 +3001,8 @@ with_constraint:
       { Pwith_modsubst ($2, $4) }
 ;
 with_type_binder:
-    EQUAL          { Public }
-  | EQUAL PRIVATE  { Private }
+    EQUAL          { None }
+  | EQUAL PRIVATE  { Some (make_loc $loc($2)) }
 ;
 
 /* Polymorphic types */
@@ -3413,7 +3416,7 @@ toplevel_directive:
 
 %inline raw_string:
   s = STRING
-    { fst s }
+    { mkrhs (fst s) $sloc }
 ;
 
 name_tag:
@@ -3440,8 +3443,8 @@ private_flag:
     { $1 }
 ;
 %inline inline_private_flag:
-    /* empty */                                 { Public }
-  | PRIVATE                                     { Private }
+    /* empty */                                 { None }
+  | PRIVATE                                     { Some (make_loc $sloc) }
 ;
 mutable_flag:
     /* empty */                                 { Immutable }

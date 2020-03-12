@@ -220,10 +220,18 @@ end
 and Payload : sig
   val pp_after : tag:document -> payload -> document
 end = struct
-  let psig tag sg =
-    let sg = Signature.pp sg in
-    let colon = token_between tag sg ":" in
-    tag ^^ nest 2 (colon ^/^ sg)
+  let pstr tag = function
+    | [] -> tag
+    | si :: st ->
+      let st = Structure.pp_nonempty si st in
+      tag ^^ nest 2 (break_before st)
+
+  let psig tag = function
+    | [] -> tag
+    | si :: sg ->
+      let sg = Signature.pp_nonempty si sg in
+      let colon = token_between tag sg ":" in
+      tag ^^ nest 2 (colon ^/^ sg)
 
   let ptyp tag ct =
     let ct = Core_type.pp [] ct in
@@ -246,7 +254,7 @@ end = struct
     )
 
   let pp_after ~tag = function
-    | PStr st -> nest 2 (break_before @@ Structure.pp st)
+    | PStr st -> pstr tag st
     | PSig sg -> psig tag sg
     | PTyp ct -> ptyp tag ct
     | PPat (p, None) -> ppat tag p
@@ -1246,108 +1254,133 @@ end = struct
     { Binding.lhs = pat; params; constr; coerce; rhs }
 end
 
+and Functor_param : sig
+  val pp : functor_parameter loc -> document
+end = struct
+  let pp { loc; txt } =
+    match txt with
+    | Unit -> string ~loc "()"
+    | Named (name, mty) ->
+      let mty = Module_type.pp mty in
+      match name.txt with
+      | None -> mty
+      | Some s ->
+        let name = string ~loc:name.loc s in
+        let colon = token_between name mty ":" in
+        parens (group (name ^/^ colon) ^/^ mty)
+end
+
 and Module_expr : sig
   val pp : module_expr -> document
 end = struct
-  let rec pp { pmod_desc; pmod_attributes; _ } =
-    let doc = pp_desc pmod_desc in
+  let rec pp { pmod_desc; pmod_attributes; pmod_loc } =
+    let doc = pp_desc ~loc:pmod_loc pmod_desc in
     Attribute.attach_to_item doc pmod_attributes
 
-  and pp_desc = function
+  and pp_desc ~loc = function
     | Pmod_ident lid -> Longident.pp lid
-    | Pmod_structure str -> pp_structure str
-    | Pmod_functor (Unit, me) -> pp_generative_functor me
-    | Pmod_functor (Named (param, mty), me) ->
-      pp_applicative_functor param mty me
+    | Pmod_structure str -> pp_structure ~loc str
+    | Pmod_functor (params, me) -> pp_functor ~loc params me
     | Pmod_apply (me1, me2) -> pp_apply me1 me2
     | Pmod_constraint (me, mty) -> pp_constraint me mty
-    | Pmod_unpack e -> pp_unpack e
+    | Pmod_unpack e -> pp_unpack ~loc e
     | Pmod_extension ext -> Extension.pp Item ext
 
-  and pp_structure str =
-    let str = Structure.pp str in
-    group (
-      enclose ~before:!^"struct" ~after:PPrint.(break 1 ^^ !^"end")
-        (nest 2 (break_before str))
-    )
+  and pp_structure ~loc = function
+    | [] -> string ~loc "struct end"
+    | si :: st ->
+      let str = Structure.pp_nonempty si st in
+      group (
+        enclose ~before:!^"struct" ~after:PPrint.(break 1 ^^ !^"end")
+          (nest 2 (break_before str))
+      )
 
-  and pp_generative_functor me =
+  and pp_functor ~(loc:Location.t) params me =
+    let params =
+      separate_map (PPrint.break 1)
+        ~f:Functor_param.pp (List.hd params) (List.tl params)
+    in
     let me = pp me in
-    !^"functor" ^/^ !^"()" ^/^ arrow ^/^ me
-
-  and pp_applicative_functor param mty me =
-    let param = module_name param.txt in
-    let mty = Module_type.pp mty in
-    let me = pp me in
-    !^"functor" ^/^ parens (param ^/^ colon ^/^ mty) ^/^ arrow ^/^ me
+    let functor_ =
+      let loc = { loc with loc_end = params.loc.loc_start } in
+      string ~loc "functor"
+    in
+    let arrow = token_between params me "->" in
+    functor_ ^/^ params ^/^ arrow ^/^ me
 
   and pp_apply me1 me2 =
     let me1 = pp me1 in
     let me2 = pp me2 in
-    me1 ^^ break 0 ^^ parens me2
+    concat me1 ~sep:(PPrint.break 0) (parens me2)
 
   and pp_constraint me mty =
     let me = pp me in
     let mty = Module_type.pp mty in
+    let colon = token_between me mty ":" in
     parens (me ^/^ colon ^/^ mty)
 
-  and pp_unpack exp =
+  and pp_unpack ~(loc:Location.t) exp =
     let exp = Expression.pp [ Unpack ] exp in
-    parens (!^"val" ^^ exp)
+    let val_=
+      let loc = { loc with loc_end = exp.loc.loc_start } in
+      string ~loc "val"
+    in
+    parens (val_ ^/^ exp)
 end
 
 and Module_type : sig
   val pp : module_type -> document
 end = struct
-  let rec pp { pmty_desc; pmty_attributes; _ } =
-    Attribute.attach_to_item (pp_desc pmty_desc) pmty_attributes
+  let rec pp { pmty_desc; pmty_attributes; pmty_loc; _ } =
+    Attribute.attach_to_item (pp_desc ~loc:pmty_loc pmty_desc) pmty_attributes
 
-  and pp_desc = function
+  and pp_desc ~loc = function
     | Pmty_ident lid -> Longident.pp lid
-    | Pmty_signature sg -> pp_signature sg
-    | Pmty_functor (Unit, mty) -> pp_generative_functor mty
-    | Pmty_functor (Named (param, pmty), mty) ->
-      pp_applicative_functor param pmty mty
+    | Pmty_signature sg -> pp_signature ~loc sg
+    | Pmty_functor (params, mty) -> pp_functor ~loc params mty
     | Pmty_with (mty, cstrs) -> pp_with mty cstrs
     | Pmty_typeof me -> pp_typeof me
     | Pmty_extension ext -> Extension.pp Item ext
     | Pmty_alias _ -> assert false (* shouldn't be produced by the parser. *)
 
-  and pp_signature sg =
-    let sg = Signature.pp sg in
-    group (
-      string "sig" ^^
-      nest 2 (break 1 ^^ sg) ^/^
-      string "end"
-    )
+  and pp_signature ~loc = function
+    | [] -> string ~loc "sig end"
+    | si :: sg ->
+      let sg = Signature.pp_nonempty si sg in
+      group (
+        enclose ~before:!^"sig" ~after:PPrint.(break 1 ^^ !^"end")
+          (nest 2 (break_before sg))
+      )
 
-  and pp_generative_functor mty =
-    let me = pp mty in
-    !^"functor" ^/^ !^"()" ^/^ arrow ^/^ me
-
-  and pp_applicative_functor param pmty mty =
-    let param = module_name param.txt in
-    let pmty = pp pmty in
+  and pp_functor ~(loc:Location.t) params mty =
+    let params =
+      separate_map (PPrint.break 1)
+        ~f:Functor_param.pp (List.hd params) (List.tl params)
+    in
     let mty = pp mty in
-    !^"functor" ^/^ parens (param ^/^ colon ^/^ pmty) ^/^ arrow ^/^ mty
+    let functor_ =
+      let loc = { loc with loc_end = params.loc.loc_start } in
+      string ~loc "functor"
+    in
+    let arrow = token_between params mty "->" in
+    functor_ ^/^ params ^/^ arrow ^/^ mty
 
   (* TODO *)
   and pp_with mty _cstrs =
     let mty = pp mty in
-    mty ^/^ !^"with <CSTRS>" 
+    mty
 
   and pp_typeof exp =
     let me = Module_expr.pp exp in
-    flow (break 1) [
-      module_; !^"type"; of_; me
-    ]
+    let pre = PPrint.flow (break 1) [ module_; !^"type"; of_ ] in
+    pre ++ break_before me
 
 end
 
 and Module_binding : sig
   val pp_raw
     :  string option loc
-    -> functor_parameter list
+    -> functor_parameter loc list
     -> module_type option
     -> module_expr
     -> attributes
@@ -1355,14 +1388,16 @@ and Module_binding : sig
 
   val pp : module_binding -> Binding.Module.t
 end = struct
-  let param = function
-    | Unit -> !^"()"
+  let param { loc; txt } =
+    match txt with
+    | Unit -> string ~loc "()"
     | Named (name, mty) ->
+      let name = module_name ~loc:name.loc name.txt in
+      let mty = Module_type.pp mty in
+      let colon = token_between name mty ":" in
       group (
         parens (
-          prefix ~indent:2 ~spaces:1
-            (group (module_name name.txt ^/^ colon))
-            (Module_type.pp mty)
+          prefix ~indent:2 ~spaces:1 (group (name ^/^ colon)) mty
         )
       )
 
@@ -1370,21 +1405,31 @@ end = struct
     | None -> Binding.Module.None
     | Some ({ pmty_desc; pmty_attributes; _ } as mty) ->
       match pmty_desc, pmty_attributes with
-      | Pmty_signature sg, [] -> Binding.Module.Sig (Signature.pp sg)
+      | Pmty_signature (si :: sg), [] ->
+        Binding.Module.Sig (Signature.pp_nonempty si sg)
       | _ -> Binding.Module.Mty (Module_type.pp mty)
 
   let pp_me ({ pmod_desc; pmod_attributes; _ } as me) =
     match pmod_desc, pmod_attributes with
-    | Pmod_structure str, [] -> Binding.Module.Struct (Structure.pp str)
+    | Pmod_structure (si :: st), [] ->
+      Binding.Module.Struct (Structure.pp_nonempty si st)
     | _ -> Binding.Module.Expr (Module_expr.pp me)
 
   let pp_raw name params mty me attrs =
-    let name = module_name name.txt in
+    let name = module_name ~loc:name.loc name.txt in
     let params = List.map param params in
     let constr = pp_mty mty in
     let expr = pp_me me in
     let attributes =
-      separate_map (break 0) (Attribute.pp Attached_to_structure_item) attrs
+      match attrs with
+      | [] -> empty ~loc:{ me.pmod_loc with loc_start = me.pmod_loc.loc_end }
+      | attr :: attrs ->
+        separate_map (break 0) ~f:(Attribute.pp Attached_to_structure_item)
+          attr attrs
+    in
+    let params =
+      let loc = { name.loc with loc_start = name.loc.loc_end } in
+      { loc; txt = params }
     in
     { Binding.Module. name; params; constr; expr; attributes }
 
@@ -1397,9 +1442,12 @@ end
 and Module_type_declaration : sig
   val pp : module_type_declaration -> document
 end = struct
-  let pp { pmtd_name; pmtd_type; pmtd_attributes; _ } =
-    let kw = !^"module type" in
-    let name = string pmtd_name.txt in
+  let pp { pmtd_name; pmtd_type; pmtd_attributes; pmtd_loc } =
+    let kw =
+      let loc = { pmtd_loc with loc_end = pmtd_name.loc.loc_start } in
+      string ~loc "module type"
+    in
+    let name = str pmtd_name in
     let doc =
       match pmtd_type with
       | None -> kw ^/^ name
@@ -1411,42 +1459,61 @@ end = struct
 end
 
 and Structure : sig
-  val pp : structure -> document
+  val pp_nonempty : structure_item -> structure -> document
 end = struct
   let pp_eval exp attrs =
     let exp = Expression.pp [] exp in
     Attribute.attach_to_top_item exp attrs
 
   and rec_flag = function
-    | Recursive -> string " rec"
-    | Nonrecursive -> empty
+    | Recursive -> " rec"
+    | Nonrecursive -> ""
 
   let pp_value rf vbs =
     let vbs =
       List.mapi (fun i vb ->
         let binding = Value_binding.pp Attached_to_structure_item vb in
-        let keyword = if i = 0 then let_ ^^ rec_flag rf else and_ in
+        let keyword = if i = 0 then "let" ^ rec_flag rf else "and" in
+        let keyword =
+          (* FIXME: pvb_loc should be pvb_start_loc *)
+          let loc =
+            { vb.pvb_loc with loc_end = vb.pvb_pat.ppat_loc.loc_start }
+          in
+          string ~loc keyword
+        in
         Binding.pp ~keyword binding
       ) vbs
     in
-    separate (twice hardline) vbs
+    separate (twice hardline) (List.hd vbs) (List.tl vbs)
 
   let pp_module mb =
+    let module_ =
+      let loc = { mb.pmb_loc with loc_end = mb.pmb_name.loc.loc_start } in
+      string ~loc "module"
+    in
     Binding.Module.pp ~keyword:module_ (Module_binding.pp mb)
 
   let pp_recmodule mbs =
     let mbs =
       List.mapi (fun i mb ->
-        let keyword = if i = 0 then group (module_ ^/^ !^"rec") else and_ in
+        let keyword = if i = 0 then "module rec" else "and" in
+        let keyword =
+          let loc = { mb.pmb_loc with loc_end = mb.pmb_name.loc.loc_start } in
+          string ~loc keyword
+        in
         Binding.Module.pp ~keyword (Module_binding.pp mb)
       ) mbs
     in
-    separate (twice hardline) mbs
+    separate (twice hardline) (List.hd mbs) (List.tl mbs)
 
-  let pp_include { pincl_mod; pincl_attributes; _ } =
+  let pp_include { pincl_mod; pincl_attributes; pincl_loc } =
     let incl = Module_expr.pp pincl_mod in
+    let kw =
+      let loc = { pincl_loc with loc_end = incl.loc.loc_start } in
+      string ~loc "include"
+    in
     Attribute.attach_to_top_item 
-      (group (!^"include" ^/^ incl))
+      (group (kw ^/^ incl))
       pincl_attributes
 
   let pp_extension ext attrs =
@@ -1471,20 +1538,24 @@ end = struct
     | Pstr_attribute attr -> Attribute.pp Free_floating attr
     | Pstr_extension (ext, attrs) -> pp_extension ext attrs
 
-  let pp = separate_map (twice hardline) pp_item
+  let pp_nonempty i is = separate_map (twice hardline) ~f:pp_item i is
 end
 
 and Signature : sig
-  val pp : signature -> document
+  val pp_nonempty : signature_item -> signature -> document
 end = struct
   let pp_extension ext attrs =
     let ext = Extension.pp Structure_item ext in
     Attribute.attach_to_top_item ext attrs
 
-  let pp_include { pincl_mod; pincl_attributes; _ } =
+  let pp_include { pincl_mod; pincl_attributes; pincl_loc } =
     let incl = Module_type.pp pincl_mod in
+    let kw =
+      let loc = { pincl_loc with loc_end = incl.loc.loc_start } in
+      string ~loc "include"
+    in
     Attribute.attach_to_top_item 
-      (group (!^"include" ^/^ incl))
+      (group (kw ^/^ incl))
       pincl_attributes
 
   let pp_item { psig_desc; _ } =
@@ -1501,25 +1572,33 @@ end = struct
     | Psig_extension (ext, attrs) -> pp_extension ext attrs
     | _ -> assert false
 
-  let pp = separate_map (twice hardline) pp_item
+  let pp_nonempty = separate_map (twice hardline) ~f:pp_item
 end
 
 and Value_description : sig
   val pp : value_description -> document
 end = struct
   let pp vd =
-    let name = string vd.pval_name.txt in
+    let name = str vd.pval_name in
     let ctyp = Core_type.pp [] vd.pval_type in
-    let prim =
+    let with_prim =
       match vd.pval_prim with
-      | [] -> empty
-      | prims ->
-        let prims = separate_map (break 1) (fun p -> dquotes (string p)) prims in
-        break 1 ^^ group (equals ^/^ prims)
+      | [] -> ctyp
+      | p :: ps ->
+        let prims =
+          separate_map (break 1) ~f:(fun p -> dquotes (str p)) p ps
+        in
+        let equals = token_between ctyp prims "=" in
+        ctyp ^^ break_before (group (equals ^/^ prims))
     in
+    let kw =
+      let loc = { vd.pval_loc with loc_end = name.loc.loc_start } in
+      string ~loc "val"
+    in
+    let colon = token_between name with_prim ":" in
     let doc =
-      prefix ~indent:2 ~spaces:1 (group (!^"val" ^/^ name))
-        (colon ^^ ifflat space (twice space) ^^ ctyp ^^ prim)
+      prefix ~indent:2 ~spaces:1 (group (kw ^/^ name))
+        (concat colon with_prim ~sep:PPrint.(ifflat space (twice space)))
     in
     Attribute.attach_to_top_item doc vd.pval_attributes
 end
@@ -1527,42 +1606,55 @@ end
 and Type_extension : sig
   val pp : type_extension -> document
 end = struct
-  let constructors cstrs =
-    let cstrs =
-      separate_map (break 1 ^^ pipe ^^ space)
-        Constructor_decl.pp_extension cstrs
-    in
-    let prefix = ifflat empty (pipe ^^ space) in
-    prefix ^^ cstrs
+  let constructors = function
+    | [] -> assert false
+    | c :: cs ->
+      let cstrs =
+        separate_map PPrint.(break 1 ^^ pipe ^^ space)
+          ~f:Constructor_decl.pp_extension c cs
+      in
+      (* FIXME *)
+      let prefix =
+        let open PPrint in
+        ifflat empty (pipe ^^ space)
+      in
+      prefix ++ cstrs
 
   let pp { ptyext_path; ptyext_params; ptyext_constructors; ptyext_private;
-           ptyext_attributes; _ } =
+           ptyext_attributes; ptyext_loc } =
     let path = Longident.pp ptyext_path in
-    let params = Type_declaration.pp_params ptyext_params in
-    let lhs = group (params ^^ path) in
+    let lhs = Type_declaration.with_params ptyext_params path in
     let constructors = constructors ptyext_constructors in
     let rhs =
       match ptyext_private with
-      | Public -> constructors
-      | Private -> group (!^"private" ^/^ constructors)
+      | None -> constructors
+      | Some loc -> group (string ~loc "private" ^/^ constructors)
     in
     let rhs = Attribute.attach_to_top_item rhs ptyext_attributes in
-    Binding.pp_simple ~keyword:!^"type" ~binder:!^"+=" lhs rhs
+    let keyword =
+      let loc = { ptyext_loc with loc_end = lhs.loc.loc_start } in
+      string ~loc "type"
+    in
+    Binding.pp_simple ~keyword ~binder:"+=" lhs rhs
 end
 
 and Type_exception : sig
   val pp : type_exception -> document
 end = struct
-  let pp { ptyexn_constructor; ptyexn_attributes; _ } =
+  let pp { ptyexn_constructor; ptyexn_attributes; ptyexn_loc } =
     let cstr = Constructor_decl.pp_extension ptyexn_constructor in
-    let doc = group (prefix ~spaces:1 ~indent:2 !^"exception" cstr) in
+    let kw =
+      let loc = { ptyexn_loc with loc_end = cstr.loc.loc_start } in
+      string ~loc "exception"
+    in
+    let doc = group (prefix ~spaces:1 ~indent:2 kw cstr) in
     Attribute.attach_to_top_item doc ptyexn_attributes
 end
 
 and Type_declaration : sig
   val pp : type_declaration -> document * document
 
-  val pp_params : (core_type * variance) list -> document
+  val with_params : (core_type * variance) list -> document -> document
 
   val pp_decl : rec_flag -> type_declaration list -> document
 
@@ -1572,100 +1664,124 @@ end = struct
     let ct = Core_type.pp [] ct in
     match var with
     | Invariant -> ct
-    | Covariant -> plus ^^ ct
-    | Contravariant -> minus ^^ ct
+    | Covariant -> plus ++ ct
+    | Contravariant -> minus ++ ct
 
-  let pp_params lst =
+  let with_params lst name =
     match lst with
-    | [] -> empty
-    | [ x ] -> pp_param x ^^ break 1
-    | _ -> parens (separate_map (comma ^^ break 1) pp_param lst) ^^ break 1
+    | [] -> name
+    | [ x ] -> group (pp_param x ^/^ name)
+    | x :: xs ->
+      let params = separate_map PPrint.(comma ^^ break 1) ~f:pp_param x xs in
+      group (parens params ^/^ name)
 
   let label_declaration { pld_name; pld_mutable; pld_type; pld_attributes; _ } =
-    let mutable_ =
-      match pld_mutable with
-      | Mutable -> !^"mutable" ^^ break 1
-      | Immutable -> empty
-    in
-    let name = string pld_name.txt in
+    let name = str pld_name in
     let typ  = Core_type.pp [] pld_type in
-    let decl =
-      group (
-        nest 2 (
-          group (mutable_ ^^ group (name ^/^ colon)) ^/^ typ
-        )
-      )
+    let colon = token_between name typ ":" in
+    let lhs = group (name ^/^ colon) in
+    let with_mutable_ =
+      (* FIXME: add loc on Mutable *)
+      match pld_mutable with
+      | Mutable -> group (!^"mutable" ++ break_before lhs)
+      | Immutable -> lhs
     in
+    let decl = group (nest 2 (with_mutable_ ^/^ typ)) in
     Attribute.attach_to_item decl pld_attributes
 
   let record lbl_decls =
-    let lbls = separate_map (semi ^^ break 1) label_declaration lbl_decls in
-    lbrace ^^
-    nest 2 (break 1 ^^ lbls) ^/^
-    rbrace
+    (* FIXME: loc won't be use since the list is nonempty *)
+    let fields = List.map label_declaration lbl_decls in
+    List_like.pp ~loc:Location.none 
+      ~formatting:!Options.Record.expression
+      ~left:lbrace
+      ~right:rbrace
+      fields
 
   let () = Constructor_decl.pp_record := record
 
   let variant cstrs =
     let cstrs =
-      separate_map (break 1 ^^ pipe ^^ space)
-        (fun c -> nest 2 (Constructor_decl.pp_decl c)) cstrs
+      separate_map PPrint.(break 1 ^^ pipe ^^ space)
+        ~f:(fun c -> nest 2 (Constructor_decl.pp_decl c))
+        (List.hd cstrs) (List.tl cstrs)
     in
-    let prefix = ifflat empty (pipe ^^ space) in
-    prefix ^^ cstrs
+    let prefix =
+      let open PPrint in
+      ifflat empty (pipe ^^ space)
+    in
+    (* FIXME: ++ :| *)
+    prefix ++ cstrs
 
-  let type_kind = function
-    | Ptype_abstract -> empty
-    | Ptype_open -> dotdot
+  let non_abstract_kind = function
+    | Ptype_abstract -> assert false
+    | Ptype_open loc -> string ~loc ".."
     | Ptype_record lbl_decls -> record lbl_decls
     | Ptype_variant cstrs -> variant cstrs 
 
   (* TODO: constraints *)
   let pp { ptype_name; ptype_params; ptype_cstrs = _; ptype_kind; ptype_private;
            ptype_manifest; ptype_attributes; _ } =
-    let name = string ptype_name.txt in
-    let params = pp_params ptype_params in
-    let kind = type_kind ptype_kind in
-    let manifest = optional (Core_type.pp []) ptype_manifest in
-    let private_ =
-      match ptype_private with
-      | Private -> !^"private" ^^ break 1
-      | Public -> empty
-    in
-    let lhs = group (params ^^ name) in
+    let name = str ptype_name in
+    let lhs = with_params ptype_params name in
+    let manifest_opt = Option.map (Core_type.pp []) ptype_manifest in
     let rhs =
-      match ptype_manifest, ptype_kind with
-      | Some _, Ptype_abstract -> private_ ^^ manifest
-      | Some _, _ -> manifest ^/^ equals ^/^ private_ ^^ kind
-      | None, _ -> private_ ^^ kind
+      (* I didn't know how to express this nightmare more cleanly. *)
+      match manifest_opt, ptype_private, ptype_kind with
+      | Some manifest, None, Ptype_abstract ->
+          manifest
+      | Some manifest, Some loc, Ptype_abstract ->
+          group (string ~loc "private" ^/^ manifest)
+      | Some manifest, None, kind ->
+          let kind = non_abstract_kind kind in
+          let equals = token_between manifest kind "=" in
+          manifest ^/^ equals ^/^ kind
+      | Some manifest, Some loc, kind ->
+          let private_ = string ~loc "private" in
+          let equals = token_between manifest private_ "=" in
+          manifest ^/^ equals ^/^ private_ ^/^ non_abstract_kind kind
+      | None, Some loc, kind ->
+          assert (kind <> Ptype_abstract);
+          let private_ = string ~loc "private" in
+          private_ ^/^ non_abstract_kind kind
+      | None, None, kind ->
+          assert (kind <> Ptype_abstract);
+          non_abstract_kind kind
     in
     let rhs = Attribute.attach_to_top_item rhs ptype_attributes in
     lhs, rhs
 
   let rec_flag = function
-    | Recursive -> empty
-    | Nonrecursive -> !^" nonrec "
+    | Recursive -> ""
+    | Nonrecursive -> " nonrec"
 
   let pp_decl rf decls =
     let decls =
       List.mapi (fun i decl ->
         let lhs, rhs = pp decl in
-        let keyword = if i = 0 then !^"type" ^^ rec_flag rf else and_ in
+        let keyword = if i = 0 then "type" ^ rec_flag rf else "and" in
+        let keyword =
+          let loc = { decl.ptype_loc with loc_end = lhs.loc.loc_start } in
+          string ~loc keyword
+        in
         Binding.pp_simple ~keyword lhs rhs
       ) decls
     in
-    separate (twice hardline) decls
+    separate (twice hardline) (List.hd decls) (List.tl decls)
 
   let pp_subst decls =
-    let binder = !^":=" in
     let decls =
       List.mapi (fun i decl ->
         let lhs, rhs = pp decl in
-        let keyword = if i = 0 then !^"type" else and_ in
-        Binding.pp_simple ~binder ~keyword lhs rhs
+        let keyword = if i = 0 then "type" else "and" in
+        let keyword =
+          let loc = { decl.ptype_loc with loc_end = lhs.loc.loc_start } in
+          string ~loc keyword
+        in
+        Binding.pp_simple ~binder:":=" ~keyword lhs rhs
       ) decls
     in
-    separate hardline decls
+    separate hardline (List.hd decls) (List.tl decls)
 end
 
 and Class_structure : sig
@@ -1677,27 +1793,31 @@ end
 and Open_description : sig
   val pp : open_description -> document
 end = struct
-  let pp { popen_expr; popen_override; popen_attributes; _ } =
+  let pp { popen_expr; popen_override; popen_attributes; popen_loc } =
     let expr = Longident.pp popen_expr in
-    let over =
-      match popen_override with
-      | Override -> bang
-      | _ -> empty
+    let kw =
+      let loc = { popen_loc with loc_end = expr.loc.loc_start } in
+      string ~loc
+        (match popen_override with
+         | Override -> "open!"
+         | _ -> "open")
     in
-    let opn = group (!^"open" ^^ over ^/^ expr) in
+    let opn = group (kw ^/^ expr) in
     Attribute.attach_to_top_item opn popen_attributes
 end
 
 and Open_declaration : sig
   val pp : Attribute.kind -> open_declaration -> document
 end = struct
-  let pp kind { popen_expr; popen_override; popen_attributes; _ } =
+  let pp kind { popen_expr; popen_override; popen_attributes; popen_loc } =
     let expr = Module_expr.pp popen_expr in
-    let over =
-      match popen_override with
-      | Override -> bang
-      | _ -> empty
+    let kw =
+      let loc = { popen_loc with loc_end = expr.loc.loc_start } in
+      string ~loc
+        (match popen_override with
+         | Override -> "open!"
+         | _ -> "open")
     in
-    let opn = group (!^"open" ^^ over ^/^ expr) in
+    let opn = group (kw ^/^ expr) in
     Attribute.attach kind opn popen_attributes
 end
