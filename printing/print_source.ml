@@ -709,8 +709,8 @@ end = struct
     | Pexp_tuple exps -> pp_tuple ps exps
     | Pexp_list_lit exps -> pp_list_literal ~loc ps exps
     | Pexp_cons (hd, tl) -> pp_cons ps hd tl
-    | Pexp_construct (lid, arg) -> pp_construct ~loc ps lid arg
-    | Pexp_variant (tag, arg) -> pp_variant ~loc ps tag arg
+    | Pexp_construct (lid, arg) -> pp_construct ps lid arg
+    | Pexp_variant (tag, arg) -> pp_variant ps tag arg
     | Pexp_record (fields, exp) -> pp_record ~loc ps fields exp
     | Pexp_field (exp, fld) -> pp_field ps exp fld
     | Pexp_setfield (exp, fld, val_) -> pp_setfield ps exp fld val_
@@ -876,11 +876,14 @@ end = struct
       in
       Printing_stack.parenthesize ps doc
 
-  and pp_construct ~loc ps lid arg_opt =
+  and pp_construct ps lid arg_opt =
     let name = Longident.pp lid in
-    let arg  = optional ~loc (pp ps) arg_opt in
-    let doc  = prefix ~indent:2 ~spaces:1 name arg in
-    Printing_stack.parenthesize ps doc
+    match arg_opt with
+    | None -> name
+    | Some arg ->
+      let arg  = pp ps arg in
+      let doc  = prefix ~indent:2 ~spaces:1 name arg in
+      Printing_stack.parenthesize ps doc
 
   and pp_cons ps hd tl =
     let ps = Printing_stack.top_is_op ~on_left:true "::" ps in
@@ -898,11 +901,14 @@ end = struct
       ~left:lbracket ~right:rbracket
       elts
 
-  and pp_variant ~loc ps tag arg_opt =
+  and pp_variant ps tag arg_opt =
     let tag = Polymorphic_variant_tag.pp tag in
-    let arg  = optional ~loc (pp ps) arg_opt in
-    let doc  = prefix ~indent:2 ~spaces:1 tag arg in
-    Printing_stack.parenthesize ps doc
+    match arg_opt with
+    | None -> tag
+    | Some arg ->
+      let arg  = pp ps arg in
+      let doc  = prefix ~indent:2 ~spaces:1 tag arg in
+      Printing_stack.parenthesize ps doc
 
   and record_field (lid, exp) =
     let fld = Longident.pp lid in
@@ -1184,7 +1190,7 @@ end = struct
       let loc = { loc with loc_end = od.loc.loc_start } in
       string ~loc "let"
     in
-    let doc = group (let_ ^^ od ^^ in_) ^/^ exp in
+    let doc = group (let_ ^/^ od ^/^ in_) ^/^ exp in
     Printing_stack.parenthesize ps doc
 
   and pp_letop _ =
