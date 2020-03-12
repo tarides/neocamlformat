@@ -275,7 +275,7 @@ end = struct
     | Ptyp_alias (ct, alias) -> pp_alias ps ct alias
     | Ptyp_variant (fields, closed, present) -> pp_variant fields closed present
     | Ptyp_poly (vars, ct) -> pp_poly vars ct
-    | Ptyp_package pkg -> pp_package pkg
+    | Ptyp_package pkg -> pp_package ~loc pkg
     | Ptyp_extension ext -> Extension.pp Item ext
 
   and pp_param ps (arg_label, ct) =
@@ -355,8 +355,10 @@ end = struct
       | Closed, None ->
         (* FIXME: this will do the breaking randomly. Take inspiration from what
            was done in odoc. *)
-        let sep = break 1 ^^ group (pipe ^^ break 1) in
-        hang 0 (separate_map sep Row_field.pp fields)
+        let sep = PPrint.(break 1 ^^ group (pipe ^^ break 1)) in
+        hang 0 (
+          separate_map sep ~f:Row_field.pp (List.hd fields) (List.tl fields)
+        )
       | _, _ ->
         (* FIXME *)
         assert false
@@ -372,13 +374,15 @@ end = struct
     let ct = pp [] ct in
     match vars with
     | [] -> ct
-    | vars ->
+    | v :: vs ->
+      let vars= separate_map space ~f:(fun v -> pp_var ~loc:v.loc v.txt) v vs in
+      let dot = token_between vars ct "." in
       prefix ~indent:2 ~spaces:1
-        (* FIXME: do I need to group here? *)
-        ((separate_map space (fun { Location.txt; _ } -> pp_var txt) vars) ^^ dot)
+        (group (vars ^^ dot))
         ct
 
-  and pp_package pkg =
+  and pp_package ~loc pkg =
+    let module_ = string ~loc "module" in
     parens (module_ ^/^ Package_type.pp pkg)
 
   let () = Constructor_decl.pp_core_type := pp
@@ -387,8 +391,14 @@ end
 and Object_field : sig
   val pp : object_field -> document
 end = struct
+  let pp_otag name ct =
+    let name = str name in
+    let ct = Core_type.pp [] ct in
+    let colon = token_between name ct ":" in
+    group (name ^^ colon) ^/^ ct
+
   let pp_desc = function
-    | Otag (name, ct) -> string name.txt ^^ colon ^/^ Core_type.pp [] ct
+    | Otag (name, ct) -> pp_otag name ct
     | Oinherit ct -> Core_type.pp [] ct
 
   let pp { pof_desc; pof_attributes; _ } =
@@ -399,29 +409,49 @@ end
 and Package_type : sig
   val pp : package_type -> document
 end = struct
+  let pp_constr (lid, ct) =
+    (* FIXME: use [Binding.simple] *)
+    concat (Longident.pp lid) (Core_type.pp [] ct)
+      ~sep:PPrint.(break 1 ^^ !^"=" ^^ break 1)
+
   let pp (lid, constrs) =
     let lid = Longident.pp lid in
     match constrs with
     | [] -> lid
-    | _ -> group (lid ^/^ !^"with" ^/^ !^"TODO")
+    | x :: xs ->
+      let constrs =
+        separate_map
+          PPrint.(break 1 ^^ !^"and" ^^ break 1 ^^ !^"type" ^^ break 1)
+          ~f:pp_constr x xs
+      in
+      let sep = PPrint.(break 1 ^^ !^"with" ^/^ !^"type") in
+      group (concat lid constrs ~sep)
 end
 
 and Row_field : sig
   val pp : row_field -> document
 end = struct
+  let pp_params p ps =
+    let sep = PPrint.(break 1 ^^ ampersand ^^ break 1) in
+    separate_map sep ~f:(Core_type.pp [ Row_field ]) p ps
+
   let pp_desc = function
     | Rinherit ct -> Core_type.pp [] ct
-    | Rtag (tag, true, []) -> Polymorphic_variant_tag.pp tag
-    | Rtag (tag, has_empty_constr, params) ->
-      let sep = break 1 ^^ ampersand ^^ break 1 in
-      let params = separate_map sep (Core_type.pp [ Row_field ]) params in
-      let params =
+    | Rtag (tag, has_empty_constr, []) ->
+      assert (not has_empty_constr);
+      Polymorphic_variant_tag.pp tag
+    | Rtag (tag, has_empty_constr, p :: ps) ->
+      let tag = Polymorphic_variant_tag.pp tag in
+      let params = pp_params p ps in
+      let of_params =
+        let of_ = token_between tag params "of" in
         if has_empty_constr then
-          sep ^^ params
+          let sep = PPrint.(break 1 ^^ ampersand ^^ break 1) in
+          concat of_ ~sep params
         else
-          break 1 ^^ params
+          of_ ^/^ params
       in
-      Polymorphic_variant_tag.pp tag.txt ^/^ of_ ^^ params
+      tag ^/^ of_params
 
   let pp { prf_desc; prf_attributes; _ } =
     let desc = pp_desc prf_desc in
@@ -437,17 +467,24 @@ end = struct
     Attribute.attach_to_item desc ppat_attributes
 
   and pp_alias ps pat alias =
-    nest 2 (pp ps pat ^/^ as_ ^/^ string alias.txt)
+    let pat = pp ps pat in
+    let alias = str alias in
+    let as_ = token_between pat alias "as" in
+    nest 2 (pat ^/^ as_ ^/^ alias)
 
   and pp_interval c1 c2 =
-    Constant.pp c1 ^/^ dotdot ^/^ Constant.pp c2
+    let c1 = Constant.pp ~loc:c1.loc c1.txt in
+    let c2 = Constant.pp ~loc:c2.loc c2.txt in
+    let dotdot = token_between c1 c2 ".." in
+    c1 ^/^ dotdot ^/^ c2
 
   (* FIXME? nest on the outside, not in each of them. *)
 
   and pp_tuple ps lst =
     let doc =
       nest 2 (
-        separate_map (comma ^^ break 1) (pp ps) lst
+        separate_map PPrint.(comma ^^ break 1) ~f:(pp ps)
+          (List.hd lst) (List.tl lst)
       )
     in
     Printing_stack.parenthesize ps doc

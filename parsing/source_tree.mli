@@ -212,7 +212,7 @@ and pattern_desc =
         (* P as 'a *)
   | Ppat_constant of constant
         (* 1, 'a', "true", 1.0, 1l, 1L, 1n *)
-  | Ppat_interval of constant * constant
+  | Ppat_interval of constant loc * constant loc
         (* 'a'..'z'
 
            Other forms of interval are recognized by the parser
@@ -306,7 +306,7 @@ and expression_desc =
          *)
   | Pexp_apply of expression * (arg_label * expression) list
         (* E0 ~l1:E1 ... ~ln:En
-           li can be empty (non labeled argument) or start with '?'
+           li can be empty (non labeled argument) or start Constant.pp with '?'
            (optional argument).
 
            Invariant: n > 0

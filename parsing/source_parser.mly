@@ -2549,7 +2549,7 @@ simple_pattern_not_ident:
       { Ppat_any }
   | signed_constant
       { Ppat_constant $1 }
-  | signed_constant DOTDOT signed_constant
+  | mkrhs(signed_constant) DOTDOT mkrhs(signed_constant)
       { Ppat_interval ($1, $3) }
   | constr_longident
       { Ppat_construct($1, None) }
