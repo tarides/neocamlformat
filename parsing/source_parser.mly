@@ -913,7 +913,7 @@ reversed_bar_llist(X):
 listx(delimiter, X, Y):
 | x = X ioption(delimiter)
     { [x], None }
-| x = X delimiter y = Y delimiter?
+| x = X delimiter y = mkrhs(Y) delimiter?
     { [x], Some y }
 | x = X
   delimiter
@@ -2617,7 +2617,11 @@ pattern_comma_list(self):
 %inline record_pat_content:
   listx(SEMI, record_pat_field, UNDERSCORE)
     { let fields, closed = $1 in
-      let closed = match closed with Some () -> Open | None -> Closed in
+      let closed =
+        match closed with
+        | None -> OClosed
+        | Some { txt = (); loc } -> OOpen loc
+      in
       fields, closed }
 ;
 %inline record_pat_field:
@@ -3198,11 +3202,11 @@ row_field:
       { Rf.inherit_ ~loc:(make_loc $sloc) $1 }
 ;
 tag_field:
-    mkrhs(name_tag) OF opt_ampersand amper_type_list attributes
+    name_tag OF opt_ampersand amper_type_list attributes
       { let info = symbol_info $endpos in
         let attrs = add_info_attrs info $5 in
         Rf.tag ~loc:(make_loc $sloc) ~attrs $1 $3 $4 }
-  | mkrhs(name_tag) attributes
+  | name_tag attributes
       { let info = symbol_info $endpos in
         let attrs = add_info_attrs info $2 in
         Rf.tag ~loc:(make_loc $sloc) ~attrs $1 true [] }
@@ -3416,7 +3420,7 @@ toplevel_directive:
 ;
 
 name_tag:
-    BACKQUOTE ident                             { $2 }
+    BACKQUOTE ident                             { mkrhs $2 $sloc }
 ;
 rec_flag:
     /* empty */                                 { Nonrecursive }

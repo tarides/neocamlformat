@@ -78,7 +78,7 @@ module Typ :
     val class_: ?loc:loc -> ?attrs:attrs -> lid -> core_type list -> core_type
     val alias: ?loc:loc -> ?attrs:attrs -> core_type -> str -> core_type
     val variant: ?loc:loc -> ?attrs:attrs -> row_field list -> closed_flag
-                 -> label list option -> core_type
+                 -> label with_loc list option -> core_type
     val poly: ?loc:loc -> ?attrs:attrs -> str list -> core_type -> core_type
     val package: ?loc:loc -> ?attrs:attrs -> lid -> (lid * core_type) list
                  -> core_type
@@ -110,9 +110,9 @@ module Pat:
       constant with_loc -> pattern
     val tuple: ?loc:loc -> ?attrs:attrs -> pattern list -> pattern
     val construct: ?loc:loc -> ?attrs:attrs -> lid -> pattern option -> pattern
-    val variant: ?loc:loc -> ?attrs:attrs -> label -> pattern option -> pattern
-    val record: ?loc:loc -> ?attrs:attrs -> (lid * pattern) list -> closed_flag
-                -> pattern
+    val variant: ?loc:loc -> ?attrs:attrs -> label with_loc -> pattern option -> pattern
+    val record: ?loc:loc -> ?attrs:attrs -> (lid * pattern) list ->
+      obj_closed_flag -> pattern
     val array: ?loc:loc -> ?attrs:attrs -> pattern list -> pattern
     val or_: ?loc:loc -> ?attrs:attrs -> pattern -> pattern -> pattern
     val constraint_: ?loc:loc -> ?attrs:attrs -> pattern -> core_type -> pattern
@@ -145,7 +145,7 @@ module Exp:
     val tuple: ?loc:loc -> ?attrs:attrs -> expression list -> expression
     val construct: ?loc:loc -> ?attrs:attrs -> lid -> expression option
                    -> expression
-    val variant: ?loc:loc -> ?attrs:attrs -> label -> expression option
+    val variant: ?loc:loc -> ?attrs:attrs -> label with_loc -> expression option
                  -> expression
     val record: ?loc:loc -> ?attrs:attrs -> (lid * expression) list
                 -> expression option -> expression

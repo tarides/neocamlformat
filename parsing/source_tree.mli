@@ -125,7 +125,7 @@ and core_type_desc =
          *)
   | Ptyp_alias of core_type * string loc
         (* T as 'a *)
-  | Ptyp_variant of row_field list * closed_flag * label list option
+  | Ptyp_variant of row_field list * closed_flag * label loc list option
         (* [ `A|`B ]         (flag = Closed; labels = None)
            [> `A|`B ]        (flag = Open;   labels = None)
            [< `A|`B ]        (flag = Closed; labels = Some [])
@@ -231,11 +231,11 @@ and pattern_desc =
         (* [ p1 ; p2 ; ... ] *)
   | Ppat_cons of pattern * pattern
         (* p1 :: p2 *)
-  | Ppat_variant of label * pattern option
+  | Ppat_variant of label loc * pattern option
         (* `A             (None)
            `A P           (Some P)
          *)
-  | Ppat_record of (Long_ident.t * pattern) list * closed_flag
+  | Ppat_record of (Long_ident.t * pattern) list * obj_closed_flag
         (* { l1=P1; ...; ln=Pn }     (flag = Closed)
            { l1=P1; ...; ln=Pn; _}   (flag = Open)
 
@@ -329,7 +329,7 @@ and expression_desc =
         (* [ e1 ; e2 ; ... ] *)
   | Pexp_cons of expression * expression
         (* e1 :: e2 *)
-  | Pexp_variant of label * expression option
+  | Pexp_variant of label loc * expression option
         (* `A             (None)
            `A E           (Some E)
          *)
