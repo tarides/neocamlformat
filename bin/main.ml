@@ -2,7 +2,9 @@ let fmt_file fn =
   let open Source_parsing in
   let open Printing in
   let ic = open_in fn in
+  Location.input_name := fn;
   let b = Lexing.from_channel ic in
+  let doc =
     if Filename.check_suffix fn "mli" then
       match Parse_source.interface b with
       | [] -> PPrint.empty
@@ -17,6 +19,9 @@ let fmt_file fn =
         let _ = Comments.init () in
         let doc = Print_source.Structure.pp_nonempty si st in
         doc.txt
+  in
+  Comments.report_remaining ();
+  doc
 
 open Cmdliner
 

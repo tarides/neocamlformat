@@ -32,3 +32,7 @@ let between pos1 pos2 () =
   in
   comments := no;
   yes
+
+let report_remaining () =
+  List.iter (fun (_, l) -> Format.eprintf "- %a\n%!" Location.print_loc l)
+    !comments
