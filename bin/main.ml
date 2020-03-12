@@ -7,12 +7,14 @@ let fmt_file fn =
       match Parse_source.interface b with
       | [] -> PPrint.empty
       | si :: sg ->
+        let _ = Comments.init () in
         let doc = Print_source.Signature.pp_nonempty si sg in
         doc.txt
     else
       match Parse_source.implementation b with
       | [] -> PPrint.empty
       | si :: st ->
+        let _ = Comments.init () in
         let doc = Print_source.Structure.pp_nonempty si st in
         doc.txt
 

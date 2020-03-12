@@ -9,6 +9,17 @@ let loc_between t1 t2 =
   { Location.loc_start = t1.loc.loc_end; loc_end = t2.loc.loc_start;
     loc_ghost = true (* useless *) }
 
+let comment s =
+  !^"(*" ^^ arbitrary_string s ^^ !^"*)"
+
+let comments_between_pos p1 p2 =
+  match Source_parsing.Comments.between p1 p2 () with
+  | [] -> empty
+  | comments -> separate_map (break 1) comment comments ^^ break 1
+
+let comments_between t1 t2 =
+  comments_between_pos t1.loc.loc_end t2.loc.loc_start
+
 type t = document loc
 
 let empty ~loc =
@@ -55,8 +66,10 @@ let enclose ~before ~after t =
   let txt = before ^^ t.txt ^^ after in
   { t with txt }
 
+(* FIXME: sep is shit, remove. *)
 let concat ?(sep=PPrint.empty) t1 t2 =
-  { txt = t1.txt ^^ sep ^^ t2.txt
+  let cmts_doc = comments_between t1 t2 in
+  { txt = t1.txt ^^ cmts_doc ^^ sep ^^ t2.txt
   ; loc = merge_locs t1.loc t2.loc }
 
 let separate sep doc docs =
@@ -84,9 +97,10 @@ module Two_separated_parts = struct
       v}
   *)
   let sep_with_first fst snd ~sep =
+    let cmts_doc = comments_between fst snd in
     let txt =
       group (
-        group (fst.txt ^^ nest 2 (break 1 ^^ sep))
+        group (fst.txt ^^ nest 2 (break 1 ^^ cmts_doc ^^ sep))
         ^^ nest 2 (break 1 ^^ snd.txt)
       )
     in
@@ -105,10 +119,11 @@ module Two_separated_parts = struct
       v}
   *)
   let sep_with_second fst snd ~sep =
+    let cmts_doc = comments_between fst snd in
     let txt =
       group (
         fst.txt ^^
-        nest 2 (break 1 ^^ group (sep ^/^ snd.txt))
+        nest 2 (break 1 ^^ cmts_doc ^^ group (sep ^/^ snd.txt))
       )
     in
     { txt; loc = merge_locs fst.loc snd.loc }
@@ -178,7 +193,9 @@ module List_like = struct
     enclose ~before:left ~after:PPrint.(break 1 ^^ right) fields
 
   let pp ~loc ~formatting ~left ~right = function
-    | [] -> { txt = PPrint.(left ^^ right); loc }
+    | [] ->
+      let cmts = comments_between_pos loc.loc_start loc.loc_end in
+      { txt = PPrint.(left ^/^ cmts ^^ right); loc }
     | x :: xs ->
       match (formatting : Options.Wrappable.t) with
       | Wrap -> docked ~left ~right x xs
