@@ -288,10 +288,14 @@ end = struct
     let ct = pp ps ct in
     match arg_label with
     | Nolabel -> ct
-    | Labelled l -> concat (str l) ~sep:PPrint.(colon ^^ break 0) ct
+    | Labelled l ->
+      let lbl = str l in
+      let colon = token_between lbl ct Colon in
+      lbl ^^ colon ^^ break_before ~spaces:0 ct
     | Optional l ->
       let opt_label = string ~loc:l.loc ("?" ^ l.txt) in
-      concat opt_label ct ~sep:PPrint.(colon ^^ break 0)
+      let colon = token_between opt_label ct Colon in
+      opt_label ^^ colon ^^ break_before ~spaces:0 ct
 
   and pp_arrow ps params res =
     let params =
@@ -411,9 +415,10 @@ and Package_type : sig
   val pp : package_type -> document
 end = struct
   let pp_constr (lid, ct) =
-    (* FIXME: use [Binding.simple] *)
-    concat (Longident.pp lid) (Core_type.pp [] ct)
-      ~sep:PPrint.(break 1 ^^ !^"=" ^^ break 1)
+    let lid = Longident.pp lid in
+    let ct = Core_type.pp [] ct in
+    let colon = token_between lid ct Equals in
+    lid ^/^ colon ^/^ ct
 
   let pp (lid, constrs) =
     let lid = Longident.pp lid in
@@ -592,9 +597,10 @@ end = struct
     string ~loc "exception" ^/^ pp ps p
 
   and pp_open lid p =
-    let p = pp [] p in
     let lid = Longident.pp lid in
-    concat lid (parens (break_before ~spaces:0 p)) ~sep:PPrint.dot
+    let pat = pp [] p in
+    let dot = token_between lid pat Dot in
+    lid ^^ dot ^^ parens (break_before ~spaces:0 pat)
 
   and pp_desc ~loc ps = function
     | Ppat_any -> underscore ~loc
@@ -628,7 +634,10 @@ end = struct
       let pre = prefix ++ str lbl in
       match exp.pexp_desc with
       | Pexp_ident Lident id when lbl.txt = id.txt -> pre
-      | _ -> concat pre (Expression.pp ps exp) ~sep:PPrint.colon
+      | _ ->
+        let exp = Expression.pp ps exp in
+        let colon = token_between pre exp Colon in
+        pre ^^ colon ^^ break_before ~spaces:0 exp
     in
     match lbl with
     | Nolabel -> Expression.pp ps exp
@@ -1196,31 +1205,43 @@ end
 and Fun_param : sig
   val pp : fun_param -> document
 end = struct
-  let build_simple_label prefix_token lbl pat =
-    let pre = prefix_token ++ str lbl in
-    match pat.ppat_desc with
-    | Ppat_constraint ({ ppat_desc = Ppat_var v; _ }, ct)
-      when lbl.txt = v.txt ->
+  let fresh_stack =
+    (* TODO: introduce a dedicated item. *)
+    [ Printing_stack.Value_binding ]
+
+  let punned_label_with_annot prefix_token lbl ct =
       let lbl = str lbl in
       let ct = Core_type.pp [] ct in
       let colon = token_between lbl ct Colon in
       prefix_token ++ parens (lbl ^^ colon ^^ break_before ~spaces:0 ct)
-    | Ppat_var v when lbl.txt = v.txt -> pre
+
+  let build_simple_label prefix_token lbl pat =
+    let pre = prefix_token ++ str lbl in
+    match pat.ppat_desc with
+    | Ppat_var v when lbl.txt = v.txt ->
+      pre
+    | Ppat_constraint ({ ppat_desc=Ppat_var v; _ }, ct)
+      when lbl.txt = v.txt ->
+      punned_label_with_annot prefix_token lbl ct
     | _ -> 
-      let pat = Pattern.pp [ Printing_stack.Value_binding ] pat in
+      let pat = Pattern.pp fresh_stack pat in
       let colon = token_between pre pat Colon in
       pre ^^ colon ^^ pat
 
   let build_optional_with_default lbl def pat =
     let pat_def =
-      let pat = Pattern.pp [ Printing_stack.Value_binding ] pat in
-      let def = Expression.pp [ Printing_stack.Value_binding ] def in
-      parens (group (concat pat def ~sep:equals))
+      let pat = Pattern.pp fresh_stack pat in
+      let def = Expression.pp fresh_stack def in
+      let eq = token_between pat def Equals in
+      parens (group (pat ^^ eq ^^ break_before ~spaces:0 def))
     in
     let rhs =
       match pat.ppat_desc with
       | Ppat_var v when lbl.txt = v.txt -> pat_def
-      | _ -> concat (str lbl) pat_def ~sep:colon
+      | _ ->
+        let lbl = str lbl in
+        let colon = token_between lbl pat_def Colon in
+        lbl ^^ colon ^^ pat_def
     in
     qmark ++ rhs
 
@@ -1319,7 +1340,7 @@ end = struct
   and pp_apply me1 me2 =
     let me1 = pp me1 in
     let me2 = pp me2 in
-    concat me1 ~sep:(PPrint.break 0) (parens me2)
+    me1 ^^ break_before ~spaces:0 (parens me2)
 
   and pp_constraint me mty =
     let me = pp me in
