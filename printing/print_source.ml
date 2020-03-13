@@ -694,7 +694,7 @@ end = struct
   and pp_desc ~loc ps = function
     | Pexp_ident id -> pp_ident id
     | Pexp_constant c -> Constant.pp ~loc c
-    | Pexp_let (rf, vbs, body) -> pp_let ps rf vbs body
+    | Pexp_let (rf, vbs, in_loc, body) -> pp_let ps rf vbs in_loc body
     | Pexp_function cases -> pp_function ps cases
     | Pexp_fun (params, exp) ->
       pp_fun ~loc ps params exp
@@ -748,7 +748,7 @@ end = struct
     (* FIXME: move the grouping to [Longident.pp] *)
     group (Longident.pp id)
 
-  and pp_let ps rf vbs body =
+  and pp_let ps rf vbs in_loc body =
     let vbs =
       List.mapi (fun i vb ->
         let binding = Value_binding.pp Attached_to_item vb in
@@ -768,7 +768,7 @@ end = struct
       let ps = if Printing_stack.will_parenthesize ps then [] else List.tl ps in
       pp ps body
     in
-    let in_ = token_between vbs body "in" in
+    let in_ = string ~loc:in_loc "in" in
     Printing_stack.parenthesize ps (group (vbs ^/^ in_) ^^ hardline ++ body)
 
   and rec_flag = function

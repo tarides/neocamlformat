@@ -381,7 +381,7 @@ let val_of_let_bindings ~loc lbs =
   | None -> str
   | Some id -> ghstr ~loc (Pstr_extension((id, PStr [str]), []))
 
-let expr_of_let_bindings ~loc lbs body =
+let expr_of_let_bindings ~loc lbs in_loc body =
   let bindings =
     List.map
       (fun lb ->
@@ -389,7 +389,7 @@ let expr_of_let_bindings ~loc lbs body =
            lb.lb_pattern lb.lb_params lb.lb_type lb.lb_expression)
       lbs.lbs_bindings
   in
-    mkexp_attrs ~loc (Pexp_let(lbs.lbs_rec, List.rev bindings, body))
+    mkexp_attrs ~loc (Pexp_let(lbs.lbs_rec, List.rev bindings, in_loc, body))
       (lbs.lbs_extension, [])
 
 let class_of_let_bindings ~loc lbs body =
@@ -1968,7 +1968,7 @@ expr:
   | mkexp(expr_)
       { $1 }
   | let_bindings(ext) IN seq_expr
-      { expr_of_let_bindings ~loc:$sloc $1 $3 }
+      { expr_of_let_bindings ~loc:$sloc $1 (make_loc $loc($2)) $3 }
   | pbop_op = mkrhs(LETOP) bindings = letop_bindings IN body = seq_expr
       { let (pbop_pat, (pbop_params, pbop_type, pbop_exp), rev_ands) =
           bindings
