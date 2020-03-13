@@ -22,17 +22,17 @@ let attach_annot doc ~sep annot =
     let sep = token_between doc annot sep in
     group (doc ^^ nest 2 (break_before sep)) ^^ nest 2 (break_before annot)
 
-let pp ?(binder="=") ~keyword { lhs; params; constr; coerce; rhs } =
+let pp ?(binder=Equals) ~keyword { lhs; params; constr; coerce; rhs } =
   let pre = group (keyword ^^ nest 2 (break_before lhs)) in
   let params = pp_params params in
-  let with_constraint = attach_annot params ~sep:":" constr in
-  let with_coercion = attach_annot with_constraint ~sep:":>" coerce in
+  let with_constraint = attach_annot params ~sep:Colon constr in
+  let with_coercion = attach_annot with_constraint ~sep:Coerce coerce in
   let binder = token_between with_coercion rhs binder in
   let lhs = pre ^^ group (with_coercion ^/^ binder) in
   group (lhs ^^ nest 2 (break_before rhs))
 
 let pp_simple ?binder ~keyword lhs rhs =
-  let loc = Document.loc_between lhs rhs in
+  let loc = { lhs.loc with loc_start = lhs.loc.loc_end } in
   pp ?binder ~keyword
     { lhs; params = { loc; txt = [] }; constr = None; coerce = None; rhs}
 
@@ -68,7 +68,7 @@ module Module = struct
         in
         doc, "end ="
       | Mty constraint_ ->
-        let doc = attach_annot params ~sep:":" (Some constraint_) in
+        let doc = attach_annot params ~sep:Colon (Some constraint_) in
         doc, "="
     in
     let binder, rhs =
@@ -82,7 +82,10 @@ module Module = struct
       | Expr doc ->
         binder, nest 2 (break_before doc)
     in
-    let binder = token_between with_constraint rhs binder in
+    let binder = (* Gloups. *)
+      let fake = token_between with_constraint rhs Equals in
+      string ~loc:fake.loc binder
+    in
     let doc = pre ^^ group (with_constraint ^/^ binder) ^^ rhs in
     group (prefix ~indent:2 ~spaces:1 doc attributes)
 end

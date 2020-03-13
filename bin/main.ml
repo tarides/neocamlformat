@@ -1,9 +1,25 @@
+let read_file fn =
+  let ic = open_in fn in
+  let chunk_size =
+    (* taken from janestreet's stdio, where they say:
+       > We use 65536 because that is the size of OCaml's IO buffers. *)
+    65536
+  in
+  let buffer = Buffer.create chunk_size in
+  let rec loop () =
+    Buffer.add_channel buffer ic chunk_size;
+    loop ()
+  in
+  try loop ()
+  with End_of_file -> Buffer.contents buffer
+
 let fmt_file fn =
   let open Source_parsing in
   let open Printing in
-  let ic = open_in fn in
+  let source = read_file fn in
   Location.input_name := fn;
-  let b = Lexing.from_channel ic in
+  Source.source := source;
+  let b = Lexing.from_string source in
   let doc =
     if Filename.check_suffix fn "mli" then
       match Parse_source.interface b with
