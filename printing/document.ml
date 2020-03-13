@@ -9,13 +9,27 @@ let loc_between t1 t2 =
   { Location.loc_start = t1.loc.loc_end; loc_end = t2.loc.loc_start;
     loc_ghost = true (* useless *) }
 
-let comment s =
+let comment (s, _) =
   !^"(*" ^^ arbitrary_string s ^^ !^"*)"
+
+type comments =
+  | No_comment
+  | Attach_fst of document
+  | Attach_snd of document
 
 let comments_between_pos p1 p2 =
   match Source_parsing.Comments.between p1 p2 () with
-  | [] -> empty
-  | comments -> separate_map (break 1) comment comments ^^ break 1
+  | [] -> No_comment
+  | comments ->
+    let doc = separate_map (break 1) comment comments in
+    let fst = snd (List.hd comments) in
+    let lst = snd (List.hd (List.rev comments)) in
+    let dist_fst = p1.pos_cnum - fst.loc_start.pos_cnum in
+    let dist_lst = p2.pos_cnum - lst.loc_start.pos_cnum in
+    if dist_fst < dist_lst then
+      Attach_fst doc
+    else
+      Attach_snd doc
 
 let comments_between t1 t2 =
   comments_between_pos t1.loc.loc_end t2.loc.loc_start
@@ -155,9 +169,13 @@ let enclose ~before ~after t =
 
 (* FIXME: sep is shit, remove. *)
 let concat ?(sep=PPrint.empty) t1 t2 =
-  let cmts_doc = comments_between t1 t2 in
-  { txt = t1.txt ^^ cmts_doc ^^ sep ^^ t2.txt
-  ; loc = merge_locs t1.loc t2.loc }
+  let txt =
+    match comments_between t1 t2 with
+    | No_comment -> t1.txt ^^ sep ^^ t2.txt
+    | Attach_fst cmts -> t1.txt ^/^ cmts ^^ sep ^^ t2.txt
+    | Attach_snd cmts -> t1.txt ^^ sep ^^ cmts ^/^ t2.txt
+  in
+  { txt; loc = merge_locs t1.loc t2.loc }
 
 let separate sep doc docs =
   match docs with
@@ -184,7 +202,12 @@ module Two_separated_parts = struct
       v}
   *)
   let sep_with_first fst snd ~sep =
-    let cmts_doc = comments_between fst snd in
+    let cmts_doc =
+      match comments_between fst snd with
+      | No_comment -> PPrint.empty
+      | Attach_fst doc
+      | Attach_snd doc -> doc ^^ break 1
+    in
     let txt =
       group (
         group (fst.txt ^^ nest 2 (break 1 ^^ cmts_doc ^^ sep))
@@ -206,7 +229,12 @@ module Two_separated_parts = struct
       v}
   *)
   let sep_with_second fst snd ~sep =
-    let cmts_doc = comments_between fst snd in
+    let cmts_doc =
+      match comments_between fst snd with
+      | No_comment -> PPrint.empty
+      | Attach_fst doc
+      | Attach_snd doc -> doc ^^ break 1
+    in
     let txt =
       group (
         fst.txt ^^
@@ -281,7 +309,11 @@ module List_like = struct
 
   let pp ~loc ~formatting ~left ~right = function
     | [] ->
-      let cmts = comments_between_pos loc.loc_start loc.loc_end in
+      let cmts =
+        match comments_between_pos loc.loc_start loc.loc_end with
+        | No_comment -> PPrint.empty
+        | Attach_fst doc | Attach_snd doc -> PPrint.(doc ^^ break 1)
+      in
       { txt = PPrint.(left ^/^ cmts ^^ right); loc }
     | x :: xs ->
       match (formatting : Options.Wrappable.t) with

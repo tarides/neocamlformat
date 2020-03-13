@@ -18,7 +18,7 @@ let compare_pos p1 p2 =
 
 let between pos1 pos2 () =
   let yes, no =
-    List.fold_right (fun (s, l as elt) (yes, no) ->
+    List.fold_right (fun (_, l as elt) (yes, no) ->
         let start = compare_pos pos1 l.Location.loc_start in
         if start > 0 then
           (yes, elt :: no)
@@ -27,7 +27,7 @@ let between pos1 pos2 () =
           if stop > 0 then
             (yes, elt :: no)
           else
-            (s :: yes, no)
+            (elt :: yes, no)
     ) !comments ([], [])
   in
   comments := no;
