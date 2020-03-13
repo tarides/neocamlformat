@@ -631,13 +631,12 @@ and Application : sig
 end = struct
   let argument ps (lbl, exp) =
     let suffix ~prefix lbl =
-      let pre = prefix ++ str lbl in
       match exp.pexp_desc with
-      | Pexp_ident Lident id when lbl.txt = id.txt -> pre
+      | Pexp_ident Lident id when lbl.txt = id.txt -> prefix ++ str lbl
       | _ ->
+        let lbl = string ~loc:lbl.loc (lbl.txt ^ ":") in
         let exp = Expression.pp ps exp in
-        let colon = token_between pre exp Colon in
-        pre ^^ colon ^^ break_before ~spaces:0 exp
+        group (prefix ++ lbl ^^ break_before ~spaces:0 exp)
     in
     match lbl with
     | Nolabel -> Expression.pp ps exp
