@@ -29,7 +29,7 @@ let constructor_arguments = function
       (* morally equivalent to: *)
       [ Printing_stack.Core_type (Ptyp_tuple args) ]
     in
-    left_assoc_map ~sep:PPrint.(star ^^ break 1)
+    left_assoc_map ~sep:Star
       ~f:(!pp_core_type printing_stack) a1 args
 
 let gadt_constructor name args res_ty attributes =

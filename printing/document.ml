@@ -78,6 +78,7 @@ type doc_token =
   | Sharp
   | Colonequals
   | Plusequals
+  | Star
 
 let token_of_doc_token t : Source_parsing.Source_parser.token =
   match t with
@@ -105,6 +106,7 @@ let token_of_doc_token t : Source_parsing.Source_parser.token =
   | Sharp -> HASH
   | Colonequals -> COLONEQUAL
   | Plusequals -> PLUSEQ
+  | Star -> STAR
 
 let string_of_token = function
   | Colon -> ":"
@@ -131,6 +133,7 @@ let string_of_token = function
   | Sharp -> "#"
   | Colonequals -> ":="
   | Plusequals -> "+="
+  | Star -> "*"
 
 let token ~loc t =
   string ~loc (string_of_token t)
@@ -266,11 +269,14 @@ let prefix ~indent ~spaces x y =
 let infix ~indent ~spaces op x y =
   prefix ~indent ~spaces (concat x ~sep:PPrint.(blank spaces) op) y
 
-let left_assoc_map ~sep ~f first rest =
+let left_assoc_map ?sep ~f first rest =
   List.fold_left (fun t elt ->
     let elt = f elt in 
-    let sep = { txt = sep; loc = loc_between t elt } in
-    t ^/^ group (sep ^^ elt)
+    match sep with
+    | None -> t ^/^ elt
+    | Some sep ->
+      let sep = token_between t elt sep in
+      t ^/^ group (sep ^/^ elt)
   ) (f first) rest
 
 let flow_map sep f first rest =

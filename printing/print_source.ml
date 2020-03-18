@@ -270,11 +270,8 @@ end = struct
 
   and pp_arrow ps params res =
     let params =
-      match params with
-      | [] -> assert false
-      | x :: xs ->
-        (* FIXME *)
-        left_assoc_map ~sep:PPrint.(!^"->" ^^ space) ~f:(pp_param ps) x xs
+      left_assoc_map ~sep:Rarrow ~f:(pp_param ps) (List.hd params)
+        (List.tl params)
     in
     let res = pp (List.tl ps) res in
     let arrow = token_between params res Rarrow in
@@ -284,7 +281,7 @@ end = struct
   and pp_tuple ps = function
     | [] -> assert false
     | x :: xs ->
-      let doc = left_assoc_map ~sep:PPrint.(star ^^ break 1) ~f:(pp ps) x xs in
+      let doc = left_assoc_map ~sep:Star ~f:(pp ps) x xs in
       Printing_stack.parenthesize ps doc
 
   and pp_constr ps name args =
@@ -804,7 +801,7 @@ end = struct
     | [] -> assert false
     | param :: params ->
       let body = pp ps exp in
-      let args = left_assoc_map ~sep:PPrint.empty ~f:Fun_param.pp param params in
+      let args = left_assoc_map ~f:Fun_param.pp param params in
       let doc = fun_ ~loc ~args ~body in
       Printing_stack.parenthesize ps doc
 
