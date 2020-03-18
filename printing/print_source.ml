@@ -9,35 +9,6 @@ let module_name ~loc = function
   | None -> underscore ~loc
   | Some name -> string ~loc name
 
-module Tokens = struct
-  open PPrint
-
-  let pipe = char '|'
-
-  let and_ = string "and"
-
-  let as_ = string "as"
-
-  let arrow = string "->"
-
-  let larrow = string "<-"
-
-  let exception_ = string "exception"
-
-  let module_ = string "module"
-
-  let of_ = string "of"
-
-  let dotdot = string ".."
-
-  let lazy_ = string "lazy"
-
-  let let_ = string "let"
-
-  let in_ = string "in"
-end
-open Tokens
-
 module Ident_class = struct
   type t =
     | Prefix_op of string loc
@@ -86,7 +57,7 @@ end = struct
   let pp_quoted_string ~loc ~delim s =
     let delim = PPrint.string delim in
     braces (
-      enclose ~before:PPrint.(delim ^^ pipe) ~after:PPrint.(pipe ^^ delim)
+      enclose ~before:PPrint.(delim ^^ bar) ~after:PPrint.(bar ^^ delim)
         (arbitrary_string ~loc s)
     )
 
@@ -302,7 +273,8 @@ end = struct
       match params with
       | [] -> assert false
       | x :: xs ->
-        left_assoc_map ~sep:PPrint.(arrow ^^ space) ~f:(pp_param ps) x xs
+        (* FIXME *)
+        left_assoc_map ~sep:PPrint.(!^"->" ^^ space) ~f:(pp_param ps) x xs
     in
     let res = pp (List.tl ps) res in
     let arrow = token_between params res Rarrow in
@@ -360,7 +332,7 @@ end = struct
       | Closed, None ->
         (* FIXME: this will do the breaking randomly. Take inspiration from what
            was done in odoc. *)
-        let sep = PPrint.(break 1 ^^ group (pipe ^^ break 1)) in
+        let sep = PPrint.(break 1 ^^ group (bar ^^ break 1)) in
         hang 0 (
           separate_map sep ~f:Row_field.pp (List.hd fields) (List.tl fields)
         )
@@ -555,7 +527,7 @@ end = struct
     let pats = List.map (pp ps) pats in
     (* TODO: add an option *)
     List_like.pp ~loc ~formatting:Wrap
-      ~left:PPrint.(lbracket ^^ pipe) ~right:PPrint.(pipe ^^ rbracket) pats
+      ~left:PPrint.(lbracket ^^ bar) ~right:PPrint.(bar ^^ rbracket) pats
 
   and pp_or ps p1 p2 =
     let p1 =
@@ -802,11 +774,12 @@ end = struct
 
   and cases ps c cs =
     let cases =
-      separate_map PPrint.(break 1 ^^ pipe ^^ space) ~f:(case ps) c cs
+      (* FIXME *)
+      separate_map PPrint.(break 1 ^^ bar ^^ space) ~f:(case ps) c cs
     in
     let prefix =
       let open PPrint in
-      ifflat empty (hardline ^^ pipe) ^^ space
+      ifflat empty (hardline ^^ bar) ^^ space
     in
     prefix ++ cases
 
@@ -961,8 +934,8 @@ end = struct
     let elts = List.map (pp ps) elts in
     (* TODO: add an option *)
     List_like.pp ~loc ~formatting:Wrap
-      ~left:PPrint.(lbracket ^^ pipe)
-      ~right:PPrint.(pipe ^^ rbracket) elts
+      ~left:PPrint.(lbracket ^^ bar)
+      ~right:PPrint.(bar ^^ rbracket) elts
 
   (* FIXME: change ast to present n-ary [if]s *)
   and pp_if_then_else ~loc ps cond then_ else_opt =
@@ -1400,7 +1373,7 @@ end = struct
 
   and pp_typeof exp =
     let me = Module_expr.pp exp in
-    let pre = PPrint.flow (break 1) [ module_; !^"type"; of_ ] in
+    let pre = PPrint.flow (break 1) [ !^"module"; !^"type"; !^"of" ] in
     pre ++ break_before me
 
 end
@@ -1638,13 +1611,13 @@ end = struct
     | [] -> assert false
     | c :: cs ->
       let cstrs =
-        separate_map PPrint.(break 1 ^^ pipe ^^ space)
+        separate_map PPrint.(break 1 ^^ bar ^^ space)
           ~f:Constructor_decl.pp_extension c cs
       in
       (* FIXME *)
       let prefix =
         let open PPrint in
-        ifflat empty (pipe ^^ space)
+        ifflat empty (bar ^^ space)
       in
       prefix ++ cstrs
 
@@ -1730,13 +1703,13 @@ end = struct
 
   let variant cstrs =
     let cstrs =
-      separate_map PPrint.(break 1 ^^ pipe ^^ space)
+      separate_map PPrint.(break 1 ^^ bar ^^ space)
         ~f:(fun c -> nest 2 (Constructor_decl.pp_decl c))
         (List.hd cstrs) (List.tl cstrs)
     in
     let prefix =
       let open PPrint in
-      ifflat empty (pipe ^^ space)
+      ifflat empty (bar ^^ space)
     in
     (* FIXME: ++ :| *)
     prefix ++ cstrs
