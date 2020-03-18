@@ -24,7 +24,7 @@ open Doc_strings
 type 'a with_loc = 'a Location.loc
 type loc = Location.t
 
-type lid = Longident.t with_loc
+type lid = Long_ident.t
 type str = string with_loc
 type str_opt = string option with_loc
 type attrs = attribute list
@@ -95,7 +95,7 @@ module Typ = struct
         | Ptyp_arrow (label,core_type,core_type') ->
             Ptyp_arrow(label, loop core_type, loop core_type')
         | Ptyp_tuple lst -> Ptyp_tuple (List.map loop lst)
-        | Ptyp_constr( { txt = Longident.Lident s }, [])
+        | Ptyp_constr( { txt = Long_ident.Lident s }, [])
           when List.mem s var_names ->
             Ptyp_var s
         | Ptyp_constr(longident, lst) ->
@@ -523,7 +523,7 @@ module Type = struct
       ?(params = [])
       ?(cstrs = [])
       ?(kind = Ptype_abstract)
-      ?(priv = Public)
+      ?priv
       ?manifest
       name =
     {
@@ -563,7 +563,7 @@ end
 (** Type extensions *)
 module Te = struct
   let mk ?(loc = !default_loc) ?(attrs = []) ?(docs = empty_docs)
-        ?(params = []) ?(priv = Public) path constructors =
+        ?(params = []) ?priv path constructors =
     {
      ptyext_path = path;
      ptyext_params = params;

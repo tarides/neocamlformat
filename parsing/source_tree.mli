@@ -22,6 +22,15 @@
 
 open Asttypes
 
+type arg_label =
+    Nolabel
+  | Labelled of string loc (*  label:T -> ... *)
+  | Optional of string loc (* ?label:T -> ... *)
+
+type obj_closed_flag =
+  | OClosed
+  | OOpen of Location.t
+
 type constant =
     Pconst_integer of string * char option
   (* 3 3l 3L 3n
@@ -100,23 +109,23 @@ and core_type_desc =
 
            Invariant: n >= 2
         *)
-  | Ptyp_constr of Longident.t loc * core_type list
+  | Ptyp_constr of Long_ident.t * core_type list
         (* tconstr
            T tconstr
            (T1, ..., Tn) tconstr
          *)
-  | Ptyp_object of object_field list * closed_flag
+  | Ptyp_object of object_field list * obj_closed_flag
         (* < l1:T1; ...; ln:Tn >     (flag = Closed)
            < l1:T1; ...; ln:Tn; .. > (flag = Open)
          *)
-  | Ptyp_class of Longident.t loc * core_type list
+  | Ptyp_class of Long_ident.t * core_type list
         (* #tconstr
            T #tconstr
            (T1, ..., Tn) #tconstr
          *)
-  | Ptyp_alias of core_type * string
+  | Ptyp_alias of core_type * string loc
         (* T as 'a *)
-  | Ptyp_variant of row_field list * closed_flag * label list option
+  | Ptyp_variant of row_field list * closed_flag * label loc list option
         (* [ `A|`B ]         (flag = Closed; labels = None)
            [> `A|`B ]        (flag = Open;   labels = None)
            [< `A|`B ]        (flag = Closed; labels = Some [])
@@ -147,7 +156,7 @@ and core_type_desc =
   | Ptyp_extension of extension
         (* [%id] *)
 
-and package_type = Longident.t loc * (Longident.t loc * core_type) list
+and package_type = Long_ident.t * (Long_ident.t * core_type) list
       (*
         (module S)
         (module S with type t1 = T1 and ... and tn = Tn)
@@ -203,7 +212,7 @@ and pattern_desc =
         (* P as 'a *)
   | Ppat_constant of constant
         (* 1, 'a', "true", 1.0, 1l, 1L, 1n *)
-  | Ppat_interval of constant * constant
+  | Ppat_interval of constant loc * constant loc
         (* 'a'..'z'
 
            Other forms of interval are recognized by the parser
@@ -213,7 +222,7 @@ and pattern_desc =
 
            Invariant: n >= 2
         *)
-  | Ppat_construct of Longident.t loc * pattern option
+  | Ppat_construct of Long_ident.t * pattern option
         (* C                None
            C P              Some P
            C (P1, ..., Pn)  Some (Ppat_tuple [P1; ...; Pn])
@@ -222,11 +231,11 @@ and pattern_desc =
         (* [ p1 ; p2 ; ... ] *)
   | Ppat_cons of pattern * pattern
         (* p1 :: p2 *)
-  | Ppat_variant of label * pattern option
+  | Ppat_variant of label loc * pattern option
         (* `A             (None)
            `A P           (Some P)
          *)
-  | Ppat_record of (Longident.t loc * pattern) list * closed_flag
+  | Ppat_record of (Long_ident.t * pattern) list * obj_closed_flag
         (* { l1=P1; ...; ln=Pn }     (flag = Closed)
            { l1=P1; ...; ln=Pn; _}   (flag = Open)
 
@@ -238,7 +247,7 @@ and pattern_desc =
         (* P1 | P2 *)
   | Ppat_constraint of pattern * core_type
         (* (P : T) *)
-  | Ppat_type of Longident.t loc
+  | Ppat_type of Long_ident.t
         (* #tconst *)
   | Ppat_lazy of pattern
         (* lazy P *)
@@ -253,7 +262,7 @@ and pattern_desc =
         (* exception P *)
   | Ppat_extension of extension
         (* [%id] *)
-  | Ppat_open of Longident.t loc * pattern
+  | Ppat_open of Long_ident.t * pattern
         (* M.(P) *)
 
 (* Value expressions *)
@@ -272,7 +281,7 @@ and fun_param =
         (* fun (type t) -> E *)
 
 and expression_desc =
-  | Pexp_ident of Longident.t loc
+  | Pexp_ident of Long_ident.t
         (* x
            M.x
          *)
@@ -297,7 +306,7 @@ and expression_desc =
          *)
   | Pexp_apply of expression * (arg_label * expression) list
         (* E0 ~l1:E1 ... ~ln:En
-           li can be empty (non labeled argument) or start with '?'
+           li can be empty (non labeled argument) or start Constant.pp with '?'
            (optional argument).
 
            Invariant: n > 0
@@ -311,7 +320,7 @@ and expression_desc =
 
            Invariant: n >= 2
         *)
-  | Pexp_construct of Longident.t loc * expression option
+  | Pexp_construct of Long_ident.t * expression option
         (* C                None
            C E              Some E
            C (E1, ..., En)  Some (Pexp_tuple[E1;...;En])
@@ -320,19 +329,19 @@ and expression_desc =
         (* [ e1 ; e2 ; ... ] *)
   | Pexp_cons of expression * expression
         (* e1 :: e2 *)
-  | Pexp_variant of label * expression option
+  | Pexp_variant of label loc * expression option
         (* `A             (None)
            `A E           (Some E)
          *)
-  | Pexp_record of (Longident.t loc * expression) list * expression option
+  | Pexp_record of (Long_ident.t * expression) list * expression option
         (* { l1=P1; ...; ln=Pn }     (None)
            { E0 with l1=P1; ...; ln=Pn }   (Some E0)
 
            Invariant: n > 0
          *)
-  | Pexp_field of expression * Longident.t loc
+  | Pexp_field of expression * Long_ident.t
         (* E.l *)
-  | Pexp_setfield of expression * Longident.t loc * expression
+  | Pexp_setfield of expression * Long_ident.t * expression
         (* E1.l <- E2 *)
   | Pexp_array of expression list
         (* [| E1; ...; En |] *)
@@ -355,7 +364,7 @@ and expression_desc =
          *)
   | Pexp_send of expression * label loc
         (*  E # m *)
-  | Pexp_new of Longident.t loc
+  | Pexp_new of Long_ident.t
         (* new M.c *)
   | Pexp_setinstvar of label loc * expression
         (* x <- 2 *)
@@ -363,7 +372,7 @@ and expression_desc =
         (* {< x1 = E1; ...; Xn = En >} *)
   | Pexp_letmodule of
       string option loc *
-      (functor_parameter list * module_type option * module_expr) * expression
+      (functor_parameter loc list * module_type option * module_expr) * expression
         (* let module M = ME in E *)
   | Pexp_letexception of extension_constructor * expression
         (* let exception C in E *)
@@ -380,7 +389,7 @@ and expression_desc =
 
            (module ME : S) is represented as
            Pexp_constraint(Pexp_pack, Ptyp_package S) *)
-  | Pexp_open of Longident.t loc * expression
+  | Pexp_open of Long_ident.t * expression
         (* M.(E) *)
   | Pexp_letopen of open_declaration * expression
         (* let open M in E
@@ -392,6 +401,29 @@ and expression_desc =
         (* [%id] *)
   | Pexp_unreachable
         (* . *)
+    (* FIXME: factorize? *)
+  | Pexp_array_get of expression * expression
+  | Pexp_array_set of expression * expression * expression
+  | Pexp_string_get of expression * expression
+  | Pexp_string_set of expression * expression * expression
+  | Pexp_bigarray_get of expression * expression list
+  | Pexp_bigarray_set of expression * expression list * expression
+  | Pexp_dotop_get of {
+      accessed: expression;
+      op: Long_ident.t;
+      left: string loc;
+      right: string loc;
+      indices: expression list;
+    }
+  | Pexp_dotop_set of {
+      accessed: expression;
+      op: Long_ident.t;
+      left: string loc;
+      right: string loc;
+      indices: expression list;
+      value: expression;
+    }
+
 
 and case =   (* (P -> E) or (P when E0 -> E) *)
     {
@@ -423,7 +455,7 @@ and value_description =
     {
      pval_name: string loc;
      pval_type: core_type;
-     pval_prim: string list;
+     pval_prim: string loc list;
      pval_attributes: attributes;  (* ... [@@id1] [@@id2] *)
      pval_loc: Location.t;
     }
@@ -443,7 +475,7 @@ and type_declaration =
      ptype_cstrs: (core_type * core_type * Location.t) list;
            (* ... constraint T1=T1'  ... constraint Tn=Tn' *)
      ptype_kind: type_kind;
-     ptype_private: private_flag;   (* = private ... *)
+     ptype_private: Location.t option;   (* = private ... *)
      ptype_manifest: core_type option;  (* = T *)
      ptype_attributes: attributes;   (* ... [@@id1] [@@id2] *)
      ptype_loc: Location.t;
@@ -464,7 +496,7 @@ and type_kind =
   | Ptype_variant of constructor_declaration list
   | Ptype_record of label_declaration list
         (* Invariant: non-empty list *)
-  | Ptype_open
+  | Ptype_open of Location.t
 
 and label_declaration =
     {
@@ -505,10 +537,10 @@ and constructor_arguments =
 
 and type_extension =
     {
-     ptyext_path: Longident.t loc;
+     ptyext_path: Long_ident.t;
      ptyext_params: (core_type * variance) list;
      ptyext_constructors: extension_constructor list;
-     ptyext_private: private_flag;
+     ptyext_private: Location.t option;
      ptyext_loc: Location.t;
      ptyext_attributes: attributes;   (* ... [@@id1] [@@id2] *)
     }
@@ -539,7 +571,7 @@ and extension_constructor_kind =
          | C: T0                  ([], Some T0)
          | C: T1 * ... * Tn -> T0 ([T1; ...; Tn], Some T0)
        *)
-  | Pext_rebind of Longident.t loc
+  | Pext_rebind of Long_ident.t
       (*
          | C = D
        *)
@@ -556,7 +588,7 @@ and class_type =
     }
 
 and class_type_desc =
-  | Pcty_constr of Longident.t loc * core_type list
+  | Pcty_constr of Long_ident.t * core_type list
         (* c
            ['a1, ..., 'an] c *)
   | Pcty_signature of class_signature
@@ -636,7 +668,7 @@ and class_expr =
     }
 
 and class_expr_desc =
-  | Pcl_constr of Longident.t loc * core_type list
+  | Pcl_constr of Long_ident.t * core_type list
         (* c
            ['a1, ..., 'an] c *)
   | Pcl_structure of class_structure
@@ -726,11 +758,11 @@ and module_type =
     }
 
 and module_type_desc =
-  | Pmty_ident of Longident.t loc
+  | Pmty_ident of Long_ident.t
         (* S *)
   | Pmty_signature of signature
         (* sig ... end *)
-  | Pmty_functor of functor_parameter * module_type
+  | Pmty_functor of functor_parameter loc list * module_type
         (* functor(X : MT1) -> MT2 *)
   | Pmty_with of module_type * with_constraint list
         (* MT with ... *)
@@ -738,7 +770,7 @@ and module_type_desc =
         (* module type of ME *)
   | Pmty_extension of extension
         (* [%id] *)
-  | Pmty_alias of Longident.t loc
+  | Pmty_alias of Long_ident.t
         (* (module M) *)
 
 and functor_parameter =
@@ -805,7 +837,7 @@ and module_declaration =
 and module_substitution =
     {
      pms_name: string loc;
-     pms_manifest: Longident.t loc;
+     pms_manifest: Long_ident.t;
      pms_attributes: attributes; (* ... [@@id1] [@@id2] *)
      pms_loc: Location.t;
     }
@@ -833,7 +865,7 @@ and 'a open_infos =
    open  X - popen_override = Fresh
  *)
 
-and open_description = Longident.t loc open_infos
+and open_description = Long_ident.t open_infos
 (* open M.N
    open M(N).O *)
 
@@ -856,16 +888,16 @@ and include_declaration = module_expr include_infos
 (* include ME *)
 
 and with_constraint =
-  | Pwith_type of Longident.t loc * type_declaration
+  | Pwith_type of Long_ident.t * type_declaration
         (* with type X.t = ...
 
            Note: the last component of the longident must match
            the name of the type_declaration. *)
-  | Pwith_module of Longident.t loc * Longident.t loc
+  | Pwith_module of Long_ident.t * Long_ident.t
         (* with module X.Y = Z *)
-  | Pwith_typesubst of Longident.t loc * type_declaration
+  | Pwith_typesubst of Long_ident.t * type_declaration
         (* with type X.t := ..., same format as [Pwith_type] *)
-  | Pwith_modsubst of Longident.t loc * Longident.t loc
+  | Pwith_modsubst of Long_ident.t * Long_ident.t
         (* with module X.Y := Z *)
 
 (* Value expressions for the module language *)
@@ -878,11 +910,11 @@ and module_expr =
     }
 
 and module_expr_desc =
-  | Pmod_ident of Longident.t loc
+  | Pmod_ident of Long_ident.t
         (* X *)
   | Pmod_structure of structure
         (* struct ... end *)
-  | Pmod_functor of functor_parameter * module_expr
+  | Pmod_functor of functor_parameter loc list * module_expr
         (* functor(X : MT1) -> ME *)
   | Pmod_apply of module_expr * module_expr
         (* ME1(ME2) *)
@@ -950,7 +982,7 @@ and value_binding =
 and module_binding =
     {
      pmb_name: string option loc;
-     pmb_params: functor_parameter list;
+     pmb_params: functor_parameter loc list;
      pmb_type: module_type option;
      pmb_expr: module_expr;
      pmb_attributes: attributes;
@@ -983,5 +1015,5 @@ and directive_argument =
 and directive_argument_desc =
   | Pdir_string of string
   | Pdir_int of string * char option
-  | Pdir_ident of Longident.t
+  | Pdir_ident of Long_ident.t
   | Pdir_bool of bool

@@ -27,7 +27,7 @@ open Source_tree
 type 'a with_loc = 'a Location.loc
 type loc = Location.t
 
-type lid = Longident.t with_loc
+type lid = Long_ident.t
 type str = string with_loc
 type str_opt = string option with_loc
 type attrs = attribute list
@@ -74,11 +74,11 @@ module Typ :
     val tuple: ?loc:loc -> ?attrs:attrs -> core_type list -> core_type
     val constr: ?loc:loc -> ?attrs:attrs -> lid -> core_type list -> core_type
     val object_: ?loc:loc -> ?attrs:attrs -> object_field list
-                   -> closed_flag -> core_type
+                   -> obj_closed_flag -> core_type
     val class_: ?loc:loc -> ?attrs:attrs -> lid -> core_type list -> core_type
-    val alias: ?loc:loc -> ?attrs:attrs -> core_type -> string -> core_type
+    val alias: ?loc:loc -> ?attrs:attrs -> core_type -> str -> core_type
     val variant: ?loc:loc -> ?attrs:attrs -> row_field list -> closed_flag
-                 -> label list option -> core_type
+                 -> label with_loc list option -> core_type
     val poly: ?loc:loc -> ?attrs:attrs -> str list -> core_type -> core_type
     val package: ?loc:loc -> ?attrs:attrs -> lid -> (lid * core_type) list
                  -> core_type
@@ -106,12 +106,13 @@ module Pat:
     val var: ?loc:loc -> ?attrs:attrs -> str -> pattern
     val alias: ?loc:loc -> ?attrs:attrs -> pattern -> str -> pattern
     val constant: ?loc:loc -> ?attrs:attrs -> constant -> pattern
-    val interval: ?loc:loc -> ?attrs:attrs -> constant -> constant -> pattern
+    val interval: ?loc:loc -> ?attrs:attrs -> constant with_loc ->
+      constant with_loc -> pattern
     val tuple: ?loc:loc -> ?attrs:attrs -> pattern list -> pattern
     val construct: ?loc:loc -> ?attrs:attrs -> lid -> pattern option -> pattern
-    val variant: ?loc:loc -> ?attrs:attrs -> label -> pattern option -> pattern
-    val record: ?loc:loc -> ?attrs:attrs -> (lid * pattern) list -> closed_flag
-                -> pattern
+    val variant: ?loc:loc -> ?attrs:attrs -> label with_loc -> pattern option -> pattern
+    val record: ?loc:loc -> ?attrs:attrs -> (lid * pattern) list ->
+      obj_closed_flag -> pattern
     val array: ?loc:loc -> ?attrs:attrs -> pattern list -> pattern
     val or_: ?loc:loc -> ?attrs:attrs -> pattern -> pattern -> pattern
     val constraint_: ?loc:loc -> ?attrs:attrs -> pattern -> core_type -> pattern
@@ -144,7 +145,7 @@ module Exp:
     val tuple: ?loc:loc -> ?attrs:attrs -> expression list -> expression
     val construct: ?loc:loc -> ?attrs:attrs -> lid -> expression option
                    -> expression
-    val variant: ?loc:loc -> ?attrs:attrs -> label -> expression option
+    val variant: ?loc:loc -> ?attrs:attrs -> label with_loc -> expression option
                  -> expression
     val record: ?loc:loc -> ?attrs:attrs -> (lid * expression) list
                 -> expression option -> expression
@@ -194,7 +195,7 @@ module Exp:
 module Val:
   sig
     val mk: ?loc:loc -> ?attrs:attrs -> ?docs:docs ->
-      ?prim:string list -> str -> core_type -> value_description
+      ?prim:string with_loc list -> str -> core_type -> value_description
   end
 
 (** Type declarations *)
@@ -203,7 +204,7 @@ module Type:
     val mk: ?loc:loc -> ?attrs:attrs -> ?docs:docs -> ?text:text ->
       ?params:(core_type * variance) list ->
       ?cstrs:(core_type * core_type * loc) list ->
-      ?kind:type_kind -> ?priv:private_flag -> ?manifest:core_type -> str ->
+      ?kind:type_kind -> ?priv:Location.t -> ?manifest:core_type -> str ->
       type_declaration
 
     val constructor: ?loc:loc -> ?attrs:attrs -> ?info:info ->
@@ -217,7 +218,7 @@ module Type:
 module Te:
   sig
     val mk: ?loc:loc -> ?attrs:attrs -> ?docs:docs ->
-      ?params:(core_type * variance) list -> ?priv:private_flag ->
+      ?params:(core_type * variance) list -> ?priv:Location.t ->
       lid -> extension_constructor list -> type_extension
 
     val mk_exception: ?loc:loc -> ?attrs:attrs -> ?docs:docs ->
@@ -245,7 +246,7 @@ module Mty:
     val alias: ?loc:loc -> ?attrs:attrs -> lid -> module_type
     val signature: ?loc:loc -> ?attrs:attrs -> signature -> module_type
     val functor_: ?loc:loc -> ?attrs:attrs ->
-      functor_parameter -> module_type -> module_type
+      functor_parameter with_loc list -> module_type -> module_type
     val with_: ?loc:loc -> ?attrs:attrs -> module_type ->
       with_constraint list -> module_type
     val typeof_: ?loc:loc -> ?attrs:attrs -> module_expr -> module_type
@@ -261,7 +262,7 @@ module Mod:
     val ident: ?loc:loc -> ?attrs:attrs -> lid -> module_expr
     val structure: ?loc:loc -> ?attrs:attrs -> structure -> module_expr
     val functor_: ?loc:loc -> ?attrs:attrs ->
-      functor_parameter -> module_expr -> module_expr
+      functor_parameter with_loc list -> module_expr -> module_expr
     val apply: ?loc:loc -> ?attrs:attrs -> module_expr -> module_expr ->
       module_expr
     val constraint_: ?loc:loc -> ?attrs:attrs -> module_expr -> module_type ->
@@ -341,7 +342,7 @@ module Mtd:
 module Mb:
   sig
     val mk: ?loc:loc -> ?attrs:attrs -> ?docs:docs -> ?text:text ->
-      str_opt -> (functor_parameter list * module_type option * module_expr) ->
+      str_opt -> (functor_parameter with_loc list * module_type option * module_expr) ->
       module_binding
   end
 
