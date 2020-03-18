@@ -40,7 +40,10 @@ end = struct
     | Normal -> str s
     | Infix_op _ | Prefix_op _ -> parens (str s)
 
-  let rec pp = function
+  let rec pp lid =
+    group (aux lid)
+
+  and aux = function
     | Lident s -> pp_ident s
     | Ldot (lid, s) -> concat (pp lid) ~sep:PPrint.(dot ^^ break 0) (str s)
     | Lapply (l1, l2) -> concat (pp l1) ~sep:(break 0) (parens (pp l2))
@@ -721,9 +724,7 @@ end = struct
       ->
       assert false
 
-  and pp_ident id =
-    (* FIXME: move the grouping to [Longident.pp] *)
-    group (Longident.pp id)
+  and pp_ident = Longident.pp
 
   and pp_let ps rf vbs body =
     let vbs =
