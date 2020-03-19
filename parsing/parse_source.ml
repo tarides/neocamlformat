@@ -42,11 +42,11 @@ let maybe_skip_phrase lexbuf =
 
 let wrap parsing_fun lexbuf =
   try
-    Docstrings.init ();
+    Doc_strings.init ();
     Source_lexer.init ();
     let ast = parsing_fun lexbuf in
     Parsing.clear_parser();
-    Docstrings.warn_bad_docstrings ();
+    Doc_strings.warn_bad_docstrings ();
     last_token := Source_parser.EOF;
     ast
   with
@@ -146,11 +146,6 @@ let prepare_error err =
       Location.errorf ~loc
         "Syntax error: applicative paths of the form F(X).t \
          are not supported when the option -no-app-func is set."
-  | Variable_in_scope (loc, var) ->
-      Location.errorf ~loc
-        "In this scoped type, variable %a \
-         is reserved for the local type %s."
-        Pprintast.tyvar var var
   | Other loc ->
       Location.errorf ~loc "Syntax error"
   | Ill_formed_ast (loc, s) ->

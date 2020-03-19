@@ -1,13 +1,12 @@
 include PPrint
+open Source_parsing
 open Location
 
 let merge_locs l1 l2 =
-  { Location.loc_start = l1.loc_start; loc_end = l2.loc_end;
-    loc_ghost = false (* useless *) }
+  { Location.loc_start = l1.loc_start; loc_end = l2.loc_end }
 
 let loc_between t1 t2 =
-  { Location.loc_start = t1.loc.loc_end; loc_end = t2.loc.loc_start;
-    loc_ghost = true (* useless *) }
+  { Location.loc_start = t1.loc.loc_end; loc_end = t2.loc.loc_start }
 
 let comment (s, _) =
   !^"(*" ^^ arbitrary_string s ^^ !^"*)"

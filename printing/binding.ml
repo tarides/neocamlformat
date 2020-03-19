@@ -1,4 +1,4 @@
-open Location
+open Source_parsing.Location
 open Document
 type document = t
 

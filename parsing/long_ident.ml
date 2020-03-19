@@ -8,4 +8,4 @@ type t =
 let last = function
     Lident s -> s
   | Ldot(_, s) -> s
-  | Lapply(_, _) -> Misc.fatal_error "Longident.last"
+  | Lapply(_, _) -> invalid_arg "Longident.last"

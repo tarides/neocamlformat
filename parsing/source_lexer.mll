@@ -19,7 +19,6 @@
 [@@@ocaml.warning "-9"]
 
 open Lexing
-open Misc
 open Source_parser
 
 type error =
@@ -38,8 +37,9 @@ exception Error of error * Location.t;;
 
 (* The table of keywords *)
 
-let keyword_table =
-  create_hashtable 149 [
+let keyword_table = Hashtbl.create 149
+let () =
+  List.iter (fun (k, v) -> Hashtbl.add keyword_table k v) [
     "and", AND;
     "as", AS;
     "assert", ASSERT;
@@ -234,11 +234,6 @@ let escaped_newlines = ref false
 
 (* Warn about Latin-1 characters used in idents *)
 
-let warn_latin1 lexbuf =
-  Location.deprecated
-    (Location.curr lexbuf)
-    "ISO-Latin1 characters in identifiers"
-
 let handle_docstrings = ref true
 let comment_list = ref []
 
@@ -362,25 +357,23 @@ rule token = parse
       { check_label_name lexbuf name;
         LABEL name }
   | "~" (lowercase_latin1 identchar_latin1 * as name) ':'
-      { warn_latin1 lexbuf;
-        LABEL name }
+      { LABEL name }
   | "?"
       { QUESTION }
   | "?" (lowercase identchar * as name) ':'
       { check_label_name lexbuf name;
         OPTLABEL name }
   | "?" (lowercase_latin1 identchar_latin1 * as name) ':'
-      { warn_latin1 lexbuf;
-        OPTLABEL name }
+      { OPTLABEL name }
   | lowercase identchar * as name
       { try Hashtbl.find keyword_table name
         with Not_found -> LIDENT name }
   | lowercase_latin1 identchar_latin1 * as name
-      { warn_latin1 lexbuf; LIDENT name }
+      { LIDENT name }
   | uppercase identchar * as name
       { UIDENT name } (* No capitalized keywords *)
   | uppercase_latin1 identchar_latin1 * as name
-      { warn_latin1 lexbuf; UIDENT name }
+      { UIDENT name }
   | int_literal as lit { INT (lit, None) }
   | (int_literal as lit) (literal_modifier as modif)
       { INT (lit, Some modif) }
@@ -444,9 +437,7 @@ rule token = parse
         in
         COMMENT (s, loc) }
   | "(*)"
-      { if !print_warnings then
-          Location.prerr_warning (Location.curr lexbuf) Warnings.Comment_start;
-        let s, loc = with_comment_buffer comment lexbuf in
+      { let s, loc = with_comment_buffer comment lexbuf in
         COMMENT (s, loc) }
   | "(*" (('*'*) as stars) "*)"
       { if !handle_docstrings && stars="" then
@@ -455,9 +446,7 @@ rule token = parse
         else
           COMMENT (stars, Location.curr lexbuf) }
   | "*)"
-      { let loc = Location.curr lexbuf in
-        Location.prerr_warning loc Warnings.Comment_not_end;
-        lexbuf.Lexing.lex_curr_pos <- lexbuf.Lexing.lex_curr_pos - 1;
+      { lexbuf.Lexing.lex_curr_pos <- lexbuf.Lexing.lex_curr_pos - 1;
         let curpos = lexbuf.lex_curr_p in
         lexbuf.lex_curr_p <- { curpos with pos_cnum = curpos.pos_cnum - 1 };
         STAR
@@ -668,20 +657,11 @@ and string = parse
         { store_escaped_uchar lexbuf (uchar_for_uchar_escape lexbuf);
           string lexbuf }
   | '\\' _
-      { if not (in_comment ()) then begin
-(*  Should be an error, but we are very lax.
-          error lexbuf (Illegal_escape (Lexing.lexeme lexbuf, None))
-*)
-          let loc = Location.curr lexbuf in
-          Location.prerr_warning loc Warnings.Illegal_backslash;
-        end;
-        store_lexeme lexbuf;
+      { store_lexeme lexbuf;
         string lexbuf
       }
   | newline
-      { if not (in_comment ()) then
-          Location.prerr_warning (Location.curr lexbuf) Warnings.Eol_in_string;
-        update_loc lexbuf None 1 false 0;
+      { update_loc lexbuf None 1 false 0;
         store_lexeme lexbuf;
         string lexbuf
       }

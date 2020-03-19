@@ -33,13 +33,11 @@ let mknoloc = Location.mknoloc
 let make_loc (startpos, endpos) = {
   Location.loc_start = startpos;
   Location.loc_end = endpos;
-  Location.loc_ghost = false;
 }
 
 let ghost_loc (startpos, endpos) = {
   Location.loc_start = startpos;
   Location.loc_end = endpos;
-  Location.loc_ghost = true;
 }
 
 let mktyp ~loc d = Typ.mk ~loc:(make_loc loc) d
@@ -87,9 +85,12 @@ let mkcf ~loc ?attrs ?docs d =
 let mkrhs rhs loc = mkloc rhs (make_loc loc)
 
 let push_loc x acc =
+  (*
   if x.Location.loc_ghost
   then acc
   else x :: acc
+  *)
+  x::acc
 
 let reloc_pat ~loc x =
   { x with ppat_loc = make_loc loc;
@@ -218,12 +219,6 @@ let bigarray_get ~loc arr arg =
 
 let bigarray_set ~loc arr arg newval =
   mkexp ~loc (Pexp_bigarray_set (arr, bigarray_untuplify arg, newval))
-
-let lapply ~loc p1 p2 =
-  if !Clflags.applicative_functors
-  then Lapply(p1, p2)
-  else raise (Syntaxerr.Error(
-                  Syntaxerr.Applicative_path (make_loc loc)))
 
 let exp_of_longident ~loc lid =
   mkexp ~loc (Pexp_ident (Lident (Long_ident.last lid)))
@@ -3372,7 +3367,7 @@ mod_ext_longident:
     UIDENT                                      { Lident (mkrhs $1 $sloc) }
   | mod_ext_longident DOT UIDENT                { Ldot($1, mkrhs $3 $loc($3)) }
   | mod_ext_longident LPAREN mod_ext_longident RPAREN
-      { lapply ~loc:$sloc $1 $3 }
+      { Lapply($1, $3) }
   | mod_ext_longident LPAREN error
       { expecting $loc($3) "module path" }
 ;

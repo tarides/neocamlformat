@@ -31,9 +31,6 @@ type attrs = attribute list
 
 let default_loc = ref Location.none
 
-let with_default_loc l f =
-  Misc.protect_refs [Misc.R (default_loc, l)] f
-
 module Const = struct
   let integer ?suffix i = Pconst_integer (i, suffix)
   let int ?suffix i = integer ?suffix (Int.to_string i)
