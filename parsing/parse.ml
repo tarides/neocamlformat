@@ -17,40 +17,40 @@
 
 (* Skip tokens to the end of the phrase *)
 
-let last_token = ref Source_parser.EOF
+let last_token = ref Parser.EOF
 
 let token lexbuf =
-  let token = Source_lexer.token lexbuf in
+  let token = Lexer.token lexbuf in
   last_token := token;
   token
 
 let rec skip_phrase lexbuf =
   match token lexbuf with
-  | Source_parser.SEMISEMI | Source_parser.EOF -> ()
+  | Parser.SEMISEMI | Parser.EOF -> ()
   | _ -> skip_phrase lexbuf
-  | exception (Source_lexer.Error (Source_lexer.Unterminated_comment _, _)
-              | Source_lexer.Error (Source_lexer.Unterminated_string, _)
-              | Source_lexer.Error (Source_lexer.Reserved_sequence _, _)
-              | Source_lexer.Error (Source_lexer.Unterminated_string_in_comment _, _)
-              | Source_lexer.Error (Source_lexer.Illegal_character _, _)) ->
+  | exception (Lexer.Error (Lexer.Unterminated_comment _, _)
+              | Lexer.Error (Lexer.Unterminated_string, _)
+              | Lexer.Error (Lexer.Reserved_sequence _, _)
+              | Lexer.Error (Lexer.Unterminated_string_in_comment _, _)
+              | Lexer.Error (Lexer.Illegal_character _, _)) ->
       skip_phrase lexbuf
 
 let maybe_skip_phrase lexbuf =
   match !last_token with
-  | Source_parser.SEMISEMI | Source_parser.EOF -> ()
+  | Parser.SEMISEMI | Parser.EOF -> ()
   | _ -> skip_phrase lexbuf
 
 let wrap parsing_fun lexbuf =
   try
-    Doc_strings.init ();
-    Source_lexer.init ();
+    Docstrings.init ();
+    Lexer.init ();
     let ast = parsing_fun lexbuf in
     Parsing.clear_parser();
-    Doc_strings.warn_bad_docstrings ();
-    last_token := Source_parser.EOF;
+    Docstrings.warn_bad_docstrings ();
+    last_token := Parser.EOF;
     ast
   with
-  | Source_lexer.Error(Source_lexer.Illegal_character _, _) as err
+  | Lexer.Error(Lexer.Illegal_character _, _) as err
     when !Location.input_name = "//toplevel//"->
       skip_phrase lexbuf;
       raise err
@@ -65,7 +65,7 @@ let wrap parsing_fun lexbuf =
       raise(Syntaxerr.Error(Syntaxerr.Other loc))
 
 let rec loop lexbuf in_error checkpoint =
-  let module I = Source_parser.MenhirInterpreter in
+  let module I = Parser.MenhirInterpreter in
   match checkpoint with
   | I.InputNeeded _env ->
       let triple =
@@ -95,7 +95,7 @@ let rec loop lexbuf in_error checkpoint =
              fill the parser with EOF tokens.
              The skip_phrase logic will resynchronize the input stream by
              looking for the next ';;'.  *)
-          (Source_parser.EOF, lexbuf.Lexing.lex_curr_p, lexbuf.Lexing.lex_curr_p)
+          (Parser.EOF, lexbuf.Lexing.lex_curr_p, lexbuf.Lexing.lex_curr_p)
         else
           let token = token lexbuf in
           (token, lexbuf.Lexing.lex_start_p, lexbuf.Lexing.lex_curr_p)
@@ -105,7 +105,7 @@ let rec loop lexbuf in_error checkpoint =
   | I.Shifting _ | I.AboutToReduce _ ->
       loop lexbuf in_error (I.resume checkpoint)
   | I.Accepted v -> v
-  | I.Rejected -> raise Source_parser.Error
+  | I.Rejected -> raise Parser.Error
   | I.HandlingError _ ->
       loop lexbuf true (I.resume checkpoint)
 
@@ -113,13 +113,13 @@ let wrap_menhir entry lexbuf =
   let initial = entry lexbuf.Lexing.lex_curr_p in
   wrap (fun lexbuf -> loop lexbuf false initial) lexbuf
 
-let implementation = wrap_menhir Source_parser.Incremental.implementation
-and interface = wrap_menhir Source_parser.Incremental.interface
-and toplevel_phrase = wrap_menhir Source_parser.Incremental.toplevel_phrase
-and use_file = wrap_menhir Source_parser.Incremental.use_file
-and core_type = wrap_menhir Source_parser.Incremental.parse_core_type
-and expression = wrap_menhir Source_parser.Incremental.parse_expression
-and pattern = wrap_menhir Source_parser.Incremental.parse_pattern
+let implementation = wrap_menhir Parser.Incremental.implementation
+and interface = wrap_menhir Parser.Incremental.interface
+and toplevel_phrase = wrap_menhir Parser.Incremental.toplevel_phrase
+and use_file = wrap_menhir Parser.Incremental.use_file
+and core_type = wrap_menhir Parser.Incremental.parse_core_type
+and expression = wrap_menhir Parser.Incremental.parse_expression
+and pattern = wrap_menhir Parser.Incremental.parse_pattern
 
 
 

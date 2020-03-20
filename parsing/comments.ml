@@ -7,7 +7,7 @@ let comments = ref []
 let init () =
   comments :=
     List.filter (fun (s, _) -> s <> "" && s.[0] <> '*')
-      (Source_lexer.comments ())
+      (Lexer.comments ())
 
 let column pos = pos.Lexing.pos_cnum - pos.pos_bol
 

@@ -27,7 +27,7 @@ type t =
   | While
   | Done
 
-let to_parser_token t : Source_parsing.Source_parser.token =
+let to_parser_token t : Source_parsing.Parser.token =
   match t with
   | Colon -> COLON
   | Qmark -> QUESTION

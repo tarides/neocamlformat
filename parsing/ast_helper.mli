@@ -21,13 +21,13 @@
 *)
 
 open Asttypes
-open Doc_strings
+open Docstrings
 open Source_tree
 
 type 'a with_loc = 'a Location.loc
 type loc = Location.t
 
-type lid = Long_ident.t
+type lid = Longident.t
 type str = string with_loc
 type str_opt = string option with_loc
 type attrs = attribute list

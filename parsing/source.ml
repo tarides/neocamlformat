@@ -23,11 +23,11 @@ let lexbuf_set_pos lexbuf pos =
 let loc_of_token_between ~start ~stop token =
   let sub = source_between start stop in
   let lexbuf = Lexing.from_string sub in
-  Source_lexer.init ();
+  Lexer.init ();
   lexbuf_set_pos lexbuf start;
   let rec loop () =
-    match Source_lexer.token lexbuf with
-    | Source_parser.EOF -> raise Not_found
+    match Lexer.token lexbuf with
+    | Parser.EOF -> raise Not_found
     | tok when tok = token -> Location.curr lexbuf
     | _ -> loop ()
   in

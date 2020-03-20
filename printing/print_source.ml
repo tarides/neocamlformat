@@ -31,9 +31,11 @@ module Ident_class = struct
 end
 
 module Longident : sig
-  val pp : Long_ident.t -> document
+  include module type of struct include Longident end
+
+  val pp : t -> document
 end = struct
-  open Long_ident
+  include Longident
 
   let pp_ident s =
     match Ident_class.classify s with
@@ -503,7 +505,7 @@ end = struct
     let field = Longident.pp lid in
     group (
       match pat.ppat_desc with
-      | Ppat_var v when (Long_ident.last lid).txt = v.txt -> field
+      | Ppat_var v when (Longident.last lid).txt = v.txt -> field
       | _ ->
         let pat = pp ps pat in
         let equals = token_between field pat Equals in
@@ -888,7 +890,7 @@ end = struct
     let fld = Longident.pp lid in
     group (
       match exp.pexp_desc with
-      | Pexp_ident Lident id when (Long_ident.last lid).txt = id.txt -> fld
+      | Pexp_ident Lident id when (Longident.last lid).txt = id.txt -> fld
       | _ ->
         let exp = pp [ Printing_stack.Record_field ] exp in
         let equals = token_between fld exp Equals in

@@ -22,14 +22,14 @@ let fmt_file fn =
   let b = Lexing.from_string source in
   let doc =
     if Filename.check_suffix fn "mli" then
-      match Parse_source.interface b with
+      match Parse.interface b with
       | [] -> PPrint.empty
       | si :: sg ->
         let _ = Comments.init () in
         let doc = Print_source.Signature.pp_nonempty si sg in
         doc.txt
     else
-      match Parse_source.implementation b with
+      match Parse.implementation b with
       | [] -> PPrint.empty
       | si :: st ->
         let _ = Comments.init () in

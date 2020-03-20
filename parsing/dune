@@ -3,7 +3,7 @@
  (libraries menhirLib)
  (modules_without_implementation asttypes source_tree))
 
-(ocamllex source_lexer)
+(ocamllex lexer)
 (menhir
-  (modules source_parser)
+  (modules parser)
   (flags --table))

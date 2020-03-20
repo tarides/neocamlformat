@@ -12,7 +12,7 @@ let pp_core_type : (Printing_stack.t -> core_type -> t) ref =
   ref (fun _ _ -> assert false)
 let attach_attributes : (t -> attributes -> t) ref =
   ref (fun _ _ -> assert false)
-let pp_longident : (Long_ident.t -> t) ref =
+let pp_longident : (Longident.t -> t) ref =
   ref (fun _ -> assert false)
 
 (******************************************************)

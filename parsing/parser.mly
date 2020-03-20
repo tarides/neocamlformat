@@ -21,11 +21,11 @@
 module Source_parsing = struct end
 
 open Asttypes
-open Long_ident
+open Longident
 open Source_tree
-open Source_ast_helper
-open Doc_strings
-open Doc_strings.WithMenhir
+open Ast_helper
+open Docstrings
+open Docstrings.WithMenhir
 
 let mkloc = Location.mkloc
 let mknoloc = Location.mknoloc
@@ -221,10 +221,10 @@ let bigarray_set ~loc arr arg newval =
   mkexp ~loc (Pexp_bigarray_set (arr, bigarray_untuplify arg, newval))
 
 let exp_of_longident ~loc lid =
-  mkexp ~loc (Pexp_ident (Lident (Long_ident.last lid)))
+  mkexp ~loc (Pexp_ident (Lident (Longident.last lid)))
 
-let loc_last (id : Long_ident.t) : string Location.loc =
-  Long_ident.last id
+let loc_last (id : Longident.t) : string Location.loc =
+  Longident.last id
 
 let exp_of_label ~loc lbl =
   mkexp ~loc (Pexp_ident (Lident lbl))
@@ -572,7 +572,7 @@ let mk_directive ~loc name arg =
 %token WHILE
 %token WITH
 %token <string * Location.t> COMMENT
-%token <Doc_strings.docstring> DOCSTRING
+%token <Docstrings.docstring> DOCSTRING
 
 %token EOL
 

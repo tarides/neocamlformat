@@ -19,7 +19,7 @@
 [@@@ocaml.warning "-9"]
 
 open Lexing
-open Source_parser
+open Parser
 
 type error =
   | Illegal_character of char
@@ -242,7 +242,7 @@ let add_comment com =
 
 let add_docstring_comment ds =
   let com =
-    ("*" ^ Doc_strings.docstring_body ds, Doc_strings.docstring_loc ds)
+    ("*" ^ Docstrings.docstring_body ds, Docstrings.docstring_loc ds)
   in
     add_comment com
 
@@ -423,7 +423,7 @@ rule token = parse
   | "(**"
       { let s, loc = with_comment_buffer comment lexbuf in
         if !handle_docstrings then
-          DOCSTRING (Doc_strings.docstring s loc)
+          DOCSTRING (Docstrings.docstring s loc)
         else
           COMMENT ("*" ^ s, loc)
       }
@@ -442,7 +442,7 @@ rule token = parse
   | "(*" (('*'*) as stars) "*)"
       { if !handle_docstrings && stars="" then
          (* (**) is an empty docstring *)
-          DOCSTRING(Doc_strings.docstring "" (Location.curr lexbuf))
+          DOCSTRING(Docstrings.docstring "" (Location.curr lexbuf))
         else
           COMMENT (stars, Location.curr lexbuf) }
   | "*)"
@@ -720,12 +720,12 @@ and skip_hash_bang = parse
         (* There have been docstrings, some of which were
            preceded by a blank line *)
 
-  and docstring = Doc_strings.docstring
+  and docstring = Docstrings.docstring
 
   let token lexbuf =
     let post_pos = lexeme_end_p lexbuf in
     let attach lines docs pre_pos =
-      let open Doc_strings in
+      let open Docstrings in
         match docs, lines with
         | Initial, _ -> ()
         | After a, (NoLine | NewLine) ->
@@ -769,10 +769,10 @@ and skip_hash_bang = parse
           in
           loop lines' docs lexbuf
       | DOCSTRING doc ->
-          Doc_strings.register doc;
+          Docstrings.register doc;
           add_docstring_comment doc;
           let docs' =
-            if Doc_strings.docstring_body doc = "/*" then
+            if Docstrings.docstring_body doc = "/*" then
               match docs with
               | Initial -> Before([], [doc], [])
               | After a -> Before (a, [doc], [])
