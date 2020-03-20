@@ -4,6 +4,11 @@ explore different design choices:
   `Parsetree`
 - use of `PPrint` instead of `Format`
 
+It currently lacks all the nice infrastructure of OCamlformat:
+- a testsuite
+- a check that the result parses to the same Parsetree as the input
+- integration with odoc, and proper formatting of comments
+
 # Implementation details
 
 ## The surface AST, and the parser
@@ -11,12 +16,15 @@ explore different design choices:
 Started by taking a snapshot of OCaml's 4.10 parser and parsetree. And then
 reintroduce AST nodes for concrete syntaxes that were desugared by the parser.
 
-In the parser itself, I haven't changed any rule, only the semantic actions.  
-In the long run, this might be a bad idea.
+In the parser itself, my initial plan was to not change any rule, only the
+semantic actions. Eventually I had to give up on that, for somewhat
+disappointing reason: I'm storing more locations in the AST than the ocaml
+parser & parsetree do. I could have done so without modifying any rules, but the
+`mkrhs` were either getting in the way, or much more convenient to add...
 
-## The printing code
+It might still be worth it to revert back to the original plan (if possible).
 
-### Coding style
+## Coding style for the formatter
 
 There's a tension between:
 - very ad-hoc formatting code (ocamlformat's style), which gives a "pretty"
@@ -31,12 +39,64 @@ combinators, and … combine them.
 This of course doesn't always work, because some formatting decisions will
 depend on a collection of elements. But that's the spirit.
 
-### Comments placement
+For an illustration of what I mean by this, look at the `Application` module in
+[`printing/print_source.ml`](./printing/print_source.ml).
 
-**TODO!**
+## Comments placement
 
-The ideas floating around:
-- adding them in the AST (reason does that I believe)
-- fetching them explicitely, using locations during printing
-- attach locations to PPrint's documents, and fetching them implicitely when
-  catenating docs.
+#### The compiler, OCamlformat, Reason
+
+Currently, OCaml's parser explicitely fetches docstrings and attaches them to
+nodes when building the AST (i.e. in the semantic actions, not in the rules).
+OCamlformat explicitely fetches comments and includes them in the formatting
+queue while formatting the AST.
+
+This sort of approach seems tedious, error-prone (it's easy to forget / misplace
+comments) and makes the code harder to read (IMHO).
+
+I have heard that reason inserts comment in its AST, so there should be no
+special logic for them in the printer?
+But I haven't seen the code which does that; I expect it works similarly to the
+approach described above (and has the same drawbacks).
+
+Furthermore, this last approach seems to restrict positions in which comments
+can appear, which I find undesirable: comments are not just a way to attach
+documentation to code, they are also used to temporarily disable bits of code.
+For that particular use, it can be annoying if your disabled bit of code gets
+moved away: you'll have to manually move it back when uncommenting it.
+
+#### Approach taken here
+
+For the record: modulo the very minor annoyance just mentioned (the moving of
+commented out code), both approaches seems to be giving good results!  
+Nevertheless, I find that they make the (formatting) code harder to work with,
+so I decided to try a different way of doing things.
+
+The way comments are inserted in the document in this reimplementation is
+completely implicit: you will not find anything mentioning comments in [the AST
+formatter](./printing/print_source.ml).
+
+This is possible because PPrint works by concatenating documents, instead of
+pushing printing commands into a queue. If that doesn't mean much to you, I
+encourage you to read
+[this small introduction](http://parce-q.eu/~trefis/pprint-doc/pprint/index.html#taste).
+
+So if you decide to restrict atomic documents to source tokens, then
+concatenation becomes the perfect time to insert comments! And the formatting
+code doesn't even have to care about comments at all.
+
+I added [a small wrapper around PPrint](./printing/document.ml), so that
+documents are now annotated with a location. And the concatenation operation now
+looks at the location of both documents, fetches all the comments that appear
+between these two location, and inserts them in the middle.
+
+If you have a location for all the tokens (which is relatively easy to get as
+OCamlformat already proved), then you can place all the comments in the exact
+same relative position as in the source (i.e. between the same two tokens).
+
+*Caveat:* this works well for "separating" tokens, i.e. keywords (`let`, `with`,
+`in`, ...) and punctuation (`.`, `;`, `::`, ...) but the model breaks down for
+parentheses. That's because we will sometimes synthesize parentheses tokens
+which weren't present in the source.
+Currently this means that edge comments will always appear outside of
+synthesized parentheses, which is a bit unfortunate. Ideas welcome!
