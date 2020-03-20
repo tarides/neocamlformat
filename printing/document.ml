@@ -52,97 +52,15 @@ let char ~loc c =
 let underscore ~loc : t=
   { txt = underscore; loc }
 
-type doc_token =
-  | Colon
-  | Qmark
-  | Equals
-  | Coerce
-  | In
-  | When
-  | Rarrow
-  | Larrow
-  | Do
-  | Dot
-  | Dotdot
-  | Of
-  | As
-  | Cons
-  | Pipe
-  | With
-  | Then
-  | Else
-  | Semi
-  | To
-  | Downto
-  | Sharp
-  | Colonequals
-  | Plusequals
-  | Star
-
-let token_of_doc_token t : Source_parsing.Source_parser.token =
-  match t with
-  | Colon -> COLON
-  | Qmark -> QUESTION
-  | Equals -> EQUAL
-  | Coerce -> COLONGREATER
-  | In -> IN
-  | When -> WHEN
-  | Rarrow -> MINUSGREATER
-  | Larrow -> LESSMINUS
-  | Do -> DO
-  | Dot -> DOT
-  | Dotdot -> DOTDOT
-  | Of -> OF
-  | As -> AS
-  | Cons -> COLONCOLON
-  | Pipe -> BAR
-  | With -> WITH
-  | Then -> THEN
-  | Else -> ELSE
-  | Semi -> SEMI
-  | To -> TO
-  | Downto -> DOWNTO
-  | Sharp -> HASH
-  | Colonequals -> COLONEQUAL
-  | Plusequals -> PLUSEQ
-  | Star -> STAR
-
-let string_of_token = function
-  | Colon -> ":"
-  | Qmark -> "?"
-  | Equals -> "="
-  | Coerce -> ":>"
-  | In -> "in"
-  | When -> "when"
-  | Rarrow -> "->"
-  | Larrow -> "<-"
-  | Do -> "do"
-  | Dot -> "."
-  | Dotdot -> ".."
-  | Of -> "of"
-  | As -> "as"
-  | Cons -> "::"
-  | Pipe -> "|"
-  | With -> "with"
-  | Then -> "then"
-  | Else -> "else"
-  | Semi -> ";"
-  | To -> "to"
-  | Downto -> "downto"
-  | Sharp -> "#"
-  | Colonequals -> ":="
-  | Plusequals -> "+="
-  | Star -> "*"
-
 let token ~loc t =
-  string ~loc (string_of_token t)
+  string ~loc (Tokens.to_string t)
 
 let token_between x1 x2 tok =
   let loc =
     Source_parsing.Source.loc_of_token_between 
       ~start:x1.loc.loc_end
       ~stop:x2.loc.loc_start
-      (token_of_doc_token tok)
+      (Tokens.to_parser_token tok)
   in
   token ~loc tok
 

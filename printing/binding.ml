@@ -22,7 +22,7 @@ let attach_annot doc ~sep annot =
     let sep = token_between doc annot sep in
     group (doc ^^ nest 2 (break_before sep)) ^^ nest 2 (break_before annot)
 
-let pp ?(binder=Equals) ~keyword { lhs; params; constr; coerce; rhs } =
+let pp ?(binder=Tokens.Equals) ~keyword { lhs; params; constr; coerce; rhs } =
   let pre = group (keyword ^^ nest 2 (break_before lhs)) in
   let params = pp_params params in
   let with_constraint = attach_annot params ~sep:Colon constr in
