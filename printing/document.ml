@@ -55,14 +55,21 @@ let underscore ~loc : t=
 let token ~loc t =
   string ~loc (Tokens.to_string t)
 
-let token_between x1 x2 tok =
+let token_between_locs start stop tok =
   let loc =
-    Source_parsing.Source.loc_of_token_between 
-      ~start:x1.loc.loc_end
-      ~stop:x2.loc.loc_start
+    Source_parsing.Source.loc_of_token_between ~start ~stop
       (Tokens.to_parser_token tok)
   in
   token ~loc tok
+
+let token_between x1 x2 tok =
+  token_between_locs x1.loc.loc_end x2.loc.loc_start tok
+
+let token_before ~start doc tok =
+  token_between_locs start doc.loc.loc_start tok
+
+let token_after ~stop doc tok =
+  token_between_locs doc.loc.loc_end stop tok
 
 (* FIXME: do I really want to keep this?
    Currently it's being used for:

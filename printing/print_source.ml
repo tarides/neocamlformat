@@ -974,17 +974,16 @@ end = struct
     let cond = pp [] cond in
     let body = pp [] body in
     let do_ = token_between cond body Do in
-    (* FIXME: these locations are not ok. *)
-    let loc_start = { loc with loc_end = cond.loc.loc_start } in
-    let loc_end = { loc with loc_start = body.loc.loc_end } in
+    let while_ = token_before ~start:loc.loc_start cond While in
+    let done_ = token_after body ~stop:loc.loc_end Done in
     group (
       group (
-        string ~loc:loc_start "while" ^^
+        while_ ^^
         nest 2 (break_before cond) ^/^
         do_
       ) ^^
       nest 2 (break_before body) ^/^
-      string ~loc:loc_end "done"
+      done_
     ) 
 
   and pp_for ~(loc:Location.t) it start stop dir body =

@@ -24,6 +24,8 @@ type t =
   | Colonequals
   | Plusequals
   | Star
+  | While
+  | Done
 
 let to_parser_token t : Source_parsing.Source_parser.token =
   match t with
@@ -52,6 +54,8 @@ let to_parser_token t : Source_parsing.Source_parser.token =
   | Colonequals -> COLONEQUAL
   | Plusequals -> PLUSEQ
   | Star -> STAR
+  | While -> WHILE
+  | Done -> DONE
 
 let to_string = function
   | Colon -> ":"
@@ -79,3 +83,5 @@ let to_string = function
   | Colonequals -> ":="
   | Plusequals -> "+="
   | Star -> "*"
+  | While -> "while"
+  | Done -> "done"
