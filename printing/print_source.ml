@@ -168,6 +168,7 @@ end = struct
     attach Attached_to_item doc
 
   let () = Constructor_decl.attach_attributes := attach_to_item
+  let () = Polymorphic_variant.attach_attributes := attach_to_item
 
   let attach_to_top_item doc =
     attach Attached_to_structure_item doc
@@ -255,7 +256,8 @@ end = struct
     | Ptyp_object (fields, closed) -> pp_object ~loc fields closed
     | Ptyp_class (name, args) -> pp_class ps name args
     | Ptyp_alias (ct, alias) -> pp_alias ps ct alias
-    | Ptyp_variant (fields, closed, present) -> pp_variant fields closed present
+    | Ptyp_variant (fields, closed, present) ->
+      Polymorphic_variant.pp_row ~loc fields closed present
     | Ptyp_poly (vars, ct) -> pp_poly vars ct
     | Ptyp_package pkg -> pp_package ~loc pkg
     | Ptyp_extension ext -> Extension.pp Item ext
@@ -323,31 +325,6 @@ end = struct
     let doc = ct ^/^ as_ ^/^ alias in
     Printing_stack.parenthesize ps doc
 
-  and pp_variant fields closed present =
-        (* [ `A|`B ]         (flag = Closed; labels = None)
-           [> `A|`B ]        (flag = Open;   labels = None)
-           [< `A|`B ]        (flag = Closed; labels = Some [])
-           [< `A|`B > `X `Y ](flag = Closed; labels = Some ["X";"Y"])
-         *)
-    let le_caca =
-      match closed, present with
-      | Closed, None ->
-        (* FIXME: this will do the breaking randomly. Take inspiration from what
-           was done in odoc. *)
-        let sep = PPrint.(break 1 ^^ group (bar ^^ break 1)) in
-        hang 0 (
-          separate_map sep ~f:Row_field.pp (List.hd fields) (List.tl fields)
-        )
-      | _, _ ->
-        (* FIXME *)
-        assert false
-    in
-    group (
-      brackets (
-        le_caca
-      )
-    )
-
   and pp_poly vars ct =
     (* FIXME: doesn't look right. *)
     let ct = pp [] ct in
@@ -365,6 +342,7 @@ end = struct
     parens (module_ ^/^ Package_type.pp pkg)
 
   let () = Constructor_decl.pp_core_type := pp
+  let () = Polymorphic_variant.pp_core_type := pp
 end
 
 and Object_field : sig
@@ -406,36 +384,6 @@ end = struct
       in
       let sep = PPrint.(break 1 ^^ !^"with" ^/^ !^"type") in
       group (concat lid constrs ~sep)
-end
-
-and Row_field : sig
-  val pp : row_field -> document
-end = struct
-  let pp_params p ps =
-    let sep = PPrint.(break 1 ^^ ampersand ^^ break 1) in
-    separate_map sep ~f:(Core_type.pp [ Row_field ]) p ps
-
-  let pp_desc = function
-    | Rinherit ct -> Core_type.pp [] ct
-    | Rtag (tag, has_empty_constr, []) ->
-      assert (not has_empty_constr);
-      Polymorphic_variant_tag.pp tag
-    | Rtag (tag, has_empty_constr, p :: ps) ->
-      let tag = Polymorphic_variant_tag.pp tag in
-      let params = pp_params p ps in
-      let of_params =
-        let of_ = token_between tag params Of in
-        if has_empty_constr then
-          let sep = PPrint.(break 1 ^^ ampersand ^^ break 1) in
-          concat of_ ~sep params
-        else
-          of_ ^/^ params
-      in
-      tag ^/^ of_params
-
-  let pp { prf_desc; prf_attributes; _ } =
-    let desc = pp_desc prf_desc in
-    Attribute.attach_to_item desc prf_attributes
 end
 
 and Pattern : sig

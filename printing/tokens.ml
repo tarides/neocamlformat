@@ -26,6 +26,11 @@ type t =
   | Star
   | While
   | Done
+  | Rangle
+  | Lbracket
+  | Open_variant
+  | Closed_variant
+  | Rbracket
 
 let to_parser_token t : Source_parsing.Parser.token =
   match t with
@@ -56,6 +61,11 @@ let to_parser_token t : Source_parsing.Parser.token =
   | Star -> STAR
   | While -> WHILE
   | Done -> DONE
+  | Rangle -> GREATER
+  | Lbracket -> LBRACKET
+  | Open_variant -> LBRACKETGREATER
+  | Closed_variant -> LBRACKETLESS
+  | Rbracket -> RBRACKET
 
 let to_string = function
   | Colon -> ":"
@@ -85,3 +95,8 @@ let to_string = function
   | Star -> "*"
   | While -> "while"
   | Done -> "done"
+  | Rangle -> ">"
+  | Lbracket -> "["
+  | Rbracket -> "]"
+  | Open_variant -> "[>"
+  | Closed_variant -> "[<"
