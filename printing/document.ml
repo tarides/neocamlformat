@@ -214,7 +214,7 @@ let flow sep first rest =
   flow_map sep (fun x -> x) first rest
 
 module List_like = struct
-  let docked_fields x xs =
+  let wrapped_fields x xs =
     let fmt x = nest 2 (group (break_before x)) in
     List.fold_left
       (fun acc elt ->
@@ -224,8 +224,8 @@ module List_like = struct
       (fmt x) 
       xs
 
-  let docked ~left ~right x xs =
-    let fields = docked_fields x xs in
+  let wrapped ~left ~right x xs =
+    let fields = wrapped_fields x xs in
     enclose ~before:left ~after:PPrint.(group (break 1 ^^ right))
       fields
 
@@ -247,11 +247,11 @@ module List_like = struct
       { txt = PPrint.(left ^/^ cmts ^^ right); loc }
     | x :: xs ->
       match (formatting : Options.Wrappable.t) with
-      | Wrap -> docked ~left ~right x xs
+      | Wrap -> wrapped ~left ~right x xs
       | Fit_or_vertical -> fit_or_vertical ~left ~right x xs
 
   let pp_fields ~formatting x xs =
     match (formatting : Options.Wrappable.t) with
-    | Wrap -> docked_fields x xs
+    | Wrap -> wrapped_fields x xs
     | Fit_or_vertical -> fit_or_vertical_fields x xs
 end
