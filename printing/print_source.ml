@@ -271,9 +271,15 @@ end = struct
       let colon = token_between lbl ct Colon in
       lbl ^^ colon ^^ break_before ~spaces:0 ct
     | Optional l ->
-      let opt_label = string ~loc:l.loc ("?" ^ l.txt) in
-      let colon = token_between opt_label ct Colon in
-      opt_label ^^ colon ^^ break_before ~spaces:0 ct
+      match token_before ~start:l.loc.loc_end ct Colon with
+      | colon ->
+        (* Form with 3 tokens. Ideally, '?' would also be fetched and
+           concatenated. *)
+        let opt_label = string ~loc:l.loc ("?" ^ l.txt) in
+        opt_label ^^ colon ^^ break_before ~spaces:0 ct
+      | exception (Not_found | Assert_failure _ (* gloups. *))  ->
+        let opt_label = string ~loc:l.loc ("?" ^ l.txt ^ ":") in
+        opt_label ^^ break_before ~spaces:0 ct
 
   and pp_arrow ps params res =
     let params =

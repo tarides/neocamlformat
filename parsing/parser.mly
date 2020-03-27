@@ -2871,7 +2871,7 @@ sig_exception_declaration:
     { let args, res = args_res in
       let loc = make_loc $sloc in
       let docs = symbol_docs $sloc in
-      Te.mk_exception ~attrs
+      Te.mk_exception ~loc ~attrs
         (Te.decl id ~args ?res ~attrs:(attrs1 @ attrs2) ~loc ~docs)
       , ext }
 ;
@@ -3089,7 +3089,7 @@ function_type:
     { $1 }
 ;
 %inline arg_label:
-  | label = mkrhs(optlabel)
+  | label = optlabel
       { Optional label }
   | label = mkrhs(LIDENT) COLON
       { Labelled label }
@@ -3497,8 +3497,8 @@ additive:
   | PLUSDOT                                     { "+." }
 ;
 optlabel:
-   | OPTLABEL                                   { $1 }
-   | QUESTION LIDENT COLON                      { $2 }
+   | mkrhs(OPTLABEL)                                   { $1 }
+   | QUESTION mkrhs(LIDENT) COLON                      { $2 }
 ;
 
 /* Attributes and extensions */
