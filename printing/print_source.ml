@@ -404,7 +404,8 @@ end = struct
     let pat = pp ps pat in
     let alias = str alias in
     let as_ = token_between pat alias As in
-    nest 2 (pat ^/^ as_ ^/^ alias)
+    let doc = nest 2 (pat ^/^ as_ ^/^ alias) in
+    Printing_stack.parenthesize ps doc
 
   and pp_interval c1 c2 =
     let c1 = Constant.pp ~loc:c1.loc c1.txt in
