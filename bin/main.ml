@@ -13,15 +13,16 @@ let read_file fn =
   try loop ()
   with End_of_file -> Buffer.contents buffer
 
-let fmt_file fn =
+let fmt_file ~width fn =
   let open Source_parsing in
   let open Printing in
   let source = read_file fn in
   Location.input_name := fn;
   Source.source := source;
   let b = Lexing.from_string source in
+  let intf = Filename.check_suffix fn "mli" in
   let doc =
-    if Filename.check_suffix fn "mli" then
+    if intf then
       match Parse.interface b with
       | [] -> PPrint.empty
       | si :: sg ->
@@ -37,7 +38,11 @@ let fmt_file fn =
         doc.txt
   in
   Comments.report_remaining ();
-  doc
+  let buf = Buffer.create (String.length source) in
+  PPrint.ToBuffer.pretty 10. width buf doc;
+  let fmted = Buffer.to_bytes buf |> Bytes.to_string in
+  assert (Ast_checker.check_same_ast ~impl:(not intf) source fmted);
+  fmted
 
 open Cmdliner
 
@@ -56,8 +61,8 @@ let cmd =
   and+ files = Arg.(value & pos_all file [] & info ~doc:"files to format" [])
   in
   List.iter (fun fn ->
-    let doc = fmt_file fn in
-    PPrint.ToChannel.pretty 10. width stdout doc;
+    let fmted = fmt_file ~width fn in
+    print_string fmted;
     print_newline ();
   ) files;
   Ok (flush stdout)

@@ -1,0 +1,3 @@
+(library
+ (name ast_checker)
+ (libraries compiler-libs.common))
