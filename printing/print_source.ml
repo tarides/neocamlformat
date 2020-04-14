@@ -99,6 +99,9 @@ module rec Attribute : sig
   val attach : kind -> document -> attributes -> document
   val attach_to_item : document -> attributes -> document
   val attach_to_top_item : document -> attributes -> document
+
+  val extract_text : attributes -> attributes * attributes
+  val prepend_text : attributes -> document -> document list
 end = struct
   type kind =
     | Free_floating
@@ -160,7 +163,7 @@ end = struct
     | [] -> doc
     | attr :: attrs ->
       group (
-        prefix ~indent:2 ~spaces:1 doc 
+        prefix ~indent:2 ~spaces:1 doc
           (separate_map (PPrint.break 0) ~f:(pp kind) attr attrs)
       )
 
@@ -172,6 +175,19 @@ end = struct
 
   let attach_to_top_item doc =
     attach Attached_to_structure_item doc
+
+  let extract_text =
+    List.partition (fun { attr_name; _ } -> attr_name.txt = "ocaml.text")
+
+  let prepend_text text doc =
+    match text with
+    | [] -> [ doc ]
+    | text :: texts ->
+      let texts =
+        separate_map PPrint.hardline ~f:(Attribute.pp Free_floating)
+          text texts
+      in
+      [ texts; doc ]
 end
 
 and Extension : sig
@@ -452,7 +468,7 @@ end = struct
     let tag = Polymorphic_variant_tag.pp tag in
     match arg_opt with
     | None -> tag
-    | Some p -> 
+    | Some p ->
       let arg = pp ps p in
       Printing_stack.parenthesize ps (tag ^/^ arg)
 
@@ -685,9 +701,15 @@ end = struct
 
   and pp_let ps rf vbs body =
     let vbs =
-      List.mapi (fun i vb ->
+      let i = ref 0 in
+      List.concat_map (fun vb ->
+        let text, vb =
+          let text, attrs = Attribute.extract_text vb.pvb_attributes in
+          text, { vb with pvb_attributes = attrs }
+        in
         let binding = Value_binding.pp Attached_to_item vb in
-        let keyword = if i = 0 then "let" ^ rec_flag rf else "and" in
+        let keyword = if !i = 0 then "let" ^ rec_flag rf else "and" in
+        incr i;
         let keyword =
           (* FIXME: pvb_loc should be pvb_start_loc *)
           let loc =
@@ -695,7 +717,8 @@ end = struct
           in
           string ~loc keyword
         in
-        Binding.pp ~keyword binding
+        let binding = Binding.pp ~keyword binding in
+        Attribute.prepend_text text binding
       ) vbs
     in
     let vbs = separate hardline (List.hd vbs) (List.tl vbs) in
@@ -777,7 +800,7 @@ end = struct
           with_
         ) ^^ cases
       in
-      Printing_stack.parenthesize ps 
+      Printing_stack.parenthesize ps
         ~situations:!Options.Match.parenthesing_situations
         ~style:!Options.Match.parens_style
         doc
@@ -903,7 +926,7 @@ end = struct
         !^"if" ++
         nest 2 (break_before cond) ^/^
         then_
-      ) ^^ 
+      ) ^^
       nest 2 (break_before then_branch)
     in
     let else_ =
@@ -941,7 +964,7 @@ end = struct
       ) ^^
       nest 2 (break_before body) ^/^
       done_
-    ) 
+    )
 
   and pp_for ~(loc:Location.t) it start stop dir body =
     let it = Pattern.pp [ Printing_stack.Value_binding ] it in
@@ -1028,7 +1051,7 @@ end = struct
   and pp_letmodule ~loc ps name (params, typ, mexp) expr =
     let binding = Module_binding.pp_raw name params typ mexp [] in
     let bind =
-      let keyword = 
+      let keyword =
         let loc = { loc with loc_end = name.loc.loc_start } in
         string ~loc "let module"
       in
@@ -1048,7 +1071,7 @@ end = struct
       let ps = if Printing_stack.will_parenthesize ps then [] else List.tl ps in
       pp ps exp
     in
-    let keyword = 
+    let keyword =
       let loc = { loc with loc_end = exn.loc.loc_start } in
       string ~loc "let exception"
     in
@@ -1062,7 +1085,7 @@ end = struct
 
   and pp_assert ~(loc:Location.t) ps exp =
     let exp = pp ps exp in
-    let assert_ = 
+    let assert_ =
       let loc = { loc with loc_end = exp.loc.loc_start } in
       string ~loc "assert"
     in
@@ -1071,7 +1094,7 @@ end = struct
 
   and pp_lazy ~(loc:Location.t) ps exp =
     let exp = pp ps exp in
-    let lazy_ = 
+    let lazy_ =
       let loc = { loc with loc_end = exp.loc.loc_start } in
       string ~loc "lazy"
     in
@@ -1117,7 +1140,7 @@ end = struct
       pp ps exp
     in
     let in_ = token_between od exp In in
-    let let_ = 
+    let let_ =
       let loc = { loc with loc_end = od.loc.loc_start } in
       string ~loc "let"
     in
@@ -1149,7 +1172,7 @@ end = struct
     | Ppat_constraint ({ ppat_desc=Ppat_var v; _ }, ct)
       when lbl.txt = v.txt ->
       punned_label_with_annot prefix_token lbl ct
-    | _ -> 
+    | _ ->
       let pat = Pattern.pp fresh_stack pat in
       let colon = token_between pre pat Colon in
       pre ^^ colon ^^ pat
@@ -1426,9 +1449,15 @@ end = struct
 
   let pp_value rf vbs =
     let vbs =
-      List.mapi (fun i vb ->
+      let i = ref 0 in
+      List.concat_map (fun vb ->
+        let text, vb =
+          let text, attrs = Attribute.extract_text vb.pvb_attributes in
+          text, { vb with pvb_attributes = attrs }
+        in
         let binding = Value_binding.pp Attached_to_structure_item vb in
-        let keyword = if i = 0 then "let" ^ rec_flag rf else "and" in
+        let keyword = if !i = 0 then "let" ^ rec_flag rf else "and" in
+        incr i;
         let keyword =
           (* FIXME: pvb_loc should be pvb_start_loc *)
           let loc =
@@ -1436,7 +1465,8 @@ end = struct
           in
           string ~loc keyword
         in
-        Binding.pp ~keyword binding
+        let binding = Binding.pp ~keyword binding in
+        Attribute.prepend_text text binding
       ) vbs
     in
     separate (twice hardline) (List.hd vbs) (List.tl vbs)
@@ -1450,13 +1480,20 @@ end = struct
 
   let pp_recmodule mbs =
     let mbs =
-      List.mapi (fun i mb ->
-        let keyword = if i = 0 then "module rec" else "and" in
+      let i = ref 0 in
+      List.concat_map (fun mb ->
+        let text, mb =
+          let text, attrs = Attribute.extract_text mb.pmb_attributes in
+          text, { mb with pmb_attributes = attrs }
+        in
+        let keyword = if !i = 0 then "module rec" else "and" in
+        incr i;
         let keyword =
           let loc = { mb.pmb_loc with loc_end = mb.pmb_name.loc.loc_start } in
           string ~loc keyword
         in
-        Binding.Module.pp ~keyword (Module_binding.pp mb)
+        let binding = Binding.Module.pp ~keyword (Module_binding.pp mb) in
+        Attribute.prepend_text text binding
       ) mbs
     in
     separate (twice hardline) (List.hd mbs) (List.tl mbs)
@@ -1467,7 +1504,7 @@ end = struct
       let loc = { pincl_loc with loc_end = incl.loc.loc_start } in
       string ~loc "include"
     in
-    Attribute.attach_to_top_item 
+    Attribute.attach_to_top_item
       (group (kw ^/^ incl))
       pincl_attributes
 
@@ -1509,7 +1546,7 @@ end = struct
       let loc = { pincl_loc with loc_end = incl.loc.loc_start } in
       string ~loc "include"
     in
-    Attribute.attach_to_top_item 
+    Attribute.attach_to_top_item
       (group (kw ^/^ incl))
       pincl_attributes
 
@@ -1647,7 +1684,7 @@ end = struct
   let record lbl_decls =
     (* FIXME: loc won't be use since the list is nonempty *)
     let fields = List.map label_declaration lbl_decls in
-    List_like.pp ~loc:Location.none 
+    List_like.pp ~loc:Location.none
       ~formatting:!Options.Record.expression
       ~left:lbrace
       ~right:rbrace
@@ -1672,7 +1709,7 @@ end = struct
     | Ptype_abstract -> assert false
     | Ptype_open loc -> string ~loc ".."
     | Ptype_record lbl_decls -> record lbl_decls
-    | Ptype_variant cstrs -> variant cstrs 
+    | Ptype_variant cstrs -> variant cstrs
 
   (* TODO: constraints *)
   let pp { ptype_name; ptype_params; ptype_cstrs = _; ptype_kind; ptype_private;
@@ -1712,28 +1749,42 @@ end = struct
 
   let pp_decl rf decls =
     let decls =
-      List.mapi (fun i decl ->
+      let i = ref 0 in
+      List.concat_map (fun decl ->
+        let text, decl =
+          let text, attrs = Attribute.extract_text decl.ptype_attributes in
+          text, { decl with ptype_attributes = attrs }
+        in
         let lhs, rhs = pp decl in
-        let keyword = if i = 0 then "type" ^ rec_flag rf else "and" in
+        let keyword = if !i = 0 then "type" ^ rec_flag rf else "and" in
+        incr i;
         let keyword =
           let loc = { decl.ptype_loc with loc_end = lhs.loc.loc_start } in
           string ~loc keyword
         in
-        Binding.pp_simple ~keyword lhs rhs
+        let binding = Binding.pp_simple ~keyword lhs rhs in
+        Attribute.prepend_text text binding
       ) decls
     in
     separate (twice hardline) (List.hd decls) (List.tl decls)
 
   let pp_subst decls =
     let decls =
-      List.mapi (fun i decl ->
+      let i = ref 0 in
+      List.concat_map (fun decl ->
+        let text, decl =
+          let text, attrs = Attribute.extract_text decl.ptype_attributes in
+          text, { decl with ptype_attributes = attrs }
+        in
         let lhs, rhs = pp decl in
-        let keyword = if i = 0 then "type" else "and" in
+        let keyword = if !i = 0 then "type" else "and" in
+        incr i;
         let keyword =
           let loc = { decl.ptype_loc with loc_end = lhs.loc.loc_start } in
           string ~loc keyword
         in
-        Binding.pp_simple ~binder:Colonequals ~keyword lhs rhs
+        let binding = Binding.pp_simple ~binder:Colonequals ~keyword lhs rhs in
+        Attribute.prepend_text text binding
       ) decls
     in
     separate hardline (List.hd decls) (List.tl decls)
