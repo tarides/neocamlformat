@@ -1159,23 +1159,26 @@ end = struct
     [ Printing_stack.Value_binding ]
 
   let punned_label_with_annot prefix_token lbl ct =
-      let lbl = str lbl in
-      let ct = Core_type.pp [] ct in
-      let colon = token_between lbl ct Colon in
-      prefix_token ++ parens (lbl ^^ colon ^^ break_before ~spaces:0 ct)
+    let lbl = str lbl in
+    let ct = Core_type.pp [] ct in
+    let colon = token_between lbl ct Colon in
+    prefix_token ++ parens (lbl ^^ colon ^^ break_before ~spaces:0 ct)
 
   let build_simple_label prefix_token lbl pat =
-    let pre = prefix_token ++ str lbl in
     match pat.ppat_desc with
     | Ppat_var v when lbl.txt = v.txt ->
-      pre
+      prefix_token ++ str lbl
     | Ppat_constraint ({ ppat_desc=Ppat_var v; _ }, ct)
       when lbl.txt = v.txt ->
       punned_label_with_annot prefix_token lbl ct
     | _ ->
       let pat = Pattern.pp fresh_stack pat in
-      let colon = token_between pre pat Colon in
-      pre ^^ colon ^^ pat
+      let loc = lbl.loc in
+      match token_before ~start:loc.loc_end pat Colon with
+      | colon -> prefix_token ++ str lbl ^^ colon ^^ pat
+      | exception (Not_found | Assert_failure _ (* gloups. *)) ->
+        let label = string ~loc (lbl.txt ^ ":") in
+        prefix_token ++ label ^^ pat
 
   let build_optional_with_default lbl def pat =
     let pat_def =
