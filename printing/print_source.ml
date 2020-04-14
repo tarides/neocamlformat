@@ -116,7 +116,7 @@ end = struct
 
   let pp_attr kind attr_name attr_payload =
     let tag = string ~loc:attr_name.loc (ats kind ^ attr_name.txt) in
-    brackets (Payload.pp_after ~tag attr_payload)
+    group (brackets (Payload.pp_after ~tag attr_payload))
 
   (* :/ *)
   let pp_doc ~loc = function
