@@ -41,7 +41,14 @@ let fmt_file ~width fn =
   let buf = Buffer.create (String.length source) in
   PPrint.ToBuffer.pretty 10. width buf doc;
   let fmted = Buffer.to_bytes buf |> Bytes.to_string in
-  assert (Ast_checker.check_same_ast ~impl:(not intf) source fmted);
+  begin try
+      assert (Ast_checker.check_same_ast ~impl:(not intf) source fmted);
+    with e ->
+      let oc = open_out "/tmp/out.txt" in
+      output_string oc fmted;
+      close_out oc;
+      raise e
+  end;
   fmted
 
 open Cmdliner
