@@ -409,11 +409,11 @@ end = struct
 end
 
 and Pattern : sig
-  val pp : Printing_stack.t -> pattern -> document
+  val pp : ?indent:int -> Printing_stack.t -> pattern -> document
 end = struct
-  let rec pp ps { ppat_desc; ppat_attributes; ppat_loc; _ } =
+  let rec pp ?indent ps { ppat_desc; ppat_attributes; ppat_loc; _ } =
     let ps = Printing_stack.Pattern ppat_desc :: ps in
-    let desc = pp_desc ~loc:ppat_loc ps ppat_desc in
+    let desc = pp_desc ?indent ~loc:ppat_loc ps ppat_desc in
     Attribute.attach_to_item desc ppat_attributes
 
   and pp_alias ps pat alias =
@@ -433,7 +433,7 @@ end = struct
 
   and pp_tuple ps lst =
     let doc =
-      nest 2 (
+      group (
         separate_map PPrint.(comma ^^ break 1) ~f:(pp ps)
           (List.hd lst) (List.tl lst)
       )
@@ -502,12 +502,12 @@ end = struct
     List_like.pp ~loc ~formatting:Wrap
       ~left:PPrint.(lbracket ^^ bar) ~right:PPrint.(bar ^^ rbracket) pats
 
-  and pp_or ps p1 p2 =
+  and pp_or ~indent ps p1 p2 =
     let p1 =
       let ps = Printing_stack.top_is_op ~on_left:true "|" ps in
-      pp ps p1
+      pp ~indent ps p1
     in
-    let p2 = pp ps p2 in
+    let p2 = pp ~indent ps p2 in
     let pipe = token_between p1 p2 Pipe in
     let or_ = p1 ^/^ group (pipe ^/^ p2) in
     Printing_stack.parenthesize ps or_
@@ -547,27 +547,32 @@ end = struct
     let dot = token_between lid pat Dot in
     lid ^^ dot ^^ parens (break_before ~spaces:0 pat)
 
-  and pp_desc ~loc ps = function
-    | Ppat_any -> underscore ~loc
-    | Ppat_var v -> str v
-    | Ppat_alias (pat, alias) -> pp_alias ps pat alias
-    | Ppat_constant c -> Constant.pp ~loc c
-    | Ppat_interval (c1, c2) -> pp_interval c1 c2
-    | Ppat_tuple pats -> pp_tuple ps pats
-    | Ppat_construct (name, arg) -> pp_construct ps name arg
-    | Ppat_list_lit pats -> pp_list_literal ~loc pats
-    | Ppat_cons (hd, tl) -> pp_cons ps hd tl
-    | Ppat_variant (tag, arg) -> pp_variant ps tag arg
-    | Ppat_record (pats, closed) -> pp_record ~loc ps pats closed
-    | Ppat_array pats -> pp_array ~loc ps pats
-    | Ppat_or (p1, p2) -> pp_or ps p1 p2
-    | Ppat_constraint (p, ct) -> pp_constraint p ct
-    | Ppat_type pt -> pp_type pt
-    | Ppat_lazy p -> pp_lazy ~loc ps p
-    | Ppat_unpack (name, typ) -> pp_unpack name typ
-    | Ppat_exception p -> pp_exception ~loc ps p
-    | Ppat_extension ext -> Extension.pp Item ext
-    | Ppat_open (lid, p) -> pp_open lid p
+  and pp_desc ?(indent=0) ~loc ps = function
+    | Ppat_or (p1, p2) -> pp_or ~indent ps p1 p2
+    | otherwise ->
+      nest indent (
+        match otherwise with
+        | Ppat_or _ -> assert false
+        | Ppat_any -> underscore ~loc
+        | Ppat_var v -> str v
+        | Ppat_alias (pat, alias) -> pp_alias ps pat alias
+        | Ppat_constant c -> Constant.pp ~loc c
+        | Ppat_interval (c1, c2) -> pp_interval c1 c2
+        | Ppat_tuple pats -> pp_tuple ps pats
+        | Ppat_construct (name, arg) -> pp_construct ps name arg
+        | Ppat_list_lit pats -> pp_list_literal ~loc pats
+        | Ppat_cons (hd, tl) -> pp_cons ps hd tl
+        | Ppat_variant (tag, arg) -> pp_variant ps tag arg
+        | Ppat_record (pats, closed) -> pp_record ~loc ps pats closed
+        | Ppat_array pats -> pp_array ~loc ps pats
+        | Ppat_constraint (p, ct) -> pp_constraint p ct
+        | Ppat_type pt -> pp_type pt
+        | Ppat_lazy p -> pp_lazy ~loc ps p
+        | Ppat_unpack (name, typ) -> pp_unpack name typ
+        | Ppat_exception p -> pp_exception ~loc ps p
+        | Ppat_extension ext -> Extension.pp Item ext
+        | Ppat_open (lid, p) -> pp_open lid p
+      )
 end
 
 and Application : sig
@@ -734,7 +739,7 @@ end = struct
     | Nonrecursive -> ""
 
   and case ps { pc_lhs; pc_guard; pc_rhs } =
-    let lhs = Pattern.pp [] pc_lhs in
+    let lhs = Pattern.pp ~indent:2 [] pc_lhs in
     let rhs = pp ps pc_rhs in
     let lhs =
       match pc_guard with
