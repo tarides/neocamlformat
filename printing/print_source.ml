@@ -1644,7 +1644,7 @@ end = struct
 end
 
 and Type_declaration : sig
-  val pp : type_declaration -> document * document
+(*   val pp : type_declaration -> document * document *)
 
   val with_params : (core_type * variance) list -> document -> document
 
@@ -1712,36 +1712,48 @@ end = struct
     | Ptype_variant cstrs -> variant cstrs
 
   (* TODO: constraints *)
-  let pp { ptype_name; ptype_params; ptype_cstrs = _; ptype_kind; ptype_private;
-           ptype_manifest; ptype_attributes; _ } =
+  let pp ?binder ~keyword
+      { ptype_name; ptype_params; ptype_cstrs = _; ptype_kind; ptype_private;
+        ptype_manifest; ptype_attributes; ptype_loc } =
     let name = str ptype_name in
     let lhs = with_params ptype_params name in
     let manifest_opt = Option.map (Core_type.pp []) ptype_manifest in
     let rhs =
       (* I didn't know how to express this nightmare more cleanly. *)
       match manifest_opt, ptype_private, ptype_kind with
+      | None, None, Ptype_abstract ->
+          None
       | Some manifest, None, Ptype_abstract ->
-          manifest
+          Some manifest
       | Some manifest, Some loc, Ptype_abstract ->
-          group (string ~loc "private" ^/^ manifest)
+          Some (group (string ~loc "private" ^/^ manifest))
       | Some manifest, None, kind ->
           let kind = non_abstract_kind kind in
           let equals = token_between manifest kind Equals in
-          manifest ^/^ equals ^/^ kind
+          Some (manifest ^/^ equals ^/^ kind)
       | Some manifest, Some loc, kind ->
           let private_ = string ~loc "private" in
           let equals = token_between manifest private_ Equals in
-          manifest ^/^ equals ^/^ private_ ^/^ non_abstract_kind kind
+          Some (manifest ^/^ equals ^/^ private_ ^/^ non_abstract_kind kind)
       | None, Some loc, kind ->
           assert (kind <> Ptype_abstract);
           let private_ = string ~loc "private" in
-          private_ ^/^ non_abstract_kind kind
+          Some (private_ ^/^ non_abstract_kind kind)
       | None, None, kind ->
           assert (kind <> Ptype_abstract);
-          non_abstract_kind kind
+          Some (non_abstract_kind kind)
     in
-    let rhs = Attribute.attach_to_top_item rhs ptype_attributes in
-    lhs, rhs
+    let keyword =
+      let loc = { ptype_loc with loc_end = lhs.loc.loc_start } in
+      string ~loc keyword
+    in
+    match rhs with
+    | Some rhs ->
+        let rhs = Attribute.attach_to_top_item rhs ptype_attributes in
+        Binding.pp_simple ?binder ~keyword lhs rhs
+    | None ->
+        let decl = group (keyword ^^ nest 2 (break_before lhs)) in
+        Attribute.attach_to_top_item decl ptype_attributes
 
   let rec_flag = function
     | Recursive -> ""
@@ -1755,14 +1767,9 @@ end = struct
           let text, attrs = Attribute.extract_text decl.ptype_attributes in
           text, { decl with ptype_attributes = attrs }
         in
-        let lhs, rhs = pp decl in
         let keyword = if !i = 0 then "type" ^ rec_flag rf else "and" in
         incr i;
-        let keyword =
-          let loc = { decl.ptype_loc with loc_end = lhs.loc.loc_start } in
-          string ~loc keyword
-        in
-        let binding = Binding.pp_simple ~keyword lhs rhs in
+        let binding = pp ~keyword decl in
         Attribute.prepend_text text binding
       ) decls
     in
@@ -1776,14 +1783,9 @@ end = struct
           let text, attrs = Attribute.extract_text decl.ptype_attributes in
           text, { decl with ptype_attributes = attrs }
         in
-        let lhs, rhs = pp decl in
         let keyword = if !i = 0 then "type" else "and" in
         incr i;
-        let keyword =
-          let loc = { decl.ptype_loc with loc_end = lhs.loc.loc_start } in
-          string ~loc keyword
-        in
-        let binding = Binding.pp_simple ~binder:Colonequals ~keyword lhs rhs in
+        let binding = pp ~binder:Colonequals ~keyword decl in
         Attribute.prepend_text text binding
       ) decls
     in
