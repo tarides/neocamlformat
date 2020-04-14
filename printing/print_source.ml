@@ -420,7 +420,7 @@ end = struct
     let pat = pp ps pat in
     let alias = str alias in
     let as_ = token_between pat alias As in
-    let doc = nest 2 (pat ^/^ as_ ^/^ alias) in
+    let doc = pat ^^ group (nest 2 (break_before ~spaces:1 as_ ^/^ alias)) in
     Printing_stack.parenthesize ps doc
 
   and pp_interval c1 c2 =
