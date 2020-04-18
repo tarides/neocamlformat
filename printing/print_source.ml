@@ -34,6 +34,7 @@ module Longident : sig
   include module type of struct include Longident end
 
   val pp : t -> document
+  val pp_ident : string loc -> document
 end = struct
   include Longident
 
@@ -547,6 +548,8 @@ end = struct
     let dot = token_between lid pat Dot in
     lid ^^ dot ^^ parens (break_before ~spaces:0 pat)
 
+  and pp_var v = Longident.pp_ident v
+
   and pp_desc ?(indent=0) ~loc ps = function
     | Ppat_or (p1, p2) -> pp_or ~indent ps p1 p2
     | otherwise ->
@@ -554,7 +557,7 @@ end = struct
         match otherwise with
         | Ppat_or _ -> assert false
         | Ppat_any -> underscore ~loc
-        | Ppat_var v -> str v
+        | Ppat_var v -> pp_var v
         | Ppat_alias (pat, alias) -> pp_alias ps pat alias
         | Ppat_constant c -> Constant.pp ~loc c
         | Ppat_interval (c1, c2) -> pp_interval c1 c2
