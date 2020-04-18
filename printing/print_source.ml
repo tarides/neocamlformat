@@ -690,11 +690,11 @@ end = struct
     | Pexp_letop letop -> pp_letop letop
     | Pexp_extension ext -> Extension.pp Item ext
     | Pexp_unreachable -> string ~loc "."
+    | Pexp_array_get (arr, idx) -> pp_array_get ps arr idx
+    | Pexp_array_set (arr, idx, e) -> pp_array_set ps arr idx e
+    | Pexp_string_get (str, idx) -> pp_string_get ps str idx
+    | Pexp_string_set (str, idx, c) -> pp_string_set ps str idx c
       (* TODO *)
-    | Pexp_array_get _
-    | Pexp_array_set _
-    | Pexp_string_get _
-    | Pexp_string_set _
     | Pexp_bigarray_get _
     | Pexp_bigarray_set _
     | Pexp_dotop_get _
@@ -919,6 +919,26 @@ end = struct
     List_like.pp ~loc ~formatting:Wrap
       ~left:PPrint.(lbracket ^^ bar)
       ~right:PPrint.(bar ^^ rbracket) elts
+
+  and pp_gen_get enclosing ps arr idx =
+    let arr = pp ps arr in
+    let idx = pp [] idx in
+    let dot = token_between arr idx Dot in
+    flow (break 0) arr [ dot; enclosing idx ]
+
+  and pp_gen_set enclosing ps arr idx val_ =
+    let access = pp_gen_get enclosing ps arr idx in
+    let value = pp (List.tl ps) val_ in
+    let larrow = token_between access value Larrow in
+    prefix ~indent:2 ~spaces:1
+      (group (access ^/^ larrow))
+      value
+
+  and pp_array_get ps arr idx = pp_gen_get parens ps arr idx
+  and pp_array_set ps arr idx val_ = pp_gen_set parens ps arr idx val_
+
+  and pp_string_get ps arr idx = pp_gen_get brackets ps arr idx
+  and pp_string_set ps arr idx val_ = pp_gen_set brackets ps arr idx val_
 
   (* FIXME: change ast to present n-ary [if]s *)
   and pp_if_then_else ~loc ps cond then_ else_opt =
