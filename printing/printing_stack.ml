@@ -367,6 +367,7 @@ let needs_parens elt parent =
                    | Pexp_variant _
                    | Pexp_assert _
                    | Pexp_lazy _
+                   | Pexp_tuple _
                    )
       | Cons_constr _ ->
         true
