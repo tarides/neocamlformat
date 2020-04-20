@@ -32,8 +32,13 @@ let constructor_arguments = function
     left_assoc_map ~sep:Star
       ~f:(!pp_core_type printing_stack) a1 args
 
+let constructor_name name =
+  match Ident_class.classify name with
+  | Normal -> str name
+  | _ -> Document.parens (str name)
+
 let gadt_constructor name args res_ty attributes =
-  let name = str name in
+  let name = constructor_name name in
   let decl =
     if has_args args then
       let args = constructor_arguments args in
@@ -54,7 +59,7 @@ let gadt_constructor name args res_ty attributes =
   !attach_attributes decl attributes
 
 let simple_constructor name args attributes =
-  let name = str name in
+  let name = constructor_name name in
   let decl =
     if has_args args then
       let args = constructor_arguments args in
