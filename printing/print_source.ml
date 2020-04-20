@@ -78,7 +78,9 @@ end = struct
       (* FIXME? nb might start with a minus… which might implying parenthesing
          is required in some contexts. *)
       string ~loc nb
-    | Pconst_char c                   -> squotes (char ~loc c)
+    | Pconst_char c ->
+      let c = Char.escaped c in
+      squotes (string ~loc c)
     | Pconst_string (s, None)         -> dquotes (pp_string_lit ~loc s)
     | Pconst_string (s, Some delim)   -> pp_quoted_string ~loc ~delim s
 end
