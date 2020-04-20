@@ -584,15 +584,14 @@ end = struct
     Printing_stack.parenthesize ps doc
 
   let prefix_op ps (exp, op) arg args =
-    match fst arg with
-    | Nolabel ->
+    if fst arg <> Nolabel || args <> [] then
+      simple_apply ps exp arg args
+    else
       let ps = Printing_stack.Prefix_op :: List.tl ps in
       let op = str op in
-      let args = separate_map (break 1) ~f:(argument ps) arg args in
-      let doc = nest 2 (op ^^ args) in
+      let arg = argument ps arg in
+      let doc = nest 2 (op ^^ arg) in
       Printing_stack.parenthesize ps doc
-    | _ ->
-      simple_apply ps exp arg args
 
   let infix_op ps (exp, op) arg args =
     match arg, args with
