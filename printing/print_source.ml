@@ -1491,7 +1491,7 @@ and Structure : sig
 end = struct
   let pp_eval exp attrs =
     let exp = Expression.pp [] exp in
-    Attribute.attach_to_top_item exp attrs
+    !^";; " ++ Attribute.attach_to_top_item exp attrs
 
   and rec_flag = function
     | Recursive -> " rec"
