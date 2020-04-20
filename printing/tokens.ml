@@ -31,6 +31,7 @@ type t =
   | Open_variant
   | Closed_variant
   | Rbracket
+  | If
 
 let to_parser_token t : Source_parsing.Parser.token =
   match t with
@@ -66,6 +67,7 @@ let to_parser_token t : Source_parsing.Parser.token =
   | Open_variant -> LBRACKETGREATER
   | Closed_variant -> LBRACKETLESS
   | Rbracket -> RBRACKET
+  | If -> IF
 
 let to_string = function
   | Colon -> ":"
@@ -100,3 +102,4 @@ let to_string = function
   | Rbracket -> "]"
   | Open_variant -> "[>"
   | Closed_variant -> "[<"
+  | If -> "if"

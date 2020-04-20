@@ -671,8 +671,8 @@ end = struct
     | Pexp_field (exp, fld) -> pp_field ps exp fld
     | Pexp_setfield (exp, fld, val_) -> pp_setfield ps exp fld val_
     | Pexp_array elts -> pp_array ~loc ps elts
-    | Pexp_ifthenelse (cond, then_, else_) ->
-      pp_if_then_else ~loc ps cond then_ else_
+    | Pexp_ifthenelse (branches, else_) ->
+      pp_if_then_else ~loc ps branches else_
     | Pexp_sequence (e1, e2) -> pp_sequence ps e1 e2
     | Pexp_while (cond, body) -> pp_while ~loc cond body
     | Pexp_for (it, start, stop, dir, body) -> pp_for ~loc it start stop dir body
@@ -943,19 +943,37 @@ end = struct
   and pp_string_get ps arr idx = pp_gen_get brackets ps arr idx
   and pp_string_set ps arr idx val_ = pp_gen_set brackets ps arr idx val_
 
-  (* FIXME: change ast to present n-ary [if]s *)
-  and pp_if_then_else ~loc ps cond then_ else_opt =
+  and pp_if_then_else ~loc ps if_branches else_opt =
+    let if_branches =
+      List.mapi (fun i ib ->
+        let cond = pp [] ib.if_cond in
+        let then_branch = pp ps ib.if_body in
+        let then_kw = token_between cond then_branch Then in
+        let keyword =
+          let if_kw =
+            let if_ = token_before ~start:ib.if_loc.loc_start cond Tokens.If in
+            if i = 0 then if_ else !^"else " ++ if_
+          in
+          let with_ext =
+            match ib.if_ext with
+            | None -> if_kw
+            | Some { txt = ext_name ; loc } ->
+              let tag = string ~loc ("%" ^ ext_name) in
+              if_kw ^^ brackets tag
+          in
+          let with_attrs = Attribute.attach_to_item with_ext ib.if_attrs in
+          with_attrs
+        in
+        group (
+          keyword ^^
+          nest 2 (break_before cond) ^/^
+          then_kw
+        ) ^^
+        nest 2 (break_before then_branch)
+      ) if_branches
+    in
     let if_ =
-      let cond = pp [] cond in
-      let then_branch = pp ps then_ in
-      let then_ = token_between cond then_branch Then in
-      group (
-        (* FIXME! ++ is not ok *)
-        !^"if" ++
-        nest 2 (break_before cond) ^/^
-        then_
-      ) ^^
-      nest 2 (break_before then_branch)
+      separate (PPrint.break 1) (List.hd if_branches) (List.tl if_branches)
     in
     let else_ =
       let loc = { loc with Location.loc_start = if_.loc.loc_end } in
@@ -966,7 +984,8 @@ end = struct
         nest 2 (break_before else_branch)
       ) else_opt
     in
-    group (if_ ^^ else_)
+    let doc = group (if_ ^^ else_) in
+    Printing_stack.parenthesize ps doc
 
   and pp_sequence ps e1 e2 =
     let e1 = pp ps e1 in

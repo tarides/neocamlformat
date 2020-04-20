@@ -2040,10 +2040,6 @@ expr:
       { Pexp_try($3, $5), $2 }
   | TRY ext_attributes seq_expr WITH error
       { syntax_error() }
-  | IF ext_attributes seq_expr THEN expr ELSE expr
-      { Pexp_ifthenelse($3, $5, Some $7), $2 }
-  | IF ext_attributes seq_expr THEN expr
-      { Pexp_ifthenelse($3, $5, None), $2 }
   | WHILE ext_attributes seq_expr DO seq_expr DONE
       { Pexp_while($3, $5), $2 }
   | FOR ext_attributes pattern EQUAL seq_expr direction_flag seq_expr DO
@@ -2073,6 +2069,24 @@ expr:
       { mkuminus ~oploc:$loc($1) $1 $2 }
   | additive expr %prec prec_unary_plus
       { mkuplus ~oploc:$loc($1) $1 $2 }
+  | IF ext_attributes seq_expr THEN expr ELSE else_=expr
+      { let (ext, attrs) = $2 in
+        let if_loc = make_loc ($startpos($1), $endpos($5)) in
+        let if_branch =
+          { if_loc; if_cond = $3; if_body = $5; if_ext = ext; if_attrs = attrs }
+        in
+        match else_.pexp_desc with
+        | Pexp_ifthenelse(if_branches, else_) ->
+            Pexp_ifthenelse(if_branch :: if_branches, else_)
+        | _ ->
+            Pexp_ifthenelse([if_branch], Some else_) }
+  | IF ext_attributes seq_expr THEN expr
+      { let (ext, attrs) = $2 in
+        let if_loc = make_loc $sloc in
+        let if_branch =
+          { if_loc; if_cond = $3; if_body = $5; if_ext = ext; if_attrs = attrs }
+        in
+        Pexp_ifthenelse([if_branch], None) }
 ;
 
 simple_expr:

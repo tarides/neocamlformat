@@ -345,7 +345,7 @@ and expression_desc =
         (* E1.l <- E2 *)
   | Pexp_array of expression list
         (* [| E1; ...; En |] *)
-  | Pexp_ifthenelse of expression * expression * expression option
+  | Pexp_ifthenelse of if_branch list * expression option
         (* if E1 then E2 else E3 *)
   | Pexp_sequence of expression * expression
         (* E1; E2 *)
@@ -424,6 +424,14 @@ and expression_desc =
       value: expression;
     }
 
+and if_branch =
+  { 
+    if_loc: Location.t;
+    if_cond: expression;
+    if_body: expression;
+    if_attrs: attributes;
+    if_ext: string loc option;
+  }
 
 and case =   (* (P -> E) or (P when E0 -> E) *)
     {
