@@ -1,8 +1,8 @@
 build:
-	dune build
+	dune build @install
 
 test: build
-	dune exec -- neocamlformat ./parsing/source_tree.mli ./printing/print_source.ml
+	dune test
 
 clean:
 	dune clean
