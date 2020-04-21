@@ -9,6 +9,10 @@ let module_name ~loc = function
   | None -> underscore ~loc
   | Some name -> string ~loc name
 
+let rec_flag = function
+  | Recursive -> " rec"
+  | Nonrecursive -> ""
+
 module Longident : sig
   include module type of struct include Longident end
 
@@ -560,8 +564,11 @@ end = struct
 end
 
 and Application : sig
-  val pp : Printing_stack.t -> expression -> (arg_label * expression) list ->
-    document
+  val pp_simple : Printing_stack.t -> document
+    -> (arg_label * expression) -> (arg_label * expression) list -> document
+
+  val pp : Printing_stack.t -> expression -> (arg_label * expression) list
+    -> document
 end = struct
   let argument ps (lbl, exp) =
     let suffix ~prefix lbl =
@@ -577,11 +584,14 @@ end = struct
     | Labelled lbl -> suffix ~prefix:tilde lbl
     | Optional lbl -> suffix ~prefix:qmark lbl
 
+  let pp_simple ps applied arg args =
+    let args = separate_map (break 1) ~f:(argument ps) arg args in
+    let doc = prefix ~indent:2 ~spaces:1 applied args in
+    Printing_stack.parenthesize ps doc
+
   let simple_apply ps exp arg args =
     let exp = Expression.pp ps exp in
-    let args = separate_map (break 1) ~f:(argument ps) arg args in
-    let doc = prefix ~indent:2 ~spaces:1 exp args in
-    Printing_stack.parenthesize ps doc
+    pp_simple ps exp arg args
 
   let prefix_op ps (exp, op) arg args =
     if fst arg <> Nolabel || args <> [] then
@@ -716,10 +726,6 @@ end = struct
     in
     let in_ = token_between vbs body In in
     Printing_stack.parenthesize ps (group (vbs ^/^ in_) ^^ hardline ++ body)
-
-  and rec_flag = function
-    | Recursive -> " rec"
-    | Nonrecursive -> ""
 
   and case ps { pc_lhs; pc_guard; pc_rhs } =
     let lhs = Pattern.pp ~indent:2 [] pc_lhs in
@@ -1467,10 +1473,6 @@ end = struct
     let exp = Expression.pp [] exp in
     !^";; " ++ Attribute.attach_to_top_item exp attrs
 
-  and rec_flag = function
-    | Recursive -> " rec"
-    | Nonrecursive -> ""
-
   let pp_value rf vbs =
     let vbs =
       let i = ref 0 in
@@ -1816,10 +1818,106 @@ end = struct
     separate hardline (List.hd decls) (List.tl decls)
 end
 
+and Class_type : sig
+  val pp : class_type -> document
+end = struct
+  let pp _ = assert false
+end
+
 and Class_expr : sig
   val pp : class_expr -> document
 end = struct
-  let pp _ = assert false
+  let pp_constr name args =
+    let name = Longident.pp name in
+    match args with
+    | [] -> name
+    | x :: xs ->
+      let args =
+        group (
+          brackets
+            (separate_map PPrint.(comma ^^ break 1) ~f:(Core_type.pp []) x xs)
+        )
+      in
+      args ^/^ name
+
+  let rec pp { pcl_desc; pcl_loc; pcl_attributes } =
+    let doc = pp_desc pcl_loc pcl_desc in
+    Attribute.attach_to_item doc pcl_attributes
+
+  (* TODO: much of this is just copy pasted from Expression; factorize. *)
+
+  and pp_fun ~loc params ce =
+    let params =
+      separate_map (PPrint.break 1) ~f:Fun_param.pp
+        (List.hd params) (List.tl params)
+    in
+    let body = pp ce in
+    (* FIXME: copied from expressions. factorize. *)
+    let fun_ =
+      let loc = { loc with Location.loc_end = params.loc.loc_start } in
+      string ~loc "fun"
+    in
+    let arrow = token_between params body Rarrow in
+    prefix ~indent:2 ~spaces:1
+      (group ((prefix ~indent:2 ~spaces:1 fun_ params) ^/^ arrow))
+      body
+
+  and pp_apply ce args =
+    let ce = pp ce in
+    Application.pp_simple [] ce (List.hd args) (List.tl args)
+
+  and pp_let rf vbs ce =
+    let vbs =
+      let i = ref 0 in
+      List.concat_map (fun vb ->
+        let text, vb =
+          let text, attrs = Attribute.extract_text vb.pvb_attributes in
+          text, { vb with pvb_attributes = attrs }
+        in
+        let binding = Value_binding.pp Attached_to_item vb in
+        let keyword = if !i = 0 then "let" ^ rec_flag rf else "and" in
+        incr i;
+        let keyword =
+          (* FIXME: pvb_loc should be pvb_start_loc *)
+          let loc =
+            { vb.pvb_loc with loc_end = vb.pvb_pat.ppat_loc.loc_start }
+          in
+          string ~loc keyword
+        in
+        let binding = Binding.pp ~keyword binding in
+        Attribute.prepend_text text binding
+      ) vbs
+    in
+    let vbs = separate hardline (List.hd vbs) (List.tl vbs) in
+    let ce = pp ce in
+    let in_ = token_between vbs ce In in
+    group (vbs ^/^ in_) ^^ hardline ++ ce
+
+  and pp_constraint ce ct =
+    let ce = pp ce in
+    let ct = Class_type.pp ct in
+    let colon = token_between ce ct Colon in
+    group (parens (ce ^/^ colon ^/^ ct))
+
+  and pp_open ~loc od ce =
+    let od = Open_description.pp od in
+    let ce = pp ce in
+    let in_ = token_between od ce In in
+    let let_ =
+      let loc = { loc with Location.loc_end = od.loc.loc_start } in
+      string ~loc "let"
+    in
+    group (let_ ^/^ od ^/^ in_) ^/^ ce
+
+  and pp_desc loc = function
+    | Pcl_constr (name, args) -> pp_constr name args
+    | Pcl_structure str -> Class_structure.pp ~loc str
+    | Pcl_fun (params, ce) -> pp_fun ~loc params ce
+    | Pcl_apply (ce, args) -> pp_apply ce args
+    | Pcl_let (rf, vbs, ce) -> pp_let rf vbs ce
+    | Pcl_constraint (ce, ct) -> pp_constraint ce ct
+    | Pcl_extension ext -> Extension.pp Item ext
+    | Pcl_open (od, ce) -> pp_open ~loc od ce
 end
 
 and Class_structure : sig
