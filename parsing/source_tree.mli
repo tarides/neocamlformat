@@ -601,6 +601,7 @@ and class_type_desc =
            ['a1, ..., 'an] c *)
   | Pcty_signature of class_signature
         (* object ... end *)
+    (* TODO: make it n-ary, like Ptyp_arrow. *)
   | Pcty_arrow of arg_label * core_type * class_type
         (* T -> CT       Simple
            ~l:T -> CT    Labelled l

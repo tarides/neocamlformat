@@ -242,6 +242,7 @@ end
 
 and Core_type : sig
   val pp : Printing_stack.t -> core_type -> document
+  val pp_param : Printing_stack.t -> (arg_label * core_type) -> document
 end = struct
   let pp_var ~loc v = string ~loc ("'" ^ v)
 
@@ -1820,12 +1821,8 @@ end
 
 and Class_type : sig
   val pp : class_type -> document
-end = struct
-  let pp _ = assert false
-end
 
-and Class_expr : sig
-  val pp : class_expr -> document
+  val pp_constr : Longident.t -> core_type list -> document
 end = struct
   let pp_constr name args =
     let name = Longident.pp name in
@@ -1840,6 +1837,41 @@ end = struct
       in
       args ^/^ name
 
+  let rec pp { pcty_desc; pcty_loc; pcty_attributes } =
+    let doc = pp_desc pcty_loc pcty_desc in
+    Attribute.attach_to_item doc pcty_attributes
+
+  and pp_open ~loc od ct =
+    let od = Open_description.pp od in
+    let ct = pp ct in
+    let in_ = token_between od ct In in
+    let let_ =
+      let loc = { loc with Location.loc_end = od.loc.loc_start } in
+      string ~loc "let"
+    in
+    group (let_ ^/^ od ^/^ in_) ^/^ ct
+
+  and pp_arrow lbl ct cty =
+    let param =
+      (* Fake printing stack :/ *)
+      let ps = [ Printing_stack.Core_type (Ptyp_arrow ([], ct)) ] in
+      Core_type.pp_param ps (lbl, ct)
+    in
+    let cty = pp cty in
+    let arrow = token_between param cty Rarrow in
+    param ^/^ group (arrow ^/^ cty)
+
+  and pp_desc loc = function
+    | Pcty_constr (ct, args) -> pp_constr ct args
+    | Pcty_signature sg -> Class_signature.pp ~loc sg
+    | Pcty_arrow (lbl, ct, cty) -> pp_arrow lbl ct cty
+    | Pcty_extension ext -> Extension.pp Item ext
+    | Pcty_open (od, ct) -> pp_open ~loc od ct
+end
+
+and Class_expr : sig
+  val pp : class_expr -> document
+end = struct
   let rec pp { pcl_desc; pcl_loc; pcl_attributes } =
     let doc = pp_desc pcl_loc pcl_desc in
     Attribute.attach_to_item doc pcl_attributes
@@ -1910,7 +1942,7 @@ end = struct
     group (let_ ^/^ od ^/^ in_) ^/^ ce
 
   and pp_desc loc = function
-    | Pcl_constr (name, args) -> pp_constr name args
+    | Pcl_constr (name, args) -> Class_type.pp_constr name args
     | Pcl_structure str -> Class_structure.pp ~loc str
     | Pcl_fun (params, ce) -> pp_fun ~loc params ce
     | Pcl_apply (ce, args) -> pp_apply ce args
@@ -2041,6 +2073,13 @@ end = struct
         enclose ~before:!^"object" ~after:PPrint.(break 1 ^^ !^"end")
           (nest 2 (break_before fields))
       )
+end
+
+and Class_signature : sig
+  val pp : loc:Location.t -> class_signature -> document
+end = struct
+  let pp ~loc:_ _ =
+    assert false
 end
 
 and Open_description : sig
