@@ -1,16 +1,13 @@
 let gen_rule file =
   Printf.printf {|
 (rule
+ (alias runtest)
  (target %s.corrected)
  (deps (:t %s))
  (action
    (with-stdout-to %%{target}
      (run %%{bin:neocamlformat} %%{t}))))
-
-(alias
- (name runtest)
- (deps %s.corrected))
-|} file file file
+|} file file
 
 let () =
   let dir_content = Sys.readdir "." in
