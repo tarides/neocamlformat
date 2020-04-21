@@ -32,6 +32,15 @@ type t =
   | Closed_variant
   | Rbracket
   | If
+  | Inherit
+  | Bang
+  | Virtual
+  | Val
+  | Mutable
+  | Method
+  | Private
+  | Constraint
+  | Initializer
 
 let to_parser_token t : Source_parsing.Parser.token =
   match t with
@@ -68,6 +77,15 @@ let to_parser_token t : Source_parsing.Parser.token =
   | Closed_variant -> LBRACKETLESS
   | Rbracket -> RBRACKET
   | If -> IF
+  | Inherit -> INHERIT
+  | Bang -> BANG
+  | Virtual -> VIRTUAL
+  | Val -> VAL
+  | Mutable -> MUTABLE
+  | Method -> METHOD
+  | Private -> PRIVATE
+  | Constraint -> CONSTRAINT
+  | Initializer -> INITIALIZER
 
 let to_string = function
   | Colon -> ":"
@@ -103,3 +121,12 @@ let to_string = function
   | Open_variant -> "[>"
   | Closed_variant -> "[<"
   | If -> "if"
+  | Inherit -> "inherit"
+  | Bang -> "!"
+  | Virtual -> "virtual"
+  | Val -> "val"
+  | Mutable -> "mutable"
+  | Method -> "method"
+  | Private -> "private"
+  | Constraint -> "constraint"
+  | Initializer -> "initializer"

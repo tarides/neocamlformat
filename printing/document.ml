@@ -95,6 +95,17 @@ let enclose ~before ~after t =
   { t with txt }
 
 (* FIXME: sep is shit, remove. *)
+let merge_possibly_swapped ?(sep=PPrint.empty) d1 d2 =
+  let t1, t2 = if Location.ends_before d1.loc d2.loc then d1, d2 else d2, d1 in
+  let txt =
+    match comments_between t1 t2 with
+    | No_comment -> d1.txt ^^ sep ^^ d2.txt
+    | Attach_fst cmts -> d1.txt ^/^ cmts ^^ sep ^^ d2.txt
+    | Attach_snd cmts -> d1.txt ^^ sep ^^ cmts ^/^ d2.txt
+  in
+  { txt; loc = merge_locs t1.loc t2.loc }
+
+(* FIXME: sep is shit, remove. *)
 let concat ?(sep=PPrint.empty) t1 t2 =
   let txt =
     match comments_between t1 t2 with

@@ -18,6 +18,17 @@ open Lexing
 type t =
   { loc_start: position; loc_end: position };;
 
+module Pos = struct
+  let column pos = pos.pos_cnum - pos.pos_bol
+
+  let compare p1 p2 =
+    match compare p1.pos_lnum p2.pos_lnum with
+    | 0 -> compare (column p1) (column p2)
+    | n -> n
+end
+
+let ends_before t1 t2 = Pos.compare t1.loc_end t2.loc_start <= 0
+
 let in_file name =
   let loc = { dummy_pos with pos_fname = name } in
   { loc_start = loc; loc_end = loc }

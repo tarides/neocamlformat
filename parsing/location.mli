@@ -27,6 +27,8 @@ type t = {
   loc_end: Lexing.position;
 }
 
+val ends_before : t -> t -> bool
+
 (** Note on the use of Lexing.position in this module.
    If [pos_fname = ""], then use [!input_name] instead.
    If [pos_lnum = -1], then [pos_bol = 0]. Use [pos_cnum] and

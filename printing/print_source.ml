@@ -666,7 +666,7 @@ end = struct
     | Pexp_letexception (exn, exp) -> pp_letexception ~loc ps exn exp
     | Pexp_assert exp -> pp_assert ~loc ps exp
     | Pexp_lazy exp -> pp_lazy ~loc ps exp
-    | Pexp_object cl -> pp_object cl
+    | Pexp_object cl -> pp_object ~loc cl
     | Pexp_pack (me, pkg) -> pp_pack me pkg
     | Pexp_open (lid, exp) -> pp_open lid exp
     | Pexp_letopen (od, exp) -> pp_letopen ~loc ps od exp
@@ -1128,13 +1128,7 @@ end = struct
     let doc = prefix ~indent:2 ~spaces:1 lazy_ exp in
     Printing_stack.parenthesize ps doc
 
-  and pp_object cl =
-    let cl = Class_structure.pp cl in
-    group (
-      enclose ~before:!^"object" ~after:PPrint.(break 1 ^^ !^"end")
-        (nest 2 (break_before cl))
-    )
-
+  and pp_object = Class_structure.pp
 
   and pp_pack me pkg =
     let me = Module_expr.pp me in
@@ -1554,8 +1548,8 @@ end = struct
     | Pstr_recmodule mbs -> pp_recmodule mbs
     | Pstr_modtype mtd -> Module_type_declaration.pp mtd
     | Pstr_open od -> Open_declaration.pp Attached_to_structure_item od
-    | Pstr_class _ -> assert false
-    | Pstr_class_type _ -> assert false
+    | Pstr_class _ 
+    | Pstr_class_type _ -> empty ~loc:_item.pstr_loc
     | Pstr_include incl -> pp_include incl
     | Pstr_attribute attr -> Attribute.pp Free_floating attr
     | Pstr_extension (ext, attrs) -> pp_extension ext attrs
@@ -1580,7 +1574,7 @@ end = struct
       (group (kw ^/^ incl))
       pincl_attributes
 
-  let pp_item { psig_desc; _ } =
+  let pp_item ({ psig_desc; _ } as _item) =
     match psig_desc with
     | Psig_value vd -> Value_description.pp vd
     | Psig_type (rf, decls) -> Type_declaration.pp_decl rf decls
@@ -1592,7 +1586,7 @@ end = struct
     | Psig_include incl -> pp_include incl
     | Psig_attribute attr -> Attribute.pp Free_floating attr
     | Psig_extension (ext, attrs) -> pp_extension ext attrs
-    | _ -> assert false
+    | _ -> empty ~loc:_item.psig_loc
 
   let pp_nonempty = separate_map (twice hardline) ~f:pp_item
 end
@@ -1822,10 +1816,133 @@ end = struct
     separate hardline (List.hd decls) (List.tl decls)
 end
 
-and Class_structure : sig
-  val pp : class_structure -> document
+and Class_expr : sig
+  val pp : class_expr -> document
 end = struct
   let pp _ = assert false
+end
+
+and Class_structure : sig
+  val pp : loc:Location.t -> class_structure -> document
+end = struct
+  let pp_inherit ~loc override ce alias =
+    let pre =
+      let ce = Class_expr.pp ce in
+      let inh_kw = token_before ~start:loc.Location.loc_start ce Inherit in
+      group (
+        match override with
+        | Override ->
+          let bang = token_between inh_kw ce Bang in
+          inh_kw ^^ bang ^/^ ce
+        | _ -> inh_kw ^/^ ce
+      )
+    in
+    match alias with
+    | None -> pre
+    | Some name ->
+      let name = str name in
+      let as_ = token_between pre name As in
+      group (pre ^/^ as_ ^/^ name)
+
+  let pp_virtual ~start kind name mod_tok ct =
+    let name = str name in
+    let ct = Core_type.pp [] ct in
+    let keyword =
+      let kw = token_before ~start name kind in
+      let virt = token_between kw name Virtual in
+      group (
+        match mod_tok with
+        | None -> kw ^/^ virt
+        | Some tok ->
+          let tok = token_between kw name tok in
+          kw ^/^ merge_possibly_swapped ~sep:(PPrint.break 1) tok virt
+      )
+    in
+    Binding.pp_simple ~binder:Colon ~keyword name ct
+
+  let pp_concrete ~start kind name mod_tok override params
+      (constr, coerce) expr =
+    let name = str name in
+    let keyword =
+      let kw = token_before ~start name kind in
+      let with_bang =
+        match override with
+        | Override -> kw ^^ token_between kw name Bang
+        | _ -> kw
+      in
+      group (
+        match mod_tok with
+        | None -> with_bang
+        | Some tok -> with_bang ^/^ token_between with_bang name tok
+      )
+    in
+    let params = List.map Fun_param.pp params in
+    let constr = Option.map (Core_type.pp []) constr in
+    let coerce = Option.map (Core_type.pp []) coerce in
+    let rhs = Expression.pp [] expr in
+    let params =
+      let loc = { name.loc with loc_start = name.loc.loc_end } in
+      { txt = params; loc }
+    in
+    Binding.pp ~keyword
+      { lhs = name; params; constr; coerce; rhs }
+
+  let pp_field_kind ~loc:{ Location.loc_start; _ } kind name mod_tok = function
+    | Cfk_virtual ct -> pp_virtual ~start:loc_start kind name mod_tok ct
+    | Cfk_concrete (override, params, cts, expr) ->
+      pp_concrete ~start:loc_start kind name mod_tok override params cts expr
+
+  let pp_val ~loc name mut cfk =
+    let modifier_token =
+      match mut with
+      | Immutable -> None
+      | Mutable -> Some Tokens.Mutable
+    in
+    pp_field_kind ~loc Val name modifier_token cfk
+
+  let pp_method ~loc name priv cfk =
+    let modifier_token =
+      match priv with
+      | Public -> None
+      | Private -> Some Tokens.Private
+    in
+    pp_field_kind ~loc Method name modifier_token cfk
+
+  let pp_constraint ~loc:{ Location.loc_start; _ } ct1 ct2 =
+    let ct1 = Core_type.pp [] ct1 in
+    let ct2 = Core_type.pp [] ct2 in
+    let keyword = token_before ~start:loc_start ct1 Constraint in
+    Binding.pp_simple ~keyword ct1 ct2
+
+  let pp_init ~loc:{ Location.loc_start; _ } expr =
+    let expr = Expression.pp [] expr in
+    let init = token_before ~start:loc_start expr Initializer in
+    group (init ^/^ expr)
+
+  let pp_field_desc ~loc = function
+    | Pcf_inherit (override, ce, alias) -> pp_inherit ~loc override ce alias
+    | Pcf_val (name, mut, cf) -> pp_val ~loc name mut cf
+    | Pcf_method (name, priv, cf) -> pp_method ~loc name priv cf
+    | Pcf_constraint (ct1, ct2) -> pp_constraint ~loc ct1 ct2
+    | Pcf_initializer e -> pp_init ~loc e
+    | Pcf_attribute attr -> Attribute.pp Free_floating attr
+    | Pcf_extension ext -> Extension.pp Structure_item ext
+
+  let pp_field { pcf_desc; pcf_loc; pcf_attributes } =
+    let doc = pp_field_desc ~loc:pcf_loc pcf_desc in
+    Attribute.attach_to_item doc pcf_attributes
+
+  let pp ~loc:_ { pcstr_self = _; pcstr_fields } =
+    (* FIXME *)
+    match pcstr_fields with
+    | [] -> assert false
+    | f :: fs ->
+      let fields = separate_map PPrint.(twice hardline) ~f:pp_field f fs in
+      (* FIXME *)
+      group (
+        enclose ~before:!^"object" ~after:PPrint.(break 1 ^^ !^"end")
+          (nest 2 (break_before fields))
+      )
 end
 
 and Open_description : sig
