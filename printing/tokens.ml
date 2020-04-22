@@ -41,6 +41,8 @@ type t =
   | Private
   | Constraint
   | Initializer
+  | Class
+  | And
 
 let to_parser_token t : Source_parsing.Parser.token =
   match t with
@@ -86,6 +88,8 @@ let to_parser_token t : Source_parsing.Parser.token =
   | Private -> PRIVATE
   | Constraint -> CONSTRAINT
   | Initializer -> INITIALIZER
+  | Class -> CLASS
+  | And -> AND
 
 let to_string = function
   | Colon -> ":"
@@ -130,3 +134,5 @@ let to_string = function
   | Private -> "private"
   | Constraint -> "constraint"
   | Initializer -> "initializer"
+  | Class -> "class"
+  | And -> "and"

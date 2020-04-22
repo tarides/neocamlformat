@@ -1551,7 +1551,7 @@ end = struct
     | Pstr_recmodule mbs -> pp_recmodule mbs
     | Pstr_modtype mtd -> Module_type_declaration.pp mtd
     | Pstr_open od -> Open_declaration.pp Attached_to_structure_item od
-    | Pstr_class _ 
+    | Pstr_class cd -> Class_declaration.pp cd
     | Pstr_class_type _ -> empty ~loc:_item.pstr_loc
     | Pstr_include incl -> pp_include incl
     | Pstr_attribute attr -> Attribute.pp Free_floating attr
@@ -1673,7 +1673,11 @@ end
 and Type_declaration : sig
 (*   val pp : type_declaration -> document * document *)
 
-  val with_params : (core_type * variance) list -> document -> document
+  val with_params
+    :  ?enclosing:(document -> document)
+    -> (core_type * variance) list
+    -> document
+    -> document
 
   val pp_decl : rec_flag -> type_declaration list -> document
 
@@ -1686,13 +1690,13 @@ end = struct
     | Covariant -> plus ++ ct
     | Contravariant -> minus ++ ct
 
-  let with_params lst name =
+  let with_params ?(enclosing=parens) lst name =
     match lst with
     | [] -> name
     | [ x ] -> group (pp_param x ^/^ name)
     | x :: xs ->
       let params = separate_map PPrint.(comma ^^ break 1) ~f:pp_param x xs in
-      group (parens params ^/^ name)
+      group (enclosing params ^/^ name)
 
   let label_declaration { pld_name; pld_mutable; pld_type; pld_attributes; _ } =
     let name = str pld_name in
@@ -1954,6 +1958,8 @@ end
 
 and Class_structure : sig
   val pp : loc:Location.t -> class_structure -> document
+
+  val pp_constraint : loc:Location.t -> core_type -> core_type -> document
 end = struct
   let pp_inherit ~loc override ce alias =
     let pre =
@@ -2078,8 +2084,113 @@ end
 and Class_signature : sig
   val pp : loc:Location.t -> class_signature -> document
 end = struct
-  let pp ~loc:_ _ =
-    assert false
+  let pp_inherit ~loc ct =
+    let ct = Class_type.pp ct in
+    let inh_kw = token_before ~start:loc.Location.loc_start ct Inherit in
+    group (inh_kw ^/^ ct)
+
+  let pp_maybe_virtual ~start kind name mod_tok vf ct =
+    let name = str name in
+    let ct = Core_type.pp [] ct in
+    let keyword =
+      let kw = token_before ~start name kind in
+      group (
+        match mod_tok, vf with
+        | None, Concrete -> kw
+        | Some tok, Concrete ->
+          let tok = token_between kw name tok in
+          kw ^/^ tok
+        | None, Virtual ->
+          let virt = token_between kw name Virtual in
+          kw ^/^ virt
+        | Some tok, Virtual ->
+          let virt = token_between kw name Virtual in
+          let tok = token_between kw name tok in
+          kw ^/^ merge_possibly_swapped ~sep:(PPrint.break 1) tok virt
+      )
+    in
+    Binding.pp_simple ~binder:Colon ~keyword name ct
+
+  let pp_val ~loc:{ Location.loc_start; _ } (name, mut, vf, ct) =
+    let mod_tok =
+      match mut with
+      | Immutable -> None
+      | Mutable -> Some Tokens.Mutable
+    in
+    pp_maybe_virtual ~start:loc_start Val name mod_tok vf ct
+
+  let pp_method ~loc:{ Location.loc_start; _ } (name, priv, vf, ct) =
+    let mod_tok =
+      match priv with
+      | Public -> None
+      | Private -> Some Tokens.Private
+    in
+    pp_maybe_virtual ~start:loc_start Method name mod_tok vf ct
+
+  let pp_field_desc ~loc = function
+    | Pctf_inherit ct -> pp_inherit ~loc ct
+    | Pctf_val val_ -> pp_val ~loc val_
+    | Pctf_method meth -> pp_method ~loc meth
+    | Pctf_constraint (ct1, ct2) -> Class_structure.pp_constraint ~loc ct1 ct2
+    | Pctf_attribute attr -> Attribute.pp Free_floating attr
+    | Pctf_extension ext -> Extension.pp Structure_item ext
+
+  let pp_field { pctf_desc; pctf_loc; pctf_attributes } =
+    let doc = pp_field_desc ~loc:pctf_loc pctf_desc in
+    Attribute.attach_to_item doc pctf_attributes
+
+  let pp ~loc:_ { pcsig_self = _; pcsig_fields } =
+    (* FIXME *)
+    match pcsig_fields with
+    | [] -> assert false
+    | f :: fs ->
+      let fields = separate_map PPrint.(twice hardline) ~f:pp_field f fs in
+      (* FIXME *)
+      group (
+        enclose ~before:!^"object" ~after:PPrint.(break 1 ^^ !^"end")
+          (nest 2 (break_before fields))
+      )
+
+
+end
+
+and Class_declaration : sig
+  val pp : class_declaration list -> document
+end = struct
+  let pp cds =
+    let cds =
+      List.mapi (fun i cd ->
+        let { pci_virt; pci_params; pci_name; pci_term_params; pci_type;
+              pci_expr; pci_loc; pci_attributes } = cd in
+        let lhs =
+          Type_declaration.with_params ~enclosing:brackets
+            pci_params (str pci_name)
+        in
+        let binding =
+          { Binding.lhs;
+            params =
+              (let loc = { lhs.loc with loc_start = lhs.loc.loc_end } in
+              { loc; txt = List.map Fun_param.pp pci_term_params });
+            constr = Option.map Class_type.pp pci_type;
+            coerce = None;
+            rhs = Class_expr.pp pci_expr }
+        in
+        let keyword =
+          let fst =
+            token_before ~start:pci_loc.loc_start lhs
+              (if i = 0 then Class else And)
+          in
+          match pci_virt with
+          | Concrete -> fst
+          | Virtual ->
+            let virt = token_between fst lhs Virtual in
+            group (fst ^/^ virt)
+        in
+        let doc = Binding.pp ~keyword binding in
+        Attribute.attach_to_top_item doc pci_attributes
+      ) cds
+    in
+    separate PPrint.(twice hardline) (List.hd cds) (List.tl cds)
 end
 
 and Open_description : sig
