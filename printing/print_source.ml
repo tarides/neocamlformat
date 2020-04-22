@@ -244,7 +244,10 @@ and Core_type : sig
   val pp : Printing_stack.t -> core_type -> document
   val pp_param : Printing_stack.t -> (arg_label * core_type) -> document
 end = struct
-  let pp_var ~loc v = string ~loc ("'" ^ v)
+  let pp_var ~loc v =
+    match String.index_opt v '\'' with
+    | None -> string ~loc ("'" ^ v)
+    | Some _ -> string ~loc ("' " ^ v)
 
   let rec pp ps ct =
     let ps = Printing_stack.Core_type ct.ptyp_desc :: ps in
