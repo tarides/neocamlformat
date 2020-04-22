@@ -129,7 +129,7 @@ let source_between (start : Lexing.position) (stop : Lexing.position) tok =
   let pos = start.pos_cnum in
   let len = stop.pos_cnum - start.pos_cnum in
   begin try
-      assert (pos > 0);
+      assert (pos >= 0);
       assert (len > 0);
     with exn ->
       Format.eprintf "source_between %d:%d -- %d:%d: %s@."
