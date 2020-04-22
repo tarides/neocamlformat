@@ -445,7 +445,11 @@ let needs_parens elt parent =
                    | Pexp_variant _
                    | Pexp_assert _
                    | Pexp_lazy _
-                   | Pexp_record _) -> true
+                   | Pexp_record _
+                   | Pexp_tuple _
+                   | Pexp_field _
+                   | Pexp_setfield _
+                   | Pexp_sequence _) -> true
       | Prefix_op
       | Infix_op { on_left = true; _ }
       | Cons_constr { on_left = true }
