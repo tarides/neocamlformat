@@ -249,9 +249,11 @@ end = struct
     | None -> string ~loc ("'" ^ v)
     | Some _ -> string ~loc ("' " ^ v)
 
-  let rec pp ps ct =
-    let ps = Printing_stack.Core_type ct.ptyp_desc :: ps in
-    group (pp_desc ~loc:ct.ptyp_loc ps ct.ptyp_desc)
+  let rec pp ps { ptyp_loc; ptyp_desc; ptyp_attributes; ptyp_loc_stack = _ } =
+    let ps = Printing_stack.Core_type ptyp_desc :: ps in
+    let doc = group (pp_desc ~loc:ptyp_loc ps ptyp_desc) in
+    Attribute.attach_to_item doc ptyp_attributes
+
 
   and pp_desc ~loc ps = function
     | Ptyp_any -> underscore ~loc
