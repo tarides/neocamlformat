@@ -56,10 +56,21 @@ let dock_fields ~opening_token x xs =
     (group (opening_token ^^ fmt x))
     xs
 
-let pp_row_prefix ~loc ~opening_token x xs =
+let pp_row_prefix ~prefix_if_necessary ~loc ~opening_token x xs =
+  let needs_prefix =
+    prefix_if_necessary && opening_token = Tokens.Lbracket && xs = [] &&
+    (match x.prf_desc with Rinherit _ -> true | _ -> false)
+  in
   let x = Row_field.pp x in
   let xs = List.map Row_field.pp xs in
   let opening_token = token_before ~start:loc.loc_start x opening_token in
+  let opening_token =
+    if not needs_prefix then
+      opening_token
+    else
+      let pipe = token_between opening_token x Pipe in
+      opening_token ^/^ pipe
+  in
   dock_fields ~opening_token x xs
 
 let pp_simple_row ~loc ~opening_token ~hang_indent = function
@@ -68,14 +79,19 @@ let pp_simple_row ~loc ~opening_token ~hang_indent = function
     let rbracket = token_after ~stop:loc.loc_end lbracket Rbracket in
     group (lbracket ^/^ rbracket)
   | x :: xs ->
-    let fields = pp_row_prefix ~loc ~opening_token x xs in
+    let fields =
+      pp_row_prefix ~prefix_if_necessary:true ~loc ~opening_token x xs
+    in
     let rbracket = token_after ~stop:loc.loc_end fields Rbracket in
     hang hang_indent (fields ^/^ rbracket)
 
 let pp_mixed_row ~loc ~labels:(l, ls) = function
   | [] -> assert false (* always at least one field *)
   | x :: xs ->
-    let fields = pp_row_prefix ~loc ~opening_token:Open_variant x xs in
+    let fields =
+      pp_row_prefix ~prefix_if_necessary:false ~loc ~opening_token:Open_variant
+        x xs
+    in
     let labels = flow_map (PPrint.break 1) Tag.pp l ls in
     let sep = token_between fields labels Rangle in
     let rbracket = token_after ~stop:loc.loc_end labels Rbracket in
