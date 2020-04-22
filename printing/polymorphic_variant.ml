@@ -63,7 +63,10 @@ let pp_row_prefix ~loc ~opening_token x xs =
   dock_fields ~opening_token x xs
 
 let pp_simple_row ~loc ~opening_token ~hang_indent = function
-  | [] -> assert false (* always at least one field *)
+  | [] -> 
+    let lbracket = token_between_locs loc.loc_start loc.loc_end opening_token in
+    let rbracket = token_after ~stop:loc.loc_end lbracket Rbracket in
+    group (lbracket ^/^ rbracket)
   | x :: xs ->
     let fields = pp_row_prefix ~loc ~opening_token x xs in
     let rbracket = token_after ~stop:loc.loc_end fields Rbracket in
