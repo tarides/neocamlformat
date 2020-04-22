@@ -91,18 +91,20 @@ let doc_loc = {txt = "ocaml.doc"; loc = Location.none}
 
 let docs_attr ds =
   let open Source_tree in
+  let body = ds.ds_body in
+  let loc = ds.ds_loc in
   let exp =
-    { pexp_desc = Pexp_constant (Pconst_string(ds.ds_body, None));
-      pexp_loc = ds.ds_loc;
+    { pexp_desc = Pexp_constant (Pconst_string(body, None));
+      pexp_loc = loc;
       pexp_loc_stack = [];
       pexp_attributes = []; }
   in
   let item =
-    { pstr_desc = Pstr_eval (exp, []); pstr_loc = exp.pexp_loc }
+    { pstr_desc = Pstr_eval (exp, []); pstr_loc = loc }
   in
   { attr_name = doc_loc;
     attr_payload = PStr [item];
-    attr_loc = Location.none }
+    attr_loc = loc }
 
 let add_docs_attrs docs attrs =
   let attrs =
@@ -141,18 +143,20 @@ let text_loc = {txt = "ocaml.text"; loc = Location.none}
 
 let text_attr ds =
   let open Source_tree in
+  let body = ds.ds_body in
+  let loc = ds.ds_loc in
   let exp =
-    { pexp_desc = Pexp_constant (Pconst_string(ds.ds_body, None));
-      pexp_loc = ds.ds_loc;
+    { pexp_desc = Pexp_constant (Pconst_string(body, None));
+      pexp_loc = loc;
       pexp_loc_stack = [];
       pexp_attributes = []; }
   in
   let item =
-    { pstr_desc = Pstr_eval (exp, []); pstr_loc = exp.pexp_loc }
+    { pstr_desc = Pstr_eval (exp, []); pstr_loc = loc }
   in
   { attr_name = text_loc;
     attr_payload = PStr [item];
-    attr_loc = Location.none }
+    attr_loc = loc }
 
 let add_text_attrs dsl attrs =
   let fdsl = List.filter (function {ds_body=""} -> false| _ ->true) dsl in
