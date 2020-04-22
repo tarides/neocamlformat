@@ -43,6 +43,7 @@ type t =
   | Initializer
   | Class
   | And
+  | Type
 
 let to_parser_token t : Source_parsing.Parser.token =
   match t with
@@ -90,6 +91,7 @@ let to_parser_token t : Source_parsing.Parser.token =
   | Initializer -> INITIALIZER
   | Class -> CLASS
   | And -> AND
+  | Type -> TYPE
 
 let to_string = function
   | Colon -> ":"
@@ -136,3 +138,4 @@ let to_string = function
   | Initializer -> "initializer"
   | Class -> "class"
   | And -> "and"
+  | Type -> "type"

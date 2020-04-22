@@ -1551,8 +1551,8 @@ end = struct
     | Pstr_recmodule mbs -> pp_recmodule mbs
     | Pstr_modtype mtd -> Module_type_declaration.pp mtd
     | Pstr_open od -> Open_declaration.pp Attached_to_structure_item od
-    | Pstr_class cd -> Class_declaration.pp cd
-    | Pstr_class_type _ -> empty ~loc:_item.pstr_loc
+    | Pstr_class cds -> Class_declaration.pp cds
+    | Pstr_class_type ctds -> Class_type_declaration.pp ctds
     | Pstr_include incl -> pp_include incl
     | Pstr_attribute attr -> Attribute.pp Free_floating attr
     | Pstr_extension (ext, attrs) -> pp_extension ext attrs
@@ -1590,11 +1590,11 @@ end = struct
     | Psig_attribute attr -> Attribute.pp Free_floating attr
     | Psig_extension (ext, attrs) -> pp_extension ext attrs
     | Psig_class cds -> Class_description.pp cds
+    | Psig_class_type ctds -> Class_type_declaration.pp ctds
     (* TODO *)
     | Psig_module _
     | Psig_modsubst _
     | Psig_recmodule _
-    | Psig_class_type _
       -> empty ~loc:_item.psig_loc
 
   let pp_nonempty = separate_map (twice hardline) ~f:pp_item
@@ -2233,6 +2233,50 @@ end = struct
             group (fst ^/^ virt)
         in
         let doc = Binding.pp ~keyword ~binder:Colon binding in
+        Attribute.attach_to_top_item doc pci_attributes
+      ) cds
+    in
+    separate PPrint.(twice hardline) (List.hd cds) (List.tl cds)
+end
+
+and Class_type_declaration : sig
+  val pp : class_description list -> document
+end = struct
+  let pp cds =
+    let cds =
+      List.mapi (fun i cd ->
+        let { pci_virt; pci_params; pci_name; pci_term_params; pci_type;
+              pci_expr; pci_loc; pci_attributes } = cd in
+        let lhs =
+          Type_declaration.with_params ~enclosing:brackets
+            pci_params (str pci_name)
+        in
+        assert (Option.is_none pci_type);
+        let binding =
+          { Binding.lhs;
+            params =
+              (let loc = { lhs.loc with loc_start = lhs.loc.loc_end } in
+              { loc; txt = List.map Fun_param.pp pci_term_params });
+            constr = None;
+            coerce = None;
+            rhs = Class_type.pp pci_expr }
+        in
+        let keyword =
+          let fst =
+            if i <> 0 then
+              token_before ~start:pci_loc.loc_start lhs And
+            else
+              let class_ = token_before ~start:pci_loc.loc_start lhs Class in
+              let type_ = token_between class_ lhs Type in
+              group (class_ ^/^ type_)
+          in
+          match pci_virt with
+          | Concrete -> fst
+          | Virtual ->
+            let virt = token_between fst lhs Virtual in
+            group (fst ^/^ virt)
+        in
+        let doc = Binding.pp ~keyword binding in
         Attribute.attach_to_top_item doc pci_attributes
       ) cds
     in
