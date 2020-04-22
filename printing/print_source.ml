@@ -1729,18 +1729,21 @@ end = struct
 
   let () = Constructor_decl.pp_record := record
 
-  let variant cstrs =
-    let cstrs =
-      separate_map PPrint.(break 1 ^^ bar ^^ space)
-        ~f:(fun c -> nest 2 (Constructor_decl.pp_decl c))
-        (List.hd cstrs) (List.tl cstrs)
-    in
-    let prefix =
-      let open PPrint in
-      ifflat empty (bar ^^ space)
-    in
-    (* FIXME: ++ :| *)
-    prefix ++ cstrs
+  let variant { Location.loc; txt = cstrs } =
+    match cstrs with
+    | [] -> string ~loc "|"
+    | cstr :: cstrs ->
+      let cstrs =
+        separate_map PPrint.(break 1 ^^ bar ^^ space)
+          ~f:(fun c -> nest 2 (Constructor_decl.pp_decl c))
+          cstr cstrs
+      in
+      let prefix =
+        let open PPrint in
+        ifflat empty (bar ^^ space)
+      in
+      (* FIXME: ++ :| *)
+      prefix ++ cstrs
 
   let non_abstract_kind = function
     | Ptype_abstract -> assert false

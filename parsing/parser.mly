@@ -2771,7 +2771,7 @@ nonempty_type_kind:
       { (Ptype_abstract, priv, Some ty) }
   | oty = type_synonym
     priv = inline_private_flag
-    cs = constructor_declarations
+    cs = mkrhs(constructor_declarations)
       { (Ptype_variant cs, priv, oty) }
   | oty = type_synonym
     priv = inline_private_flag
