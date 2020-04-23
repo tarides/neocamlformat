@@ -3,12 +3,44 @@ open Ast_helper
 
 let sort_attributes : attributes -> attributes = List.sort compare
 
+let normalize_cmt_spaces doc =
+  String.split_on_char ' ' doc
+  |> List.filter ((<>) "")
+  |> String.concat " "
+
 let mapper =
   (* remove locations *)
   let location _ _ = Location.none in
-  (* sort attributes *)
-  let attributes (m : Ast_mapper.mapper) (atrs : attribute list) =
-    Ast_mapper.default_mapper.attributes m (sort_attributes atrs)
+  let attribute (m : Ast_mapper.mapper) (attr : attribute) =
+    let attr =
+      match attr.attr_name.txt with
+      | "ocaml.doc" | "ocaml.txt" ->
+        let attr_payload =
+          match attr.attr_payload with
+          | PStr [ {
+              pstr_desc =
+                Pstr_eval
+                  ({ pexp_desc= Pexp_constant (Pconst_string (doc, None)) ; _ }
+                   as inner_exp
+                  ,[]);
+              _
+            } as str ] ->
+            let doc = normalize_cmt_spaces doc in
+            let inner' =
+              { inner_exp with
+                pexp_desc = Pexp_constant (Pconst_string (doc, None)) }
+            in
+            PStr [ { str with pstr_desc = Pstr_eval (inner', []) }]
+          | _ -> assert false
+        in
+        { attr with attr_payload }
+      | _ -> attr
+    in
+    Ast_mapper.default_mapper.attribute m attr
+  in
+  let attributes (m : Ast_mapper.mapper) (attrs : attribute list) =
+    (* sort attributes *)
+    Ast_mapper.default_mapper.attributes m (sort_attributes attrs)
   in
   let expr (m : Ast_mapper.mapper) exp =
     let exp = {exp with pexp_loc_stack= []} in
@@ -81,6 +113,7 @@ let mapper =
   in
   { Ast_mapper.default_mapper with
     location
+  ; attribute
   ; attributes
   ; expr
   ; pat
