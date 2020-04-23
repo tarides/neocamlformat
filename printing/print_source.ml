@@ -898,15 +898,19 @@ end = struct
     let record = pp ps re in
     let field = Longident.pp fld in
     let dot = token_between record field Dot in
-    flow (break 0) record [ dot; field ]
+    let doc = flow (break 0) record [ dot; field ] in
+    Printing_stack.parenthesize ps doc
 
   and pp_setfield ps re fld val_ =
     let field = pp_field ps re fld in
     let value = pp (List.tl ps) val_ in
     let larrow = token_between field value Larrow in
-    prefix ~indent:2 ~spaces:1
-      (group (field ^/^ larrow))
-      value
+    let doc =
+      prefix ~indent:2 ~spaces:1
+        (group (field ^/^ larrow))
+        value
+    in
+    Printing_stack.parenthesize ps doc
 
   and pp_array ~loc ps elts =
     let elts = List.map (pp ps) elts in
@@ -919,15 +923,19 @@ end = struct
     let arr = pp ps arr in
     let idx = pp [] idx in
     let dot = token_between arr idx Dot in
-    flow (break 0) arr [ dot; enclosing idx ]
+    let doc = flow (break 0) arr [ dot; enclosing idx ] in
+    Printing_stack.parenthesize ps doc
 
   and pp_gen_set enclosing ps arr idx val_ =
     let access = pp_gen_get enclosing ps arr idx in
     let value = pp (List.tl ps) val_ in
     let larrow = token_between access value Larrow in
-    prefix ~indent:2 ~spaces:1
-      (group (access ^/^ larrow))
-      value
+    let doc =
+      prefix ~indent:2 ~spaces:1
+        (group (access ^/^ larrow))
+        value
+    in
+    Printing_stack.parenthesize ps doc
 
   and pp_array_get ps arr idx = pp_gen_get parens ps arr idx
   and pp_array_set ps arr idx val_ = pp_gen_set parens ps arr idx val_

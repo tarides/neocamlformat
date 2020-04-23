@@ -160,6 +160,12 @@ let needs_parens elt parent =
 
   (* Expressions *)
 
+  | Prefix_op -> begin
+      match parent with
+      | Prefix_op -> true
+      | _ -> false
+    end
+
   | Expression Pexp_field _ -> begin
       match parent with
       | Prefix_op -> true
