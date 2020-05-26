@@ -94,6 +94,26 @@ let enclose ~before ~after t =
   let txt = before ^^ t.txt ^^ after in
   { t with txt }
 
+let fmt_comments before = function
+  | [] -> PPrint.empty
+  | comments ->
+    let cmts = separate_map hardline comment comments in
+    if before then
+      cmts ^^ hardline
+    else
+      hardline ^^ cmts
+
+let attach_surrounding_comments doc =
+  let before =
+    Comments.before doc.loc.loc_start
+    |> fmt_comments true
+  in
+  let after =
+    Comments.after doc.loc.loc_end
+    |> fmt_comments false
+  in
+  before ^^ doc.txt ^^ after
+
 (* FIXME: sep is shit, remove. *)
 let merge_possibly_swapped ?(sep=PPrint.empty) d1 d2 =
   let t1, t2 = if Location.ends_before d1.loc d2.loc then d1, d2 else d2, d1 in

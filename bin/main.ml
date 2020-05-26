@@ -23,19 +23,13 @@ let fmt_file ~width fn =
   let intf = Filename.check_suffix fn "mli" in
   let doc =
     if intf then
-      match Parse.interface b with
-      | [] -> PPrint.empty
-      | si :: sg ->
-        let _ = Comments.init () in
-        let doc = Print_source.Signature.pp_nonempty si sg in
-        doc.txt
+      let sg = Parse.interface b in
+      let _ = Comments.init () in
+      Print_source.interface sg
     else
-      match Parse.implementation b with
-      | [] -> PPrint.empty
-      | si :: st ->
-        let _ = Comments.init () in
-        let doc = Print_source.Structure.pp_nonempty si st in
-        doc.txt
+      let str = Parse.implementation b in
+      let _ = Comments.init () in
+      Print_source.implementation str
   in
   Comments.report_remaining ();
   let buf = Buffer.create (String.length source) in

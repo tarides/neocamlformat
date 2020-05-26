@@ -2360,3 +2360,19 @@ end = struct
     let opn = group (kw ^/^ expr) in
     Attribute.attach kind opn popen_attributes
 end
+
+let interface sg =
+  let doc =
+    match sg with
+    | [] -> empty ~loc:Location.none
+    | si :: sg -> Signature.pp_nonempty si sg
+  in
+  Document.attach_surrounding_comments doc
+
+let implementation str =
+  let doc =
+    match str with
+    | [] -> empty ~loc:Location.none
+    | si :: st -> Structure.pp_nonempty si st
+  in
+  Document.attach_surrounding_comments doc

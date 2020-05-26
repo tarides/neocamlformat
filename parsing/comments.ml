@@ -16,6 +16,19 @@ let compare_pos p1 p2 =
   | 0 -> compare (column p1) (column p2)
   | n -> n
 
+let fetch accept pos =
+  let yes, no =
+    List.fold_right (fun (_, l as elt) (yes, no) ->
+      let relative_pos = compare_pos pos l.Location.loc_start in
+      if accept relative_pos then
+        (elt :: yes, no)
+      else
+        (yes, elt :: no)
+    ) !comments ([], [])
+  in
+  comments := no;
+  yes
+
 let between pos1 pos2 () =
   let yes, no =
     List.fold_right (fun (_, l as elt) (yes, no) ->
@@ -32,6 +45,9 @@ let between pos1 pos2 () =
   in
   comments := no;
   yes
+
+let before = fetch (fun relative_pos -> relative_pos >= 0)
+let after = fetch (fun relative_pos -> relative_pos <= 0)
 
 let report_remaining () =
   List.iter (fun (_, l) -> Format.eprintf "- %a\n%!" Location.print_loc l)
