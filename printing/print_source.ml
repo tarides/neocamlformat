@@ -1794,9 +1794,24 @@ end = struct
     | Ptype_record lbl_decls -> record lbl_decls
     | Ptype_variant cstrs -> variant cstrs
 
-  (* TODO: constraints *)
+  let pp_constraint (ct1, ct2, _) =
+    let ct1 = Core_type.pp [] ct1 in
+    let ct2 = Core_type.pp [] ct2 in
+    let equals = token_between ct1 ct2 Equals in
+    ct1 ^/^ equals ^/^ ct2
+
+  let add_constraints decl = function
+    | [] -> decl
+    | cstr :: cstrs ->
+      let cstrs =
+        separate_map (PPrint.break 1) ~f:pp_constraint cstr cstrs
+      in
+      let kw = token_between decl cstrs Constraint in
+      prefix ~indent:2 ~spaces:1 decl
+        (kw ^/^ hang 2 (break_before ~spaces:0 cstrs))
+
   let pp ?binder ~keyword
-      { ptype_name; ptype_params; ptype_cstrs = _; ptype_kind; ptype_private;
+      { ptype_name; ptype_params; ptype_cstrs; ptype_kind; ptype_private;
         ptype_manifest; ptype_attributes; ptype_loc } =
     let name = str ptype_name in
     let lhs = with_params ptype_params name in
@@ -1832,10 +1847,12 @@ end = struct
     in
     match rhs with
     | Some rhs ->
+        let rhs = add_constraints rhs ptype_cstrs in
         let rhs = Attribute.attach_to_top_item rhs ptype_attributes in
         Binding.pp_simple ?binder ~keyword lhs rhs
     | None ->
         let decl = group (keyword ^^ nest 2 (break_before lhs)) in
+        let decl = add_constraints decl ptype_cstrs in
         Attribute.attach_to_top_item decl ptype_attributes
 
   let rec_flag = function
