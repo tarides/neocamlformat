@@ -1461,6 +1461,36 @@ end = struct
     { binding with expr }
 end
 
+and Module_declaration : sig
+  val pp : module_declaration -> document
+end = struct
+  let pp { pmd_name; pmd_type; pmd_attributes; pmd_loc } =
+    let kw =
+      let loc = { pmd_loc with loc_end = pmd_name.loc.loc_start } in
+      string ~loc "module "
+    in
+    let name =
+      str { pmd_name with txt = Option.value ~default:"_" pmd_name.txt }
+    in
+    let typ = Module_type.pp pmd_type in
+    let doc = Binding.pp_simple ~keyword:kw name ~binder:Colon typ in
+    Attribute.attach_to_top_item doc pmd_attributes
+end
+
+and Module_substitution : sig
+  val pp : module_substitution -> document
+end = struct
+  let pp { pms_name; pms_manifest; pms_attributes; pms_loc } =
+    let kw =
+      let loc = { pms_loc with loc_end = pms_name.loc.loc_start } in
+      string ~loc "module "
+    in
+    let name = str pms_name in
+    let man = Longident.pp pms_manifest in
+    let doc = Binding.pp_simple ~keyword:kw name ~binder:Colonequals man in
+    Attribute.attach_to_top_item doc pms_attributes
+end
+
 and Module_type_declaration : sig
   val pp : module_type_declaration -> document
 end = struct
@@ -1597,6 +1627,8 @@ end = struct
     | Psig_typesubst decls -> Type_declaration.pp_subst decls
     | Psig_typext te -> Type_extension.pp te
     | Psig_exception exn -> Type_exception.pp exn
+    | Psig_module md -> Module_declaration.pp md
+    | Psig_modsubst ms -> Module_substitution.pp ms
     | Psig_modtype mtd -> Module_type_declaration.pp mtd
     | Psig_open od -> Open_description.pp od
     | Psig_include incl -> pp_include incl
@@ -1605,8 +1637,6 @@ end = struct
     | Psig_class cds -> Class_description.pp cds
     | Psig_class_type ctds -> Class_type_declaration.pp ctds
     (* TODO *)
-    | Psig_module _
-    | Psig_modsubst _
     | Psig_recmodule _
       -> empty ~loc:_item.psig_loc
 
