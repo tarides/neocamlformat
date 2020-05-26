@@ -1133,7 +1133,7 @@ end = struct
     let doc =
       group (prefix ~indent:2 ~spaces:1 keyword
                (group (exn ^/^ in_)))
-      ^^ exp
+      ^/^ exp
     in
     Printing_stack.parenthesize ps doc
 
