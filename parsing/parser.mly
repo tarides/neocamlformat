@@ -172,14 +172,6 @@ let mkexp_constraint ~loc e (t1, t2) =
   | _, Some t -> ghexp ~loc (Pexp_coerce(e, t1, t))
   | None, None -> assert false
 
-let mkexp_opt_constraint ~loc e = function
-  | None -> e
-  | Some constraint_ -> mkexp_constraint ~loc e constraint_
-
-let mkpat_opt_constraint ~loc p = function
-  | None -> p
-  | Some typ -> mkpat ~loc (Ppat_constraint(p, typ))
-
 let syntax_error () =
   raise Syntaxerr.Escape_error
 
@@ -220,17 +212,11 @@ let bigarray_get ~loc arr arg =
 let bigarray_set ~loc arr arg newval =
   mkexp ~loc (Pexp_bigarray_set (arr, bigarray_untuplify arg, newval))
 
-let exp_of_longident ~loc lid =
-  mkexp ~loc (Pexp_ident (Lident (Longident.last lid)))
-
 let loc_last (id : Longident.t) : string Location.loc =
   Longident.last id
 
 let exp_of_label ~loc lbl =
   mkexp ~loc (Pexp_ident (Lident lbl))
-
-let pat_of_label ~loc lbl =
-  mkpat ~loc (Ppat_var (loc_last lbl))
 
 let mk_newtypes ~loc newtypes exp =
   let mkexp = mkexp ~loc in
@@ -2421,15 +2407,8 @@ record_expr_content:
   | label = label_longident
     c = type_constraint?
     eo = preceded(EQUAL, expr)?
-      { let e =
-          match eo with
-          | None ->
-              (* No pattern; this is a pun. Desugar it. *)
-              exp_of_longident ~loc:$sloc label
-          | Some e ->
-              e
-        in
-        label, mkexp_opt_constraint ~loc:$sloc e c }
+      { let c = Option.value ~default:(None, None) c in
+        label, c, eo }
 ;
 %inline object_expr_content:
   xs = separated_or_terminated_nonempty_list(SEMI, object_expr_field)
@@ -2637,16 +2616,7 @@ pattern_comma_list(self):
   label = label_longident
   octy = preceded(COLON, core_type)?
   opat = preceded(EQUAL, pattern)?
-    { let pat =
-        match opat with
-        | None ->
-            (* No pattern; this is a pun. Desugar it. *)
-            pat_of_label ~loc:$sloc label
-        | Some pat ->
-            pat
-      in
-      label, mkpat_opt_constraint ~loc:$sloc pat octy
-    }
+    { label, octy, opat }
 ;
 
 /* Value descriptions */

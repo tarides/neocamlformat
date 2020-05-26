@@ -235,7 +235,8 @@ and pattern_desc =
         (* `A             (None)
            `A P           (Some P)
          *)
-  | Ppat_record of (Longident.t * pattern) list * obj_closed_flag
+  | Ppat_record of
+      (Longident.t * core_type option * pattern option) list * obj_closed_flag
         (* { l1=P1; ...; ln=Pn }     (flag = Closed)
            { l1=P1; ...; ln=Pn; _}   (flag = Open)
 
@@ -333,7 +334,9 @@ and expression_desc =
         (* `A             (None)
            `A E           (Some E)
          *)
-  | Pexp_record of (Longident.t * expression) list * expression option
+  | Pexp_record of
+      (Longident.t * (core_type option * core_type option) * expression option) list *
+      expression option
         (* { l1=P1; ...; ln=Pn }     (None)
            { E0 with l1=P1; ...; ln=Pn }   (Some E0)
 

@@ -7,7 +7,7 @@ type t = {
   params: document list loc;
   constr: document option;
   coerce: document option;
-  rhs : document;
+  rhs : document option;
 }
 
 let pp_params { loc; txt = params } =
@@ -22,19 +22,27 @@ let attach_annot doc ~sep annot =
     let sep = token_between doc annot sep in
     group (doc ^^ nest 2 (break_before sep)) ^^ nest 2 (break_before annot)
 
-let pp ?(binder=Tokens.Equals) ~keyword { lhs; params; constr; coerce; rhs } =
-  let pre = group (keyword ^^ nest 2 (break_before lhs)) in
+let pp ?(binder=Tokens.Equals) ?keyword { lhs; params; constr; coerce; rhs } =
+  let pre =
+    match keyword with
+    | None -> lhs
+    | Some keyword -> group (keyword ^^ nest 2 (break_before lhs))
+  in
   let params = pp_params params in
   let with_constraint = attach_annot params ~sep:Colon constr in
   let with_coercion = attach_annot with_constraint ~sep:Coerce coerce in
-  let binder = token_between with_coercion rhs binder in
-  let lhs = pre ^^ group (with_coercion ^/^ binder) in
-  group (lhs ^^ nest 2 (break_before rhs))
+  match rhs with
+  | None -> pre ^^ with_coercion
+  | Some rhs ->
+    let binder = token_between with_coercion rhs binder in
+    let lhs = pre ^^ group (with_coercion ^/^ binder) in
+    group (lhs ^^ nest 2 (break_before rhs))
 
 let pp_simple ?binder ~keyword lhs rhs =
   let loc = { lhs.loc with loc_start = lhs.loc.loc_end } in
   pp ?binder ~keyword
-    { lhs; params = { loc; txt = [] }; constr = None; coerce = None; rhs}
+    { lhs; params = { loc; txt = [] }; constr = None; coerce = None;
+      rhs = Some rhs }
 
 module Module = struct
   type constraint_ = None | Sig of document | Mty of document

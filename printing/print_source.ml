@@ -464,17 +464,20 @@ end = struct
       let arg = pp ps p in
       Printing_stack.parenthesize ps (tag ^/^ arg)
 
-  and pp_record_field ps (lid, pat) =
-    let field = Longident.pp lid in
-    group (
-      match pat.ppat_desc with
-      | Ppat_var v when (Longident.last lid).txt = v.txt -> field
-      | _ ->
-        let pat = pp ps pat in
-        let equals = token_between field pat Equals in
-        group (field ^/^ equals) ^^
-        nest 2 (break_before pat)
-    )
+  and pp_record_field ps (lid, ctyo, pato) =
+    let params =
+      let pos = (Longident.endpos lid).loc_end in
+      { txt = []; loc = { loc_start = pos; loc_end = pos }}
+    in
+    let binding : Binding.t =
+      { lhs = Longident.pp lid;
+        params;
+        constr = Option.map (Core_type.pp []) ctyo;
+        coerce = None;
+        rhs = Option.map (pp ps) pato;
+      }
+    in
+    Binding.pp binding
 
   and pp_record ~loc ps pats closed =
     let fields = List.map (pp_record_field ps) pats in
@@ -864,16 +867,20 @@ end = struct
       let doc  = prefix ~indent:2 ~spaces:1 tag arg in
       Printing_stack.parenthesize ps doc
 
-  and record_field (lid, exp) =
-    let fld = Longident.pp lid in
-    group (
-      match exp.pexp_desc with
-      | Pexp_ident Lident id when (Longident.last lid).txt = id.txt -> fld
-      | _ ->
-        let exp = pp [ Printing_stack.Record_field ] exp in
-        let equals = token_between fld exp Equals in
-        group (fld ^/^ equals) ^^ nest 2 (break_before exp)
-    )
+  and record_field (lid, (oct1, oct2), exp) =
+    let params =
+      let pos = (Longident.endpos lid).loc_end in
+      { txt = []; loc = { loc_start = pos; loc_end = pos }}
+    in
+    let binding : Binding.t =
+      { lhs = Longident.pp lid;
+        params;
+        constr = Option.map (Core_type.pp []) oct1;
+        coerce = Option.map (Core_type.pp []) oct2;
+        rhs = Option.map (pp [ Printing_stack.Record_field ]) exp;
+      }
+    in
+    Binding.pp binding
 
   and pp_record ~loc ps fields updated_record =
     let fields = List.map record_field fields in
@@ -1268,7 +1275,7 @@ end = struct
     let constr = Option.map (Core_type.pp [ Value_binding ]) constr in
     let coerce = Option.map (Core_type.pp [ Value_binding ]) coerce in
     let rhs = Expression.pp [] pvb_expr in
-    let rhs = Attribute.attach attr_kind rhs pvb_attributes in
+    let rhs = Some (Attribute.attach attr_kind rhs pvb_attributes) in
     let params =
       let loc = { pat.loc with loc_start = pat.loc.loc_end } in
       { txt = params; loc }
@@ -2084,7 +2091,7 @@ end = struct
     let params = List.map Fun_param.pp params in
     let constr = Option.map (Core_type.pp []) constr in
     let coerce = Option.map (Core_type.pp []) coerce in
-    let rhs = Expression.pp [] expr in
+    let rhs = Some (Expression.pp [] expr) in
     let params =
       let loc = { name.loc with loc_start = name.loc.loc_end } in
       { txt = params; loc }
@@ -2242,7 +2249,7 @@ end = struct
               { loc; txt = List.map Fun_param.pp pci_term_params });
             constr = Option.map Class_type.pp pci_type;
             coerce = None;
-            rhs = Class_expr.pp pci_expr }
+            rhs = Some (Class_expr.pp pci_expr) }
         in
         let keyword =
           let fst =
@@ -2282,7 +2289,7 @@ end = struct
               { loc; txt = List.map Fun_param.pp pci_term_params });
             constr = None;
             coerce = None;
-            rhs = Class_type.pp pci_expr }
+            rhs = Some (Class_type.pp pci_expr) }
         in
         let keyword =
           let fst =
@@ -2322,7 +2329,7 @@ end = struct
               { loc; txt = List.map Fun_param.pp pci_term_params });
             constr = None;
             coerce = None;
-            rhs = Class_type.pp pci_expr }
+            rhs = Some (Class_type.pp pci_expr) }
         in
         let keyword =
           let fst =

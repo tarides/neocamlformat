@@ -9,3 +9,8 @@ let last = function
     Lident s -> s
   | Ldot(_, s) -> s
   | Lapply(_, _) -> invalid_arg "Longident.last"
+
+let rec endpos = function
+  | Lident s
+  | Ldot(_, s) -> s.loc
+  | Lapply(_, t) -> endpos t
