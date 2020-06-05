@@ -8,6 +8,8 @@ let normalize_cmt_spaces doc =
   |> List.filter ((<>) "")
   |> String.concat " "
 
+let ignore_docstrings = ref false
+
 let mapper =
   (* remove locations *)
   let location _ _ = Location.none in
@@ -39,6 +41,16 @@ let mapper =
     Ast_mapper.default_mapper.attribute m attr
   in
   let attributes (m : Ast_mapper.mapper) (attrs : attribute list) =
+    let attrs =
+      if not !ignore_docstrings then
+        attrs
+      else
+        List.filter (function
+          | { attr_name = { txt = ("ocaml.doc" | "ocaml.txt"); _ }; _ } ->
+            false
+          | _ -> true
+        ) attrs
+    in
     (* sort attributes *)
     Ast_mapper.default_mapper.attributes m (sort_attributes attrs)
   in

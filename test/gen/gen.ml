@@ -6,7 +6,7 @@ let gen_rule file =
  (deps (:t %s))
  (action
    (with-stdout-to %%{target}
-     (run %%{bin:neocamlformat} %%{t}))))
+     (run %%{bin:neocamlformat} --ignore-docstrings %%{t}))))
 |} file file
 
 let () =

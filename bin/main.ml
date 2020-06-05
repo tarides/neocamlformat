@@ -60,7 +60,9 @@ let cmd =
   and+ () = Cases.body_on_separate_line_cmd
   and+ width = Arg.(value & opt int 80 & info ["w"; "width"])
   and+ files = Arg.(value & pos_all file [] & info ~doc:"files to format" [])
+  and+ ignore_docstrings = Arg.(value & flag & info ["ignore-docstrings"])
   in
+  Ast_checker.ignore_docstrings.contents <- ignore_docstrings;
   List.iter (fun fn ->
     let fmted = fmt_file ~width fn in
     print_string fmted;
