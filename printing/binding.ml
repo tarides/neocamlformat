@@ -46,23 +46,28 @@ let pp_simple ?binder ~keyword lhs rhs =
 
 module Module = struct
   type constraint_ = None | Sig of document | Mty of document
-  type expr = Struct of document | Expr of document
+  type body =
+    | Items of document
+    | Generic of document
+
+  type context = Sig | Struct
 
   type t = {
     name : document;
     params: document list loc;
     constr: constraint_;
-    expr:  expr;
+    body:  body;
     attributes: document;
   }
 
-  let pp ~keyword { name; params; constr; expr; attributes } =
+  let pp ~keyword ~context { name; params; constr; body; attributes } =
     let pre = group (keyword ^^ nest 2 (break_before name)) in
     let params = pp_params params in
     let with_constraint, binder =
-      match constr with
-      | None -> params, "="
-      | Sig sg ->
+      match constr, context with
+      | None, Struct -> params, "="
+      | None, Sig -> params, ":"
+      | Sig sg, Struct ->
         let sep =
           let txt =
             let open PPrint in
@@ -75,23 +80,29 @@ module Module = struct
           ^^ nest 2 (PPrint.hardline ++ sg)
         in
         doc, "end ="
-      | Mty constraint_ ->
+      | Mty constraint_, Struct ->
         let doc = attach_annot params ~sep:Colon (Some constraint_) in
         doc, "="
+      | _ , Sig -> assert false
     in
     let binder, rhs =
-      match expr with
-      | Struct str ->
+      match body with
+      | Items items ->
         let doc =
           enclose ~before:PPrint.empty ~after:PPrint.(hardline ^^ !^"end")
-            (nest 2 (hardline ++ str))
+            (nest 2 (hardline ++ items))
         in
-        binder ^ " struct", doc
-      | Expr doc ->
+        binder ^ (match context with Struct -> " struct" | Sig -> " sig"), doc
+      | Generic doc ->
         binder, nest 2 (break_before doc)
     in
     let binder = (* Gloups. *)
-      let fake = token_between with_constraint rhs Equals in
+      let fake =
+        token_between with_constraint rhs
+          (match context with
+           | Struct -> Equals
+           | Sig -> Colon)
+      in
       string ~loc:fake.loc binder
     in
     let doc = pre ^^ group (with_constraint ^/^ binder) ^^ rhs in

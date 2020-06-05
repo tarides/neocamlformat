@@ -319,7 +319,8 @@ module Str:
 module Md:
   sig
     val mk: ?loc:loc -> ?attrs:attrs -> ?docs:docs -> ?text:text ->
-      str_opt -> module_type -> module_declaration
+      str_opt -> (functor_parameter with_loc list * module_type) ->
+      module_declaration
   end
 
 (** Module substitutions *)

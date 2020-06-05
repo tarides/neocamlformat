@@ -418,10 +418,11 @@ end
 
 module Md = struct
   let mk ?(loc = !default_loc) ?(attrs = [])
-        ?(docs = empty_docs) ?(text = []) name typ =
+        ?(docs = empty_docs) ?(text = []) name (params, typ) =
     {
      pmd_name = name;
      pmd_type = typ;
+     pmd_params = params;
      pmd_attributes =
        add_text_attrs text (add_docs_attrs docs attrs);
      pmd_loc = loc;

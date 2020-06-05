@@ -1422,12 +1422,10 @@ signature_item:
 (* The body (right-hand side) of a module declaration. *)
 module_declaration_body:
     COLON mty = module_type
-      { mty }
-  | mkmty(
-      arg = functor_arg body = module_declaration_body
-        { Pmty_functor([ arg ], body) }
-    )
-    { $1 }
+      { [], mty }
+  | arg = functor_arg body = module_declaration_body
+      { let args, body = body in
+        (arg :: args, body) }
 ;
 
 (* A module alias declaration (in a signature). *)
@@ -1442,7 +1440,7 @@ module_declaration_body:
     let attrs = attrs1 @ attrs2 in
     let loc = make_loc $sloc in
     let docs = symbol_docs $sloc in
-    Md.mk name body ~attrs ~loc ~docs, ext
+    Md.mk name ([], body) ~attrs ~loc ~docs, ext
   }
 ;
 %inline module_expr_alias:
@@ -1485,7 +1483,7 @@ module_subst:
     let attrs = attrs1 @ attrs2 in
     let loc = make_loc $sloc in
     let docs = symbol_docs $sloc in
-    ext, Md.mk name mty ~attrs ~loc ~docs
+    ext, Md.mk name ([], mty) ~attrs ~loc ~docs
   }
 ;
 %inline and_module_declaration:
@@ -1500,7 +1498,7 @@ module_subst:
     let docs = symbol_docs $sloc in
     let loc = make_loc $sloc in
     let text = symbol_text $symbolstartpos in
-    Md.mk name mty ~attrs ~loc ~text ~docs
+    Md.mk name ([], mty) ~attrs ~loc ~text ~docs
   }
 ;
 

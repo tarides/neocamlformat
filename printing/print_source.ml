@@ -5,7 +5,8 @@ open Source_tree
 open Document
 open struct type document = Document.t end
 
-let module_name ~loc = function
+let module_name { txt; loc} =
+  match txt with
   | None -> underscore ~loc
   | Some name -> string ~loc name
 
@@ -284,9 +285,12 @@ end = struct
     match arg_label with
     | Nolabel -> ct
     | Labelled l ->
-      let lbl = str l in
-      let colon = token_between lbl ct Colon in
-      lbl ^^ colon ^^ break_before ~spaces:0 ct
+      begin match token_before ~start:l.loc.loc_end ct Colon with
+      | colon -> str l ^^ colon ^^ break_before ~spaces:0 ct
+      | exception (Not_found | Assert_failure _ (* gloups *)) ->
+        let lbl = string ~loc:l.loc (l.txt ^ ":") in
+        lbl ^^ break_before ~spaces:0 ct
+      end
     | Optional l ->
       match token_before ~start:l.loc.loc_end ct Colon with
       | colon ->
@@ -530,7 +534,7 @@ end = struct
     Printing_stack.parenthesize ps (lazy_ ^/^ pp ps p)
 
   and pp_unpack mod_name ct =
-    let mod_name = module_name ~loc:mod_name.loc mod_name.txt in
+    let mod_name = module_name mod_name in
     let with_constraint =
       match ct with
       | None -> mod_name
@@ -1127,7 +1131,7 @@ end = struct
         let loc = { loc with loc_end = name.loc.loc_start } in
         string ~loc "let module"
       in
-      Binding.Module.pp ~keyword binding
+      Binding.Module.pp ~keyword ~context:Struct binding
     in
     let expr =
       let ps = if Printing_stack.will_parenthesize ps then [] else List.tl ps in
@@ -1443,12 +1447,14 @@ and Module_binding : sig
     -> Binding.Module.t
 
   val pp : module_binding -> Binding.Module.t
+
+  val param : functor_parameter loc -> t
 end = struct
   let param { loc; txt } =
     match txt with
     | Unit -> string ~loc "()"
     | Named (name, mty) ->
-      let name = module_name ~loc:name.loc name.txt in
+      let name = module_name name in
       let mty = Module_type.pp mty in
       let colon = token_between name mty Colon in
       group (
@@ -1468,14 +1474,14 @@ end = struct
   let pp_me ({ pmod_desc; pmod_attributes; _ } as me) =
     match pmod_desc, pmod_attributes with
     | Pmod_structure (si :: st), [] ->
-      Binding.Module.Struct (Structure.pp_nonempty si st)
-    | _ -> Binding.Module.Expr (Module_expr.pp me)
+      Binding.Module.Items (Structure.pp_nonempty si st)
+    | _ -> Binding.Module.Generic (Module_expr.pp me)
 
   let pp_raw name params mty me attrs =
-    let name = module_name ~loc:name.loc name.txt in
+    let name = module_name name in
     let params = List.map param params in
     let constr = pp_mty mty in
-    let expr = pp_me me in
+    let body = pp_me me in
     let attributes =
       match attrs with
       | [] -> empty ~loc:{ me.pmod_loc with loc_start = me.pmod_loc.loc_end }
@@ -1487,28 +1493,47 @@ end = struct
       let loc = { name.loc with loc_start = name.loc.loc_end } in
       { loc; txt = params }
     in
-    { Binding.Module. name; params; constr; expr; attributes }
+    { Binding.Module. name; params; constr; body; attributes }
 
   let pp { pmb_name; pmb_params; pmb_type; pmb_expr; pmb_attributes; _ } =
     let binding = pp_raw pmb_name pmb_params pmb_type pmb_expr pmb_attributes in
-    let expr = binding.expr in
-    { binding with expr }
+    let body = binding.body in
+    { binding with body }
 end
 
 and Module_declaration : sig
   val pp : module_declaration -> document
 end = struct
-  let pp { pmd_name; pmd_type; pmd_attributes; pmd_loc } =
+  let pp_mty ({ pmty_desc; pmty_attributes; _ } as mty) =
+    match pmty_desc, pmty_attributes with
+    | Pmty_signature (si :: sg), [] ->
+      Binding.Module.Items (Signature.pp_nonempty si sg)
+    | _ -> Binding.Module.Generic (Module_type.pp mty)
+
+  let pp { pmd_name; pmd_params; pmd_type; pmd_attributes; pmd_loc } =
     let kw =
       let loc = { pmd_loc with loc_end = pmd_name.loc.loc_start } in
-      string ~loc "module "
+      string ~loc "module"
     in
-    let name =
-      str { pmd_name with txt = Option.value ~default:"_" pmd_name.txt }
+    let name = module_name pmd_name in
+    let params = List.map Module_binding.param pmd_params in
+    let body = pp_mty pmd_type in
+    let attributes =
+      match pmd_attributes with
+      | [] ->
+        empty ~loc:{ pmd_type.pmty_loc with loc_start = pmd_type.pmty_loc.loc_end }
+      | attr :: attrs ->
+        separate_map (break 0) ~f:(Attribute.pp Attached_to_structure_item)
+          attr attrs
     in
-    let typ = Module_type.pp pmd_type in
-    let doc = Binding.pp_simple ~keyword:kw name ~binder:Colon typ in
-    Attribute.attach_to_top_item doc pmd_attributes
+    let params =
+      let loc = { name.loc with loc_start = name.loc.loc_end } in
+      { loc; txt = params }
+    in
+    let binding =
+      { Binding.Module. name; params; constr = None; body; attributes }
+    in
+    Binding.Module.pp ~keyword:kw ~context:Sig binding
 end
 
 and Module_substitution : sig
@@ -1580,7 +1605,7 @@ end = struct
       let loc = { mb.pmb_loc with loc_end = mb.pmb_name.loc.loc_start } in
       string ~loc "module"
     in
-    Binding.Module.pp ~keyword:module_ (Module_binding.pp mb)
+    Binding.Module.pp ~keyword:module_ ~context:Struct (Module_binding.pp mb)
 
   let pp_recmodule mbs =
     let mbs =
@@ -1596,7 +1621,9 @@ end = struct
           let loc = { mb.pmb_loc with loc_end = mb.pmb_name.loc.loc_start } in
           string ~loc keyword
         in
-        let binding = Binding.Module.pp ~keyword (Module_binding.pp mb) in
+        let binding =
+          Binding.Module.pp ~context:Struct ~keyword (Module_binding.pp mb)
+        in
         Attribute.prepend_text text binding
       ) mbs
     in

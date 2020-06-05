@@ -840,6 +840,7 @@ and signature_item_desc =
 and module_declaration =
     {
      pmd_name: string option loc;
+     pmd_params: functor_parameter loc list;
      pmd_type: module_type;
      pmd_attributes: attributes; (* ... [@@id1] [@@id2] *)
      pmd_loc: Location.t;
