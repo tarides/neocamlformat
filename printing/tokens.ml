@@ -44,6 +44,7 @@ type t =
   | Class
   | And
   | Type
+  | Underscore
 
 let to_parser_token t : Source_parsing.Parser.token =
   match t with
@@ -92,6 +93,7 @@ let to_parser_token t : Source_parsing.Parser.token =
   | Class -> CLASS
   | And -> AND
   | Type -> TYPE
+  | Underscore -> UNDERSCORE
 
 let to_string = function
   | Colon -> ":"
@@ -139,3 +141,4 @@ let to_string = function
   | Class -> "class"
   | And -> "and"
   | Type -> "type"
+  | Underscore -> "_"

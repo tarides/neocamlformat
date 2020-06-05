@@ -1284,19 +1284,28 @@ end = struct
 end
 
 and Functor_param : sig
-  val pp : functor_parameter loc -> document
+  val pp : context:[ `Type | `Expr ] -> functor_parameter loc -> document
 end = struct
-  let pp { loc; txt } =
+  let pp ~context { loc; txt } =
     match txt with
     | Unit -> string ~loc "()"
     | Named (name, mty) ->
       let mty = Module_type.pp mty in
-      match name.txt with
-      | None -> mty
-      | Some s ->
-        let name = string ~loc:name.loc s in
+      let pp name =
         let colon = token_between name mty Colon in
         parens (group (name ^/^ colon) ^/^ mty)
+      in
+      match name.txt with
+      | None ->
+        begin match context with
+        | `Type -> mty
+        | `Expr ->
+          let name = token_before ~start:loc.loc_start mty Underscore in
+          pp name
+        end
+      | Some s ->
+        let name = string ~loc:name.loc s in
+        pp name
 end
 
 and Module_expr : sig
@@ -1327,7 +1336,7 @@ end = struct
   and pp_functor ~(loc:Location.t) params me =
     let params =
       separate_map (PPrint.break 1)
-        ~f:Functor_param.pp (List.hd params) (List.tl params)
+        ~f:(Functor_param.pp ~context:`Expr) (List.hd params) (List.tl params)
     in
     let me = pp me in
     let functor_ =
@@ -1384,7 +1393,7 @@ end = struct
   and pp_functor ~(loc:Location.t) params mty =
     let params =
       separate_map (PPrint.break 1)
-        ~f:Functor_param.pp (List.hd params) (List.tl params)
+        ~f:(Functor_param.pp ~context:`Type) (List.hd params) (List.tl params)
     in
     let mty = pp mty in
     let functor_ =
