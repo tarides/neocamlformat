@@ -6,6 +6,7 @@ type core_type_elt =
   | Tuple
 
 type elt =
+  | Attribute
   | Core_type of core_type_desc
   | Pattern of pattern_desc
   | Expression of expression_desc
@@ -118,6 +119,7 @@ let needs_parens elt parent =
         (* Not necessary: but better style. *)
         true
       | Prefix_op
+      | Attribute
       | Expression ( Pexp_field _ 
                    | Pexp_apply _
                    | Pexp_construct _
@@ -204,6 +206,26 @@ let needs_parens elt parent =
                    | Pexp_lazy _
                    ) ->
         true
+      | Expression Pexp_record _
+      | Unpack ->
+        (* Not described by the precedence table, but won't parse otherwise. *)
+        true
+      | _ -> false
+    end
+
+  | Attribute -> begin
+      match parent with
+      | Prefix_op
+      | Expression Pexp_field _
+      | Infix_op { level = 9; _ }
+      | Expression ( Pexp_apply _
+                   | Pexp_construct _
+                   | Pexp_variant _
+                   | Pexp_assert _
+                   | Pexp_lazy _
+                   ) ->
+        true
+      | Cons_constr { on_left = false }
       | Expression Pexp_record _
       | Unpack ->
         (* Not described by the precedence table, but won't parse otherwise. *)

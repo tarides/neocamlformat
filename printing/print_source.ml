@@ -80,6 +80,8 @@ module rec Attribute : sig
     | Attached_to_structure_item
     | Attached_to_item
 
+  val has_non_doc : attributes -> bool
+
   val pp : kind -> attribute -> document
 
   val attach : kind -> document -> attributes -> document
@@ -152,6 +154,13 @@ end = struct
         prefix ~indent:2 ~spaces:1 doc
           (separate_map (PPrint.break 0) ~f:(pp kind) attr attrs)
       )
+
+  let has_non_doc =
+    List.exists (fun attr ->
+      match attr.attr_name.txt with
+      | "ocaml.doc" | "ocaml.txt" -> false
+      | _ -> true
+    )
 
   let attach_to_item doc =
     attach Attached_to_item doc
@@ -645,11 +654,20 @@ and Expression : sig
   val pp : Printing_stack.t -> expression -> document
 end = struct
   let rec pp ps { pexp_desc; pexp_attributes; pexp_loc; _ } =
-    let desc =
-      let ps = Printing_stack.Expression pexp_desc :: ps in
-      group (pp_desc ~loc:pexp_loc ps pexp_desc)
+    let has_attrs = Attribute.has_non_doc pexp_attributes in
+    let ps' =
+      let new_item = Printing_stack.Expression pexp_desc in
+      if has_attrs then
+        new_item :: Attribute :: ps
+      else
+        new_item :: ps
     in
-    Attribute.attach_to_item desc pexp_attributes
+    let desc = group (pp_desc ~loc:pexp_loc ps' pexp_desc) in
+    let doc = Attribute.attach_to_item desc pexp_attributes in
+    if has_attrs then
+      Printing_stack.parenthesize (List.tl ps') doc
+    else
+      doc
 
   and pp_desc ~loc ps = function
     | Pexp_ident id -> pp_ident id
