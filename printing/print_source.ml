@@ -720,9 +720,9 @@ end = struct
     | Pexp_array_set (arr, idx, e) -> pp_array_set ps arr idx e
     | Pexp_string_get (str, idx) -> pp_string_get ps str idx
     | Pexp_string_set (str, idx, c) -> pp_string_set ps str idx c
+    | Pexp_bigarray_get (ba, idx) -> pp_bigarray_get ps ba idx
+    | Pexp_bigarray_set (ba, idx, c) -> pp_bigarray_set ps ba idx c
       (* TODO *)
-    | Pexp_bigarray_get _
-    | Pexp_bigarray_set _
     | Pexp_dotop_get _
     | Pexp_dotop_set _
       ->
@@ -933,7 +933,10 @@ end = struct
     Printing_stack.parenthesize ps doc
 
   and pp_setfield ps re fld val_ =
-    let field = pp_field ps re fld in
+    let field =
+      let ps = Printing_stack.Expression (Pexp_field (re, fld)) :: List.tl ps in
+      pp_field ps re fld
+    in
     let value = pp (List.tl ps) val_ in
     let larrow = token_between field value Larrow in
     let doc =
@@ -952,13 +955,12 @@ end = struct
 
   and pp_gen_get enclosing ps arr idx =
     let arr = pp ps arr in
-    let idx = pp [] idx in
     let dot = token_between arr idx Dot in
     let doc = flow (break 0) arr [ dot; enclosing idx ] in
     Printing_stack.parenthesize ps doc
 
-  and pp_gen_set enclosing ps arr idx val_ =
-    let access = pp_gen_get enclosing ps arr idx in
+  and pp_gen_set enclosing access_ps ps arr idx val_ =
+    let access = pp_gen_get enclosing access_ps arr idx in
     let value = pp (List.tl ps) val_ in
     let larrow = token_between access value Larrow in
     let doc =
@@ -968,11 +970,30 @@ end = struct
     in
     Printing_stack.parenthesize ps doc
 
-  and pp_array_get ps arr idx = pp_gen_get parens ps arr idx
-  and pp_array_set ps arr idx val_ = pp_gen_set parens ps arr idx val_
+  and pp_array_get ps arr idx = pp_gen_get parens ps arr (pp [] idx)
+  and pp_array_set ps arr idx val_ =
+    let access_ps =
+      Printing_stack.Expression (Pexp_array_get (arr, idx)) :: List.tl ps
+    in
+    pp_gen_set parens access_ps ps arr (pp [] idx) val_
 
-  and pp_string_get ps arr idx = pp_gen_get brackets ps arr idx
-  and pp_string_set ps arr idx val_ = pp_gen_set brackets ps arr idx val_
+  and pp_string_get ps arr idx = pp_gen_get brackets ps arr (pp [] idx)
+  and pp_string_set ps arr idx val_ =
+    let access_ps =
+      Printing_stack.Expression (Pexp_string_get (arr, idx)) :: List.tl ps
+    in
+    pp_gen_set brackets access_ps ps arr (pp [] idx) val_
+
+  and pp_bigarray_get ps arr idx =
+    let idx = pp_tuple ps idx in
+    pp_gen_get braces ps arr idx
+
+  and pp_bigarray_set ps arr idx val_ =
+    let access_ps =
+      Printing_stack.Expression (Pexp_bigarray_get (arr, idx)) :: List.tl ps
+    in
+    let idx = pp_tuple ps idx in
+    pp_gen_set braces access_ps ps arr idx val_
 
   and pp_if_then_else ~loc ps if_branches else_opt =
     let if_branches =
