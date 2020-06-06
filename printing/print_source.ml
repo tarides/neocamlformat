@@ -25,6 +25,8 @@ end = struct
   let pp_ident s =
     match Ident_class.classify s with
     | Normal -> str s
+    | Infix_op { loc; txt } when txt <> "" && String.get txt 0 = '*' ->
+      parens (string ~loc (" " ^ txt ^ " "))
     | Infix_op _ | Prefix_op _ -> parens (str s)
 
   let rec pp lid =
