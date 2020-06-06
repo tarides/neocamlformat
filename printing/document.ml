@@ -83,6 +83,10 @@ let (++) doc t =
   { txt = doc ^^ t.txt
   ; loc = t.loc }
 
+let suffix ~after:t doc =
+  { txt = t.txt ^^ doc
+  ; loc = t.loc }
+
 let angles (t : t) = { t with txt = angles t.txt }
 let braces (t : t) = { t with txt = braces t.txt }
 let brackets (t : t) = { t with txt = brackets t.txt }
@@ -244,29 +248,88 @@ let flow_map sep f first rest =
 let flow sep first rest =
   flow_map sep (fun x -> x) first rest
 
-module List_like = struct
-  let wrapped_fields x xs =
-    let fmt x = nest 2 (group (break_before x)) in
-    List.fold_left
-      (fun acc elt ->
-          let elt = fmt elt in
-          let semi = token_between acc elt Semi in
-          group (acc ^^ semi) ^^ elt)
-      (fmt x) 
-      xs
+module Enclosed_separated = struct
+  type raw = t * t list
 
-  let wrapped ~left ~right x xs =
-    let fields = wrapped_fields x xs in
-    enclose ~before:left ~after:PPrint.(group (break 1 ^^ right))
-      fields
+  type element = {
+    doc: t;
+    has_semi: bool;
+  }
 
-  let fit_or_vertical_fields x xs =
-    let fields = separate PPrint.(semi ^^ break 1) x xs in
-    nest 2 (break_before fields)
+  module Wrapped : sig
+    val pp_fields: raw -> raw list -> t
 
-  let fit_or_vertical ~left ~right x xs  =
-    let fields = fit_or_vertical_fields x xs in
-    enclose ~before:left ~after:PPrint.(break 1 ^^ right) fields
+    val pp : left:document -> right:document -> raw -> raw list -> t
+  end = struct
+    let ( * ) before after =
+      { after with doc = before ^^ after.doc }
+
+    let fmt (x, attrs) =
+      let doc = nest 2 (group (break_before x)) in
+      match attrs with
+      | [] -> { doc; has_semi = false }
+      | x :: xs ->
+        let attrs = group (separate (PPrint.break 0) x xs) in
+        { doc = group (suffix ~after:doc PPrint.semi ^/^ attrs)
+        ; has_semi = true }
+
+    let pp_fields x xs =
+      let res =
+        List.fold_left
+          (fun { doc = acc; has_semi } elt ->
+             let elt = fmt elt in
+             if has_semi then
+               acc * elt
+             else
+               let semi = token_between acc elt.doc Semi in
+               group (acc ^^ semi) * elt)
+          (fmt x) 
+          xs
+      in
+      res.doc
+
+    let pp ~left ~right x xs =
+      let fields = pp_fields x xs in
+      enclose ~before:left ~after:PPrint.(group (break 1 ^^ right))
+        fields
+  end
+
+  module Fit_or_vertical : sig
+    val pp_fields: raw -> raw list -> t
+
+    val pp : left:document -> right:document -> raw -> raw list -> t
+  end = struct
+    let fmt (doc, attrs) =
+      match attrs with
+      | [] -> { doc; has_semi = false }
+      | x :: xs ->
+        let attrs = separate (PPrint.break 0) x xs in
+        { doc = group (group (suffix ~after:doc semi) ^/^ attrs)
+        ; has_semi = true }
+
+    let ( * ) before after =
+      { after with doc = before ^^ break_before after.doc }
+
+    let pp_fields x xs =
+      let fields =
+        match xs with
+        | [] -> fmt x
+        | _ ->
+          List.fold_left (fun { doc = acc; has_semi } elt ->
+              let elt = fmt elt in
+              if has_semi then
+                acc * elt
+              else
+                let semi = token_between acc elt.doc Semi in
+                group (acc ^^ semi) * elt)
+            (fmt x) xs
+      in
+      nest 2 (break_before fields.doc)
+
+    let pp ~left ~right x xs  =
+      let fields = pp_fields x xs in
+      enclose ~before:left ~after:PPrint.(break 1 ^^ right) fields
+  end
 
   let pp ~loc ~formatting ~left ~right = function
     | [] ->
@@ -278,11 +341,25 @@ module List_like = struct
       { txt = PPrint.(left ^/^ cmts ^^ right); loc }
     | x :: xs ->
       match (formatting : Options.Wrappable.t) with
-      | Wrap -> wrapped ~left ~right x xs
-      | Fit_or_vertical -> fit_or_vertical ~left ~right x xs
+      | Wrap -> Wrapped.pp ~left ~right x xs
+      | Fit_or_vertical -> Fit_or_vertical.pp ~left ~right x xs
 
   let pp_fields ~formatting x xs =
     match (formatting : Options.Wrappable.t) with
-    | Wrap -> wrapped_fields x xs
-    | Fit_or_vertical -> fit_or_vertical_fields x xs
+    | Wrap -> Wrapped.pp_fields x xs
+    | Fit_or_vertical -> Fit_or_vertical.pp_fields x xs
 end
+
+module List_like = struct
+
+  let pp ~loc ~formatting ~left ~right elts =
+    let elts = List.map (fun x -> (x, [])) elts in
+    Enclosed_separated.pp ~loc ~formatting ~left ~right elts
+
+  let pp_fields ~formatting x xs =
+    Enclosed_separated.pp_fields ~formatting
+      (x, [])
+      (List.map (fun x -> (x, [])) xs)
+end
+
+module Record_like = Enclosed_separated

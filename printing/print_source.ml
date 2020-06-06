@@ -333,9 +333,9 @@ end = struct
     let fields =
       match closed with
       | OClosed -> fields
-      | OOpen loc -> fields @ [ string ~loc ".." ]
+      | OOpen loc -> fields @ [ string ~loc "..", [] ]
     in
-    List_like.pp ~loc ~formatting:Wrap ~left:langle ~right:rangle
+    Record_like.pp ~loc ~formatting:Fit_or_vertical ~left:langle ~right:rangle
       fields
 
   and pp_class ps name args =
@@ -373,7 +373,7 @@ end = struct
 end
 
 and Object_field : sig
-  val pp : object_field -> document
+  val pp : object_field -> document * document list
 end = struct
   let pp_otag name ct =
     let name = str name in
@@ -387,7 +387,7 @@ end = struct
 
   let pp { pof_desc; pof_attributes; _ } =
     let desc = pp_desc pof_desc in
-    Attribute.attach_to_item desc pof_attributes
+    desc, List.map (Attribute.pp Attached_to_item) pof_attributes
 end
 
 and Package_type : sig
@@ -2198,10 +2198,12 @@ end = struct
     let doc = pp_field_desc ~loc:pcf_loc pcf_desc in
     Attribute.attach_to_item doc pcf_attributes
 
-  let pp ~loc:_ { pcstr_self = _; pcstr_fields } =
+  let pp ~loc { pcstr_self = _; pcstr_fields } =
     (* FIXME *)
     match pcstr_fields with
-    | [] -> assert false
+    | [] ->
+      (* FIXME: get the tokens, to get the comments. *)
+      string ~loc "object end"
     | f :: fs ->
       let fields = separate_map PPrint.(twice hardline) ~f:pp_field f fs in
       (* FIXME *)
