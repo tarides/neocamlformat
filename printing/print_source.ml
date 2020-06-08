@@ -1418,13 +1418,14 @@ end = struct
     Attribute.attach_to_item (pp_desc ~loc:pmty_loc pmty_desc) pmty_attributes
 
   and pp_desc ~loc = function
-    | Pmty_ident lid -> Longident.pp lid
+    | Pmty_alias lid (* [module type _ = A] *)
+    | Pmty_ident lid (* [module _ : A] *)
+      -> Longident.pp lid
     | Pmty_signature sg -> pp_signature ~loc sg
     | Pmty_functor (params, mty) -> pp_functor ~loc params mty
     | Pmty_with (mty, cstrs) -> pp_with mty cstrs
     | Pmty_typeof me -> pp_typeof me
     | Pmty_extension ext -> Extension.pp Item ext
-    | Pmty_alias _ -> assert false (* shouldn't be produced by the parser. *)
 
   and pp_signature ~loc = function
     | [] -> string ~loc "sig end"
@@ -1556,7 +1557,15 @@ end = struct
     let binding =
       { Binding.Module. name; params; constr = None; body; attributes }
     in
-    Binding.Module.pp ~keyword:kw ~context:Sig binding
+    let context : Binding.Module.context =
+      (* This is a hack.
+         The context is used to decide whether to print "=" or ":", but that
+         doesn't quite work: module aliases declarations use "=". *)
+      match pmd_type.pmty_desc with
+      | Pmty_alias _ -> Struct
+      | _ -> Sig
+    in
+    Binding.Module.pp ~keyword:kw ~context binding
 end
 
 and Module_substitution : sig
