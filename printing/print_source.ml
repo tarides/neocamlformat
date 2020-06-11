@@ -1449,10 +1449,57 @@ end = struct
     let arrow = token_between params mty Rarrow in
     functor_ ^/^ params ^/^ arrow ^/^ mty
 
-  (* TODO *)
-  and pp_with mty _cstrs =
+  and attach_constraint mty is_first_cstr (kw, cstr) =
+    let keyword =
+      match kw with
+      | With loc -> string ~loc "with"
+      | And  loc -> string ~loc "and"
+    in
+    let cstr =
+      match cstr with
+      | Pwith_type (lid, td) ->
+        let type_ = token_after keyword ~stop:td.ptype_loc.loc_start Type in
+        let kw = keyword ^/^ type_ in
+        Type_declaration.pp ~override_name:(Longident.pp lid)
+          ~keyword:(Formatted kw) td
+      | Pwith_typesubst (lid, td) ->
+        let type_ = token_after keyword ~stop:td.ptype_loc.loc_start Type in
+        let kw = keyword ^/^ type_ in
+        Type_declaration.pp ~binder:Colonequals
+          ~override_name:(Longident.pp lid)
+          ~keyword:(Formatted kw) td
+      | Pwith_module (lid1, lid2) ->
+        let d1 = Longident.pp lid1 in
+        let d2 = Longident.pp lid2 in
+        let module_ = token_between keyword d1 Module in
+        let keyword = keyword ^/^ module_ in
+        Binding.pp_simple  ~keyword d1 d2
+      | Pwith_modsubst (lid1, lid2) ->
+        let d1 = Longident.pp lid1 in
+        let d2 = Longident.pp lid2 in
+        let module_ = token_between keyword d1 Module in
+        let keyword = keyword ^/^ module_ in
+        Binding.pp_simple ~binder:Colonequals ~keyword d1 d2
+    in
+    if is_first_cstr then
+      prefix ~spaces:1 ~indent:2 mty cstr
+    else
+      let indent =
+        match kw with
+        | With _ -> 2
+        | And _ -> 3
+      in
+      mty ^^ nest indent (break_before cstr)
+
+  and pp_with mty cstrs =
     let mty = pp mty in
-    mty
+    let with_constraints, _ =
+      List.fold_left (fun (mty, is_first) cstr ->
+        let mty = attach_constraint mty is_first cstr in
+        mty, false
+      ) (mty, true) cstrs
+    in
+    with_constraints
 
   and pp_typeof exp =
     let me = Module_expr.pp exp in
@@ -1821,6 +1868,13 @@ and Type_declaration : sig
     -> document
     -> document
 
+  type keyword =
+    | String_prefix of string
+    | Formatted of document
+
+  val pp : ?override_name:document -> ?binder:Tokens.t -> keyword:keyword ->
+    type_declaration -> document
+
   val pp_decl : rec_flag -> type_declaration list -> document
 
   val pp_subst : type_declaration list -> document
@@ -1902,10 +1956,14 @@ end = struct
       prefix ~indent:2 ~spaces:1 decl
         (kw ^/^ hang 2 (break_before ~spaces:0 cstrs))
 
-  let pp ?binder ~keyword
+  type keyword =
+    | String_prefix of string
+    | Formatted of document
+
+  let pp ?override_name ?binder ~keyword
       { ptype_name; ptype_params; ptype_cstrs; ptype_kind; ptype_private;
         ptype_manifest; ptype_attributes; ptype_loc } =
-    let name = str ptype_name in
+    let name = Option.value override_name ~default:(str ptype_name) in
     let lhs = with_params ptype_params name in
     let manifest_opt = Option.map (Core_type.pp []) ptype_manifest in
     let rhs =
@@ -1934,8 +1992,12 @@ end = struct
           Some (non_abstract_kind kind)
     in
     let keyword =
-      let loc = { ptype_loc with loc_end = lhs.loc.loc_start } in
-      string ~loc keyword
+      match keyword with
+      | String_prefix keyword ->
+        let loc = { ptype_loc with loc_end = lhs.loc.loc_start } in
+        string ~loc keyword
+      | Formatted doc ->
+        doc
     in
     match rhs with
     | Some rhs ->
@@ -1959,7 +2021,9 @@ end = struct
           let text, attrs = Attribute.extract_text decl.ptype_attributes in
           text, { decl with ptype_attributes = attrs }
         in
-        let keyword = if !i = 0 then "type" ^ rec_flag rf else "and" in
+        let keyword =
+          String_prefix (if !i = 0 then "type" ^ rec_flag rf else "and")
+        in
         incr i;
         let binding = pp ~keyword decl in
         Attribute.prepend_text text binding
@@ -1975,7 +2039,7 @@ end = struct
           let text, attrs = Attribute.extract_text decl.ptype_attributes in
           text, { decl with ptype_attributes = attrs }
         in
-        let keyword = if !i = 0 then "type" else "and" in
+        let keyword = String_prefix (if !i = 0 then "type" else "and") in
         incr i;
         let binding = pp ~binder:Colonequals ~keyword decl in
         Attribute.prepend_text text binding

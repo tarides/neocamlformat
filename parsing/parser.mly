@@ -393,7 +393,7 @@ let package_type_of_module_type pmty =
     raise (Syntaxerr.Error (Syntaxerr.Invalid_package_type (loc, s)))
   in
   let map_cstr = function
-    | Pwith_type (lid, ptyp) ->
+    | _, Pwith_type (lid, ptyp) ->
         let loc = ptyp.ptype_loc in
         if ptyp.ptype_params <> [] then
           err loc "parametrized types are not supported";
@@ -1310,16 +1310,28 @@ open_description:
 /* Module types */
 
 module_type:
-  | SIG attrs = attributes s = signature END
-      { mkmty ~loc:$sloc ~attrs (Pmty_signature s) }
-  | SIG attributes signature error
-      { unclosed "sig" $loc($1) "end" $loc($4) }
+  | module_type_no_with { $1 }
   | FUNCTOR attrs = attributes args = functor_args
     MINUSGREATER mty = module_type
       %prec below_WITH
       { wrap_mty_attrs ~loc:$sloc attrs (
           mkmty ~loc:$sloc (Pmty_functor (args, mty))
         ) }
+  | mkmty(
+      module_type MINUSGREATER module_type
+        %prec below_WITH
+        { let param = mkrhs (Named (mknoloc None, $1)) $loc($1) in
+          Pmty_functor([ param ], $3) }
+    | module_type_no_with with_constraints
+        { Pmty_with($1, $2) }
+    )
+    { $1 }
+
+module_type_no_with:
+  | SIG attrs = attributes s = signature END
+      { mkmty ~loc:$sloc ~attrs (Pmty_signature s) }
+  | SIG attributes signature error
+      { unclosed "sig" $loc($1) "end" $loc($4) }
   | MODULE TYPE OF attributes module_expr %prec below_LBRACKETAT
       { mkmty ~loc:$sloc ~attrs:$4 (Pmty_typeof $5) }
   | LPAREN module_type RPAREN
@@ -1331,12 +1343,6 @@ module_type:
   | mkmty(
       mty_longident
         { Pmty_ident $1 }
-    | module_type MINUSGREATER module_type
-        %prec below_WITH
-        { let param = mkrhs (Named (mknoloc None, $1)) $loc($1) in
-          Pmty_functor([ param ], $3) }
-    | module_type WITH separated_nonempty_llist(AND, with_constraint)
-        { Pmty_with($1, $3) }
 /*  | LPAREN MODULE mod_longident RPAREN
         { Pmty_alias $3 } */
     | extension
@@ -2949,6 +2955,20 @@ extension_constructor_rebind(opening):
 
 /* "with" constraints (additional type equations over signature components) */
 
+and_or_with:
+    AND  { And  (make_loc $sloc) }
+  | WITH { With (make_loc $sloc) }
+;
+
+with_constraints:
+    WITH with_constraint llist(located_with_constraint)
+      { (With (make_loc $loc($1)), $2) :: $3 }
+;
+
+located_with_constraint:
+    and_or_with with_constraint { $1, $2 }
+;
+
 with_constraint:
     TYPE type_parameters label_longident with_type_binder
     core_type_no_attr constraints
@@ -2960,7 +2980,7 @@ with_constraint:
               ~cstrs:$6
               ~manifest:$5
               ?priv:$4
-              ~loc:(make_loc $sloc))) }
+              ~loc:(make_loc ($startpos($2), $endpos($6))))) }
     /* used label_longident instead of type_longident to disallow
        functor applications in type path */
   | TYPE type_parameters label_longident
@@ -2971,7 +2991,7 @@ with_constraint:
            (Type.mk lident
               ~params:$2
               ~manifest:$5
-              ~loc:(make_loc $sloc))) }
+              ~loc:(make_loc ($startpos($2), $endpos($5))))) }
   | MODULE mod_longident EQUAL mod_ext_longident
       { Pwith_module ($2, $4) }
   | MODULE mod_longident COLONEQUAL mod_ext_longident

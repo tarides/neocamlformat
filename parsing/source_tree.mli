@@ -776,7 +776,7 @@ and module_type_desc =
         (* sig ... end *)
   | Pmty_functor of functor_parameter loc list * module_type
         (* functor(X : MT1) -> MT2 *)
-  | Pmty_with of module_type * with_constraint list
+  | Pmty_with of module_type * located_with_constraint list
         (* MT with ... *)
   | Pmty_typeof of module_expr
         (* module type of ME *)
@@ -899,6 +899,8 @@ and include_description = module_type include_infos
 
 and include_declaration = module_expr include_infos
 (* include ME *)
+
+and located_with_constraint = and_or_with * with_constraint
 
 and with_constraint =
   | Pwith_type of Longident.t * type_declaration

@@ -46,6 +46,8 @@ type closed_flag = Closed | Open
 
 type label = string
 
+type and_or_with = And of Location.t | With of Location.t
+
 type arg_label =
     Nolabel
   | Labelled of string (*  label:T -> ... *)

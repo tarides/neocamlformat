@@ -45,6 +45,7 @@ type t =
   | And
   | Type
   | Underscore
+  | Module
 
 let to_parser_token t : Source_parsing.Parser.token =
   match t with
@@ -94,6 +95,7 @@ let to_parser_token t : Source_parsing.Parser.token =
   | And -> AND
   | Type -> TYPE
   | Underscore -> UNDERSCORE
+  | Module -> MODULE
 
 let to_string = function
   | Colon -> ":"
@@ -142,3 +144,4 @@ let to_string = function
   | And -> "and"
   | Type -> "type"
   | Underscore -> "_"
+  | Module -> "module"
