@@ -1846,9 +1846,8 @@ end = struct
     let colon = token_between name typ Colon in
     let lhs = group (name ^/^ colon) in
     let with_mutable_ =
-      (* FIXME: add loc on Mutable *)
       match pld_mutable with
-      | Mutable -> group (!^"mutable" ++ break_before lhs)
+      | Mutable loc -> group (string ~loc "mutable" ^/^ lhs)
       | Immutable -> lhs
     in
     let decl = group (nest 2 (with_mutable_ ^/^ typ)) in
@@ -2194,7 +2193,7 @@ end = struct
     let modifier_token =
       match mut with
       | Immutable -> None
-      | Mutable -> Some Tokens.Mutable
+      | Mutable _ -> Some Tokens.Mutable
     in
     pp_field_kind ~loc Val name modifier_token cfk
 
@@ -2279,7 +2278,7 @@ end = struct
     let mod_tok =
       match mut with
       | Immutable -> None
-      | Mutable -> Some Tokens.Mutable
+      | Mutable _ -> Some Tokens.Mutable
     in
     pp_maybe_virtual ~start:loc_start Val name mod_tok vf ct
 

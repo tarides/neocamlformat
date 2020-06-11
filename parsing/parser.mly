@@ -3425,7 +3425,7 @@ private_flag:
 ;
 mutable_flag:
     /* empty */                                 { Immutable }
-  | MUTABLE                                     { Mutable }
+  | MUTABLE                                     { Mutable (make_loc $loc)}
 ;
 virtual_flag:
     /* empty */                                 { Concrete }
@@ -3435,12 +3435,12 @@ mutable_virtual_flags:
     /* empty */
       { Immutable, Concrete }
   | MUTABLE
-      { Mutable, Concrete }
+      { Mutable (make_loc $loc), Concrete }
   | VIRTUAL
       { Immutable, Virtual }
-  | MUTABLE VIRTUAL
-  | VIRTUAL MUTABLE
-      { Mutable, Virtual }
+  | _mut=MUTABLE VIRTUAL
+  | VIRTUAL _mut=MUTABLE
+      { Mutable (make_loc $loc(_mut)), Virtual }
 ;
 private_virtual_flags:
     /* empty */  { Public, Concrete }
@@ -3453,8 +3453,8 @@ private_virtual_flags:
    keyword and the possible presence of a MUTABLE keyword. *)
 virtual_with_mutable_flag:
   | VIRTUAL { Immutable }
-  | MUTABLE VIRTUAL { Mutable }
-  | VIRTUAL MUTABLE { Mutable }
+  | MUTABLE VIRTUAL { Mutable (make_loc $loc($1)) }
+  | VIRTUAL MUTABLE { Mutable (make_loc $loc($2)) }
 ;
 (* This nonterminal symbol indicates the definite presence of a VIRTUAL
    keyword and the possible presence of a PRIVATE keyword. *)

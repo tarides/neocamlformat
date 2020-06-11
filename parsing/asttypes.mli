@@ -36,7 +36,7 @@ type direction_flag = Upto | Downto
 (* Order matters, used in polymorphic comparison *)
 type private_flag = Private | Public
 
-type mutable_flag = Immutable | Mutable
+type mutable_flag = Immutable | Mutable of Location.t
 
 type virtual_flag = Virtual | Concrete
 
