@@ -545,7 +545,7 @@ end = struct
         let colon = token_between mod_name constr Colon in
         mod_name ^/^ colon ^/^ constr
     in
-    enclose ~before:PPrint.(!^"(module") ~after:PPrint.(!^")")
+    enclose ~before:PPrint.(!^"(module ") ~after:PPrint.(!^")")
       with_constraint
 
   and pp_exception ~loc ps p =
