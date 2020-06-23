@@ -14,34 +14,54 @@ let read_file fn =
   with End_of_file -> Buffer.contents buffer
 
 let fmt_file ~width fn =
-  let open Source_parsing in
-  let open Printing in
   let source = read_file fn in
-  Location.input_name := fn;
-  Source.source := source;
-  let b = Lexing.from_string source in
   let intf = Filename.check_suffix fn "mli" in
-  let doc =
-    if intf then
-      let sg = Parse.interface b in
-      let _ = Comments.init () in
-      Print_source.interface sg
-    else
-      let str = Parse.implementation b in
-      let _ = Comments.init () in
-      Print_source.implementation str
+  let fmted =
+    let open Source_parsing in
+    let open Printing in
+    Location.input_name := fn;
+    Source.source := source;
+    let b = Lexing.from_string source in
+    let doc =
+      if intf then
+        match Parse.interface b with
+        | exception (Syntaxerr.Error _ as exn) ->
+          Location.report_exception Format.err_formatter exn;
+          exit 1
+        | sg ->
+          let _ = Comments.init () in
+          Print_source.interface sg
+      else
+        match Parse.implementation b with
+        | exception (Syntaxerr.Error _ as exn) ->
+          Location.report_exception Format.err_formatter exn;
+          exit 1
+        | str ->
+          let _ = Comments.init () in
+          Print_source.implementation str
+    in
+    Comments.report_remaining ();
+    let buf = Buffer.create (String.length source) in
+    PPrint.ToBuffer.pretty 10. width buf doc;
+    Buffer.to_bytes buf |> Bytes.to_string
   in
-  Comments.report_remaining ();
-  let buf = Buffer.create (String.length source) in
-  PPrint.ToBuffer.pretty 10. width buf doc;
-  let fmted = Buffer.to_bytes buf |> Bytes.to_string in
   begin try
-      assert (Ast_checker.check_same_ast ~impl:(not intf) source fmted);
-    with e ->
-      let oc = open_out "/tmp/out.txt" in
-      output_string oc fmted;
-      close_out oc;
-      raise e
+    assert (Ast_checker.check_same_ast ~impl:(not intf) source fmted);
+  with e ->
+    let oc = open_out "/tmp/out.txt" in
+    output_string oc fmted;
+    close_out oc;
+    begin match e with
+    | Syntaxerr.Error _ ->
+      Format.eprintf "neocamlformat: formated file doesn't parse:@.%a@."
+        Location.report_exception e
+    | Assert_failure _ ->
+      Format.eprintf "neocamlformat: AST changed by formater@."
+    | _ ->
+      Format.eprintf "neocamlformat: internal error:@;%s@."
+        (Printexc.to_string e)
+    end;
+    exit 2
   end;
   fmted
 

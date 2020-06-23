@@ -140,6 +140,7 @@ let check_same_ast ~impl s1 s2 =
       Parse.implementation lex1
       |> mapper.structure mapper
     in
+    Location.input_name := "/tmp/out.txt";
     let ast2 =
       Parse.implementation lex2
       |> mapper.structure mapper
@@ -150,6 +151,7 @@ let check_same_ast ~impl s1 s2 =
       Parse.interface lex1
       |> mapper.signature mapper
     in
+    Location.input_name := "/tmp/out.txt";
     let ast2 =
       Parse.interface lex2
       |> mapper.signature mapper
