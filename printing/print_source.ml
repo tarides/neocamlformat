@@ -1917,12 +1917,12 @@ end = struct
       | Immutable -> lhs
     in
     let decl = group (nest 2 (with_mutable_ ^/^ typ)) in
-    Attribute.attach_to_item decl pld_attributes
+    decl, List.map (Attribute.pp Attached_to_item) pld_attributes
 
   let record lbl_decls =
     (* FIXME: loc won't be use since the list is nonempty *)
     let fields = List.map label_declaration lbl_decls in
-    List_like.pp ~loc:Location.none
+    Record_like.pp ~loc:Location.none
       ~formatting:!Options.Record.expression
       ~left:lbrace
       ~right:rbrace
