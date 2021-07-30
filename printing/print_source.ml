@@ -44,6 +44,10 @@ end
 
 module Constant : sig
   val pp : loc:Location.t -> constant -> document
+
+  (* Helpers. *)
+  val pp_string_lit : loc:Location.t -> string -> document
+  val pp_quoted_string : loc:Location.t -> delim:string -> string -> document
 end = struct
   let pp_string_lit ~loc s = arbitrary_string ~loc (String.escaped s)
   let pp_quoted_string ~loc ~delim s =
@@ -1800,19 +1804,20 @@ end = struct
   let pp vd =
     let name = str vd.pval_name in
     let ctyp = Core_type.pp [] vd.pval_type in
-    let with_prim =
+    let kw_string, with_prim =
       match vd.pval_prim with
-      | [] -> ctyp
+      | [] -> "val", ctyp
       | p :: ps ->
         let prims =
-          separate_map (break 1) ~f:(fun p -> dquotes (str p)) p ps
+          separate_map (break 1) ~f:(fun {loc; txt} ->
+            dquotes (Constant.pp_string_lit ~loc txt)) p ps
         in
         let equals = token_between ctyp prims Equals in
-        ctyp ^^ break_before (group (equals ^/^ prims))
+        "external", ctyp ^^ break_before (group (equals ^/^ prims))
     in
     let kw =
       let loc = { vd.pval_loc with loc_end = name.loc.loc_start } in
-      string ~loc "val"
+      string ~loc kw_string
     in
     let colon = token_between name with_prim Colon in
     let doc =
