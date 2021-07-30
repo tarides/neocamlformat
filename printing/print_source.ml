@@ -1316,7 +1316,7 @@ end = struct
       | Some def -> build_optional_with_default lbl def pat
 
   let newtype typ =
-    parens (!^"type" ++ str typ)
+    parens (!^"type " ++ str typ)
 
   let pp = function
     | Term (lbl, default, pat) -> group (term lbl default pat)
