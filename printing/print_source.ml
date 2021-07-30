@@ -63,7 +63,8 @@ end = struct
       in
       (* FIXME? nb might start with a minus… which might implying parenthesing
          is required in some contexts. *)
-      string ~loc nb
+      let doc = string ~loc nb in
+      if String.get nb 0 = '-' then parens doc else doc
     | Pconst_char c ->
       let c = Char.escaped c in
       squotes (string ~loc c)

@@ -163,7 +163,8 @@ let needs_parens elt parent =
   | Pattern Ppat_alias _ -> begin
       match parent with
       | Pattern _
-      | Value_binding -> true
+      | Value_binding
+      | Cons_constr _ -> true
       | _ -> false
     end
 
