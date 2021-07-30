@@ -430,7 +430,6 @@ end = struct
     let desc = pp_desc ?indent ~loc:ppat_loc ps ppat_desc in
     let doc = Attribute.attach_to_item desc ppat_attributes in
     if has_attrs then
-      let () = Printf.eprintf "NONONONO\n%!" in
       Printing_stack.parenthesize (List.tl ps) doc
     else
       doc
