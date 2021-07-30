@@ -246,6 +246,7 @@ let needs_parens elt parent =
         true
       | Cons_constr { on_left = false }
       | Expression Pexp_record _
+      | Value_binding
       | Unpack ->
         (* Not described by the precedence table, but won't parse otherwise. *)
         true

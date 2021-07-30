@@ -419,9 +419,20 @@ and Pattern : sig
   val pp : ?indent:int -> Printing_stack.t -> pattern -> document
 end = struct
   let rec pp ?indent ps { ppat_desc; ppat_attributes; ppat_loc; _ } =
-    let ps = Printing_stack.Pattern ppat_desc :: ps in
+    let has_attrs = Attribute.has_non_doc ppat_attributes in
+    let ps =
+      let new_item = Printing_stack.Pattern ppat_desc in
+      if has_attrs
+      then new_item :: Attribute :: ps
+      else new_item :: ps
+    in
     let desc = pp_desc ?indent ~loc:ppat_loc ps ppat_desc in
-    Attribute.attach_to_item desc ppat_attributes
+    let doc = Attribute.attach_to_item desc ppat_attributes in
+    if has_attrs then
+      let () = Printf.eprintf "NONONONO\n%!" in
+      Printing_stack.parenthesize (List.tl ps) doc
+    else
+      doc
 
   and pp_alias ps pat alias =
     let pat = pp ps pat in
