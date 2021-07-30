@@ -22,15 +22,14 @@ let mapper =
           | PStr [ {
               pstr_desc =
                 Pstr_eval
-                  ({ pexp_desc= Pexp_constant (Pconst_string (doc, None)) ; _ }
-                   as inner_exp
-                  ,[]);
+                  ({ pexp_desc= Pexp_constant (Pconst_string (doc, loc, None))
+                   ; _ } as inner_exp,[]);
               _
             } as str ] ->
             let doc = normalize_cmt_spaces doc in
             let inner' =
               { inner_exp with
-                pexp_desc = Pexp_constant (Pconst_string (doc, None)) }
+                pexp_desc = Pexp_constant (Pconst_string (doc, loc, None)) }
             in
             PStr [ { str with pstr_desc = Pstr_eval (inner', []) }]
           | _ -> assert false
