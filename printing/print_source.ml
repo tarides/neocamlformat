@@ -1344,9 +1344,9 @@ end = struct
 end
 
 and Functor_param : sig
-  val pp : context:[ `Type | `Expr ] -> functor_parameter loc -> document
+  val pp : functor_parameter loc -> document
 end = struct
-  let pp ~context { loc; txt } =
+  let pp { loc; txt } =
     match txt with
     | Unit -> string ~loc "()"
     | Named (name, mty) ->
@@ -1357,12 +1357,8 @@ end = struct
       in
       match name.txt with
       | None ->
-        begin match context with
-        | `Type -> mty
-        | `Expr ->
-          let name = token_before ~start:loc.loc_start mty Underscore in
-          pp name
-        end
+        let name = token_before ~start:loc.loc_start mty Underscore in
+        pp name
       | Some s ->
         let name = string ~loc:name.loc s in
         pp name
@@ -1396,7 +1392,7 @@ end = struct
   and pp_functor ~(loc:Location.t) params me =
     let params =
       separate_map (PPrint.break 1)
-        ~f:(Functor_param.pp ~context:`Expr) (List.hd params) (List.tl params)
+        ~f:Functor_param.pp (List.hd params) (List.tl params)
     in
     let me = pp me in
     let functor_ =
@@ -1451,10 +1447,16 @@ end = struct
           (nest 2 (break_before sg))
       )
 
-  and pp_functor ~(loc:Location.t) params mty =
+  and pp_short_functor param_mty res_mty =
+    let param_mty = Module_type.pp param_mty in
+    let res_mty = Module_type.pp res_mty in
+    let arrow = token_between param_mty res_mty Rarrow in
+    param_mty ^/^ arrow ^/^ res_mty
+
+  and pp_regular_functor ~(loc:Location.t) params mty =
     let params =
       separate_map (PPrint.break 1)
-        ~f:(Functor_param.pp ~context:`Type) (List.hd params) (List.tl params)
+        ~f:Functor_param.pp (List.hd params) (List.tl params)
     in
     let mty = pp mty in
     let functor_ =
@@ -1463,6 +1465,13 @@ end = struct
     in
     let arrow = token_between params mty Rarrow in
     functor_ ^/^ params ^/^ arrow ^/^ mty
+
+  and pp_functor ~loc params mty =
+    match params with
+    | [ { txt = Named ({ txt = None; _ }, param_mty); _ } ] ->
+      pp_short_functor param_mty mty
+    | _ ->
+      pp_regular_functor ~loc params mty
 
   and attach_constraint mty is_first_cstr (kw, cstr) =
     let keyword =
@@ -1589,6 +1598,10 @@ end
 
 and Module_declaration : sig
   val pp : module_declaration -> document
+
+  val pp_raw : module_declaration -> Binding.Module.t
+
+  val decide_context : module_type -> Binding.Module.context
 end = struct
   let pp_mty ({ pmty_desc; pmty_attributes; _ } as mty) =
     match pmty_desc, pmty_attributes with
@@ -1596,11 +1609,7 @@ end = struct
       Binding.Module.Items (Signature.pp_nonempty si sg)
     | _ -> Binding.Module.Generic (Module_type.pp mty)
 
-  let pp { pmd_name; pmd_params; pmd_type; pmd_attributes; pmd_loc } =
-    let kw =
-      let loc = { pmd_loc with loc_end = pmd_name.loc.loc_start } in
-      string ~loc "module"
-    in
+  let pp_raw { pmd_name; pmd_params; pmd_type; pmd_attributes; pmd_loc = _ } =
     let name = module_name pmd_name in
     let params = List.map Module_binding.param pmd_params in
     let body = pp_mty pmd_type in
@@ -1616,17 +1625,23 @@ end = struct
       let loc = { name.loc with loc_start = name.loc.loc_end } in
       { loc; txt = params }
     in
-    let binding =
-      { Binding.Module. name; params; constr = None; body; attributes }
+    { Binding.Module. name; params; constr = None; body; attributes }
+
+  let decide_context pmd_type : Binding.Module.context =
+    (* This is a hack.
+       The context is used to decide whether to print "=" or ":", but that
+       doesn't quite work: module aliases declarations use "=". *)
+    match pmd_type.pmty_desc with
+    | Pmty_alias _ -> Struct
+    | _ -> Sig
+
+  let pp pmd =
+    let kw =
+      let loc = { pmd.pmd_loc with loc_end = pmd.pmd_name.loc.loc_start } in
+      string ~loc "module"
     in
-    let context : Binding.Module.context =
-      (* This is a hack.
-         The context is used to decide whether to print "=" or ":", but that
-         doesn't quite work: module aliases declarations use "=". *)
-      match pmd_type.pmty_desc with
-      | Pmty_alias _ -> Struct
-      | _ -> Sig
-    in
+    let binding = pp_raw pmd in
+    let context = decide_context pmd.pmd_type in
     Binding.Module.pp ~keyword:kw ~context binding
 end
 
@@ -1775,6 +1790,29 @@ end = struct
       (group (kw ^/^ incl))
       pincl_attributes
 
+  let pp_recmodules mds =
+    let mds =
+      let i = ref 0 in
+      List.concat_map (fun md ->
+        let text, md =
+          let text, attrs = Attribute.extract_text md.pmd_attributes in
+          text, { md with pmd_attributes = attrs }
+        in
+        let keyword = if !i = 0 then "module rec" else "and" in
+        incr i;
+        let keyword =
+          let loc = { md.pmd_loc with loc_end = md.pmd_name.loc.loc_start } in
+          string ~loc keyword
+        in
+        let binding =
+          Binding.Module.pp (Module_declaration.pp_raw md)
+            ~context:(Module_declaration.decide_context md.pmd_type) ~keyword
+        in
+        Attribute.prepend_text text binding
+      ) mds
+    in
+    separate (twice hardline) (List.hd mds) (List.tl mds)
+
   let pp_item ({ psig_desc; _ } as _item) =
     match psig_desc with
     | Psig_value vd -> Value_description.pp vd
@@ -1783,6 +1821,7 @@ end = struct
     | Psig_typext te -> Type_extension.pp te
     | Psig_exception exn -> Type_exception.pp exn
     | Psig_module md -> Module_declaration.pp md
+    | Psig_recmodule pmds -> pp_recmodules pmds
     | Psig_modsubst ms -> Module_substitution.pp ms
     | Psig_modtype mtd -> Module_type_declaration.pp mtd
     | Psig_open od -> Open_description.pp od
@@ -1791,9 +1830,6 @@ end = struct
     | Psig_extension (ext, attrs) -> pp_extension ext attrs
     | Psig_class cds -> Class_description.pp cds
     | Psig_class_type ctds -> Class_type_declaration.pp ctds
-    (* TODO *)
-    | Psig_recmodule _
-      -> empty ~loc:_item.psig_loc
 
   let pp_nonempty = separate_map (twice hardline) ~f:pp_item
 end
