@@ -68,17 +68,17 @@ let needs_parens elt parent =
   | Core_type Ptyp_arrow _
   | Core_type Ptyp_tuple _ -> begin
       match parent with
-      | Core_type ( Ptyp_constr _ 
+      | Core_type ( Ptyp_constr _
                   | Ptyp_class _
-                  | Ptyp_arrow _ 
+                  | Ptyp_arrow _
                   | Ptyp_tuple _) -> true
       | _ -> false
     end
   | Core_type Ptyp_alias _ -> begin
       match parent with
-      | Core_type ( Ptyp_constr _ 
+      | Core_type ( Ptyp_constr _
                   | Ptyp_class _
-                  | Ptyp_arrow _ 
+                  | Ptyp_arrow _
                   | Ptyp_tuple _) -> true
       | _ -> false
     end
@@ -120,7 +120,7 @@ let needs_parens elt parent =
         true
       | Prefix_op
       | Attribute
-      | Expression ( Pexp_field _ 
+      | Expression ( Pexp_field _
                    | Pexp_setfield _
                    | Pexp_array_get _
                    | Pexp_array_set _
@@ -154,7 +154,7 @@ let needs_parens elt parent =
   | Pattern Ppat_or _ -> begin
       match parent with
       | Pattern Ppat_alias _ (* Not necessary: but better style. *)
-      | Pattern _ 
+      | Pattern _
       | Value_binding ->
         true
       | Pipe { on_left } -> not on_left
@@ -176,7 +176,7 @@ let needs_parens elt parent =
       | _ -> false
     end
 
-  | Expression Pexp_field _ 
+  | Expression Pexp_field _
   | Expression Pexp_array_get _
   | Expression Pexp_bigarray_get _
   | Expression Pexp_string_get _ -> begin
@@ -488,7 +488,7 @@ let needs_parens elt parent =
                    | Pexp_variant _
                    | Pexp_record _
                    | Pexp_array _
-                   | Pexp_sequence _ 
+                   | Pexp_sequence _
                    | Pexp_send _
                    )
       | Record_field
@@ -509,7 +509,7 @@ let needs_parens elt parent =
                    | Pexp_array _
                    | Pexp_ifthenelse _
                    | Pexp_list_lit _
-                   | Pexp_sequence _ 
+                   | Pexp_sequence _
                    | Pexp_send _
                    )
       | Record_field
@@ -559,7 +559,8 @@ let needs_parens elt parent =
                    | Pexp_function _
                    | Pexp_list_lit _
                    | Pexp_sequence _
-                   | Pexp_record _)
+                   | Pexp_record _
+                   | Pexp_tuple _)
       | Prefix_op
       | Infix_op { on_left = true; _ }
       | Cons_constr { on_left = true }
