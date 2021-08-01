@@ -416,7 +416,7 @@ end = struct
           PPrint.(break 1 ^^ !^"and" ^^ break 1 ^^ !^"type" ^^ break 1)
           ~f:pp_constr x xs
       in
-      let sep = PPrint.(break 1 ^^ !^"with" ^/^ !^"type") in
+      let sep = PPrint.(break 1 ^^ !^"with" ^/^ !^"type" ^^ break 1) in
       group (concat lid constrs ~sep)
 end
 
@@ -1227,7 +1227,7 @@ end = struct
         let colon = token_between me constr Colon in
         me ^/^ colon ^/^ constr
     in
-    enclose ~before:PPrint.(!^"(module") ~after:PPrint.(!^")")
+    enclose ~before:PPrint.(!^"(module ") ~after:PPrint.(!^")")
       with_constraint
 
   and pp_open lid exp =
