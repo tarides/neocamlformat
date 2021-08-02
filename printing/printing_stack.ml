@@ -271,6 +271,7 @@ let needs_parens elt parent =
   | Infix_op { level = 8; _ } -> begin
       (* **.. lsl lsr asr : right-assoc *)
       match parent with
+      | Attribute
       | Prefix_op
       | Expression ( Pexp_field _
                    | Pexp_array_get _
@@ -295,6 +296,7 @@ let needs_parens elt parent =
   | Infix_op { level = 7; _ } -> begin
       (* *.. /.. %.. mod land lor lxor: left-assoc *)
       match parent with
+      | Attribute
       | Prefix_op
       | Expression ( Pexp_field _
                    | Pexp_array_get _
@@ -319,6 +321,7 @@ let needs_parens elt parent =
   | Infix_op { level = 6; _ } -> begin
       (* +.. -..: left-assoc *)
       match parent with
+      | Attribute
       | Prefix_op
       | Expression ( Pexp_field _
                    | Pexp_array_get _
@@ -343,6 +346,7 @@ let needs_parens elt parent =
   | Infix_op { level = 5; _ } -> begin
       (* @.. ^..: right-assoc *)
       match parent with
+      | Attribute
       | Prefix_op
       | Expression ( Pexp_field _
                    | Pexp_array_get _
@@ -368,6 +372,7 @@ let needs_parens elt parent =
   | Infix_op { level = 4; _ } -> begin
       (* =.. <.. >.. |.. &.. $.. != : left-assoc *)
       match parent with
+      | Attribute
       | Prefix_op
       | Expression ( Pexp_field _
                    | Pexp_array_get _
@@ -394,6 +399,7 @@ let needs_parens elt parent =
   | Infix_op { level = 3; _ } -> begin
       (* & && : right-assoc *)
       match parent with
+      | Attribute
       | Prefix_op
       | Expression ( Pexp_field _
                    | Pexp_array_get _
@@ -419,6 +425,7 @@ let needs_parens elt parent =
   | Infix_op { level = 2; _ } -> begin
       (* or || : right-assoc *)
       match parent with
+      | Attribute
       | Prefix_op
       | Expression ( Pexp_field _
                    | Pexp_array_get _
@@ -443,6 +450,7 @@ let needs_parens elt parent =
 
   | Expression Pexp_tuple _ -> begin
       match parent with
+      | Attribute
       | Prefix_op
       | Expression ( Pexp_field _
                    | Pexp_array_get _
@@ -468,6 +476,7 @@ let needs_parens elt parent =
   | Infix_op { level = 1; _ } -> begin
       (* <- := : right-assoc *)
       match parent with
+      | Attribute
       | Prefix_op
       | Expression ( Pexp_field _
                    | Pexp_array_get _
@@ -493,6 +502,7 @@ let needs_parens elt parent =
 
   | Expression Pexp_ifthenelse _ -> begin
       match parent with
+      | Attribute
       | Prefix_op
       | Infix_op _
       | Expression ( Pexp_apply _
@@ -528,6 +538,7 @@ let needs_parens elt parent =
 
   | Expression Pexp_sequence _ -> begin
       match parent with
+      | Attribute
       | Prefix_op
       | Infix_op _
       | Expression ( Pexp_apply _
@@ -550,6 +561,7 @@ let needs_parens elt parent =
   | Expression Pexp_letopen _
   | Expression Pexp_let _ -> begin
       match parent with
+      | Attribute
       | Expression ( Pexp_apply _
                    | Pexp_construct _
                    | Pexp_variant _
@@ -579,6 +591,7 @@ let needs_parens elt parent =
   | Expression Pexp_match _
   | Expression Pexp_try _ -> begin
       match parent with
+      | Attribute
       | Expression ( Pexp_apply _
                    | Pexp_construct _
                    | Pexp_variant _
