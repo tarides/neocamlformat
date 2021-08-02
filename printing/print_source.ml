@@ -54,7 +54,7 @@ end = struct
     let delim = PPrint.string delim in
     braces (
       enclose ~before:PPrint.(delim ^^ bar) ~after:PPrint.(bar ^^ delim)
-        (arbitrary_string ~loc s)
+        (quoted_string ~loc s)
     )
 
   let pp ~loc = function
