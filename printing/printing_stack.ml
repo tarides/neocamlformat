@@ -160,6 +160,7 @@ let needs_parens elt parent =
       match parent with
       | Pattern Ppat_alias _ (* Not necessary: but better style. *)
       | Pattern _
+      | Attribute
       | Function_parameter
       | Value_binding ->
         true
