@@ -181,6 +181,9 @@ let separate sep doc docs =
 let separate_map sep ~f doc docs =
   separate sep (f doc) (List.map f docs)
 
+let break_after ?(spaces=1) t =
+  { t with txt = t.txt ^^ break spaces }
+
 let break_before ?(spaces=1) t =
   { t with txt = break spaces ^^ t.txt }
 

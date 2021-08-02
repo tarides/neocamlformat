@@ -230,7 +230,12 @@ end = struct
       tag ^^ nest 2 (colon ^/^ sg)
 
   let ptyp tag ct =
-    let ct = Core_type.pp [] ct in
+    let break_after =
+      if Core_type.ends_in_obj ct
+      then break_after ~spaces:1
+      else (fun x -> x)
+    in
+    let ct = break_after (Core_type.pp [] ct) in
     let colon = token_between tag ct Colon in
     tag ^^ nest 2 (colon ^/^ ct)
 
@@ -258,9 +263,42 @@ end = struct
 end
 
 and Core_type : sig
+  val ends_in_obj : core_type -> bool
+  val starts_with_obj : core_type -> bool
+
   val pp : Printing_stack.t -> core_type -> document
   val pp_param : Printing_stack.t -> (arg_label * core_type) -> document
 end = struct
+  let rec starts_with_obj core_type =
+    match core_type.ptyp_desc with
+    | Ptyp_arrow (lhs, _) -> starts_with_obj (snd @@ List.hd lhs)
+    | Ptyp_object (_, _) -> true
+    | Ptyp_any
+    | Ptyp_var _
+    | Ptyp_tuple _
+    | Ptyp_constr (_, _)
+    | Ptyp_class (_, _)
+    | Ptyp_alias (_, _)
+    | Ptyp_variant (_, _, _)
+    | Ptyp_poly _
+    | Ptyp_package _
+    | Ptyp_extension _ -> false
+
+  let rec ends_in_obj core_type =
+    match core_type.ptyp_desc with
+    | Ptyp_arrow (_, rhs)
+    | Ptyp_poly (_, rhs) -> ends_in_obj rhs
+    | Ptyp_object (_, _) -> true
+    | Ptyp_any
+    | Ptyp_var _
+    | Ptyp_tuple _
+    | Ptyp_constr (_, _)
+    | Ptyp_class (_, _)
+    | Ptyp_alias (_, _)
+    | Ptyp_variant (_, _, _)
+    | Ptyp_package _
+    | Ptyp_extension _ -> false
+
   let pp_var ~loc v =
     match String.index_opt v '\'' with
     | None -> string ~loc ("'" ^ v)
@@ -1718,9 +1756,12 @@ end
 and Structure : sig
   val pp_nonempty : structure_item -> structure -> document
 end = struct
-  let pp_eval exp attrs =
+  let pp_eval ~first exp attrs =
     let exp = Expression.pp [] exp in
-    !^";; " ++ Attribute.attach_to_top_item exp attrs
+    let doc =  Attribute.attach_to_top_item exp attrs in
+    if first
+    then doc
+    else !^";; " ++ doc
 
   let pp_value rf vbs =
     let vbs =
@@ -1789,9 +1830,9 @@ end = struct
     let ext = Extension.pp Structure_item ext in
     Attribute.attach_to_top_item ext attrs
 
-  let pp_item ({ pstr_desc; _ } as _item) =
+  let pp_item ?(first=false) ({ pstr_desc; _ } as _item) =
     match pstr_desc with
-    | Pstr_eval (e, attrs) -> pp_eval e attrs
+    | Pstr_eval (e, attrs) -> pp_eval ~first e attrs
     | Pstr_value (rf, vbs) -> pp_value rf vbs
     | Pstr_primitive vd -> Value_description.pp vd
     | Pstr_type (rf, tds) -> Type_declaration.pp_decl rf tds
@@ -1807,7 +1848,10 @@ end = struct
     | Pstr_attribute attr -> Attribute.pp Free_floating attr
     | Pstr_extension (ext, attrs) -> pp_extension ext attrs
 
-  let pp_nonempty i is = separate_map (twice hardline) ~f:pp_item i is
+  let pp_nonempty i is =
+    let i = pp_item ~first:true i in
+    let is = List.map pp_item is in
+    separate (twice hardline) i is
 end
 
 and Signature : sig
@@ -2147,10 +2191,27 @@ end = struct
     match args with
     | [] -> name
     | x :: xs ->
+      let break_after =
+        let rec ends_in_obj = function
+          | [] -> assert false
+          | [ x ] -> Core_type.ends_in_obj x
+          | _ :: xs -> ends_in_obj xs
+        in
+        if ends_in_obj args
+        then break_after ~spaces:1
+        else Fun.id
+      in
+      let break_before =
+        if Core_type.starts_with_obj x
+        then break_before ~spaces:1
+        else Fun.id
+      in
       let args =
         group (
-          brackets
-            (separate_map PPrint.(comma ^^ break 1) ~f:(Core_type.pp []) x xs)
+          brackets (
+            break_before @@ break_after @@
+            separate_map PPrint.(comma ^^ break 1) ~f:(Core_type.pp []) x xs
+          )
         )
       in
       args ^/^ name

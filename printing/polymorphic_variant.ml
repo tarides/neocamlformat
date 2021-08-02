@@ -89,8 +89,8 @@ let pp_mixed_row ~loc ~labels:(l, ls) = function
   | [] -> assert false (* always at least one field *)
   | x :: xs ->
     let fields =
-      pp_row_prefix ~prefix_if_necessary:false ~loc ~opening_token:Open_variant
-        x xs
+      pp_row_prefix ~prefix_if_necessary:false ~loc
+        ~opening_token:Closed_variant x xs
     in
     let labels = flow_map (PPrint.break 1) Tag.pp l ls in
     let sep = token_between fields labels Rangle in
