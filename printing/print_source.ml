@@ -1367,9 +1367,12 @@ end
 and Module_expr : sig
   val pp : module_expr -> document
 end = struct
-  let rec pp { pmod_desc; pmod_attributes; pmod_loc } =
+  let rec pp ?(lhs_of_apply=false) { pmod_desc; pmod_attributes; pmod_loc } =
     let doc = pp_desc ~loc:pmod_loc pmod_desc in
-    Attribute.attach_to_item doc pmod_attributes
+    let doc = Attribute.attach_to_item doc pmod_attributes in
+    match lhs_of_apply, pmod_desc with
+    | true, Pmod_functor _ -> parens doc
+    | _ -> doc
 
   and pp_desc ~loc = function
     | Pmod_ident lid -> Longident.pp lid
@@ -1403,7 +1406,7 @@ end = struct
     functor_ ^/^ params ^/^ arrow ^/^ me
 
   and pp_apply me1 me2 =
-    let me1 = pp me1 in
+    let me1 = pp ~lhs_of_apply:true me1 in
     let me2 = pp me2 in
     me1 ^^ break_before ~spaces:0 (parens me2)
 
@@ -1420,6 +1423,8 @@ end = struct
       string ~loc "val"
     in
     parens (val_ ^/^ exp)
+
+  let pp = pp ~lhs_of_apply:false
 end
 
 and Module_type : sig
