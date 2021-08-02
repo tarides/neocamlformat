@@ -730,7 +730,7 @@ end = struct
     | Pexp_pack (me, pkg) -> pp_pack me pkg
     | Pexp_open (lid, exp) -> pp_open lid exp
     | Pexp_letopen (od, exp) -> pp_letopen ~loc ps od exp
-    | Pexp_letop letop -> pp_letop letop
+    | Pexp_letop letop -> pp_letop ps letop
     | Pexp_extension ext -> Extension.pp Item ext
     | Pexp_unreachable -> string ~loc "."
     | Pexp_array_get (arr, idx) -> pp_array_get ps arr idx
@@ -1263,8 +1263,21 @@ end = struct
     let doc = group (let_ ^/^ od ^/^ in_) ^/^ exp in
     Printing_stack.parenthesize ps doc
 
-  and pp_letop _ =
-    assert false
+  and pp_binding_op (bop : binding_op) =
+    let binding = Value_binding.pp_bop Attached_to_item bop in
+    let keyword = Longident.pp_ident bop.pbop_op in
+    Binding.pp ~keyword binding
+
+  and pp_letop ps { let_; ands; body } =
+    let let_ = pp_binding_op let_ in
+    let ands = List.map pp_binding_op ands in
+    let bindings = separate hardline let_ ands in
+    let body =
+      let ps = if Printing_stack.will_parenthesize ps then [] else List.tl ps in
+      pp ps body
+    in
+    let in_ = token_between bindings body In in
+    Printing_stack.parenthesize ps (group (bindings ^/^ in_) ^^ hardline ++ body)
 end
 
 and Fun_param : sig
@@ -1335,11 +1348,11 @@ end = struct
 end
 
 and Value_binding : sig
+  val pp_bop : Attribute.kind -> binding_op -> Binding.t
   val pp : Attribute.kind -> value_binding -> Binding.t
 end = struct
 
-  let pp attr_kind
-      { pvb_pat; pvb_params; pvb_type; pvb_expr; pvb_attributes; _ } =
+  let pp_raw attr_kind pvb_pat pvb_params pvb_type pvb_expr pvb_attributes =
     let pat = Pattern.pp [ Printing_stack.Value_binding ] pvb_pat in
     let params = List.map Fun_param.pp pvb_params in
     let constr, coerce = pvb_type in
@@ -1352,6 +1365,14 @@ end = struct
       { txt = params; loc }
     in
     { Binding.lhs = pat; params; constr; coerce; rhs }
+
+  let pp_bop attr_kind { pbop_pat; pbop_params; pbop_type; pbop_exp; _ } =
+    pp_raw attr_kind pbop_pat pbop_params pbop_type pbop_exp []
+
+  let pp attr_kind
+      { pvb_pat; pvb_params; pvb_type; pvb_expr; pvb_attributes; _ } =
+    pp_raw attr_kind
+      pvb_pat pvb_params pvb_type pvb_expr pvb_attributes
 end
 
 and Functor_param : sig
