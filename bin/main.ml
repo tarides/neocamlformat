@@ -81,12 +81,22 @@ let cmd =
   and+ width = Arg.(value & opt int 80 & info ["w"; "width"])
   and+ files = Arg.(value & pos_all file [] & info ~doc:"files to format" [])
   and+ ignore_docstrings = Arg.(value & flag & info ["ignore-docstrings"])
+  and+ inplace = Arg.(value & flag & info ["i"; "inplace"])
   in
   Ast_checker.ignore_docstrings.contents <- ignore_docstrings;
   List.iter (fun fn ->
     let fmted = fmt_file ~width fn in
-    print_string fmted;
-    print_newline ();
+    if not inplace then (
+      print_string fmted;
+      print_newline ()
+    ) else (
+      let tmpfile = Filename.temp_file "neocamlformat" "ml" in
+      let oc = open_out tmpfile in
+      output_string oc fmted;
+      output_string oc "\n";
+      flush oc;
+      ignore (Sys.command ("mv " ^ tmpfile ^ " " ^ fn))
+    )
   ) files;
   Ok (flush stdout)
 
