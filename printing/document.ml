@@ -264,7 +264,7 @@ let infix ~indent ~spaces op x y =
 
 let left_assoc_map ?sep ~f first rest =
   List.fold_left (fun t elt ->
-    let elt = f elt in 
+    let elt = f elt in
     match sep with
     | None -> t ^/^ elt
     | Some sep ->
@@ -317,7 +317,7 @@ module Enclosed_separated = struct
              else
                let semi = token_between acc elt.doc Semi in
                group (acc ^^ semi) * elt)
-          (fmt x) 
+          (fmt x)
           xs
       in
       res.doc
