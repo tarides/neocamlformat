@@ -496,6 +496,22 @@ let needs_parens elt parent =
       | _ -> false
     end
 
+  | Expression Pexp_for _
+  | Expression Pexp_while _ -> begin
+      match parent with
+      | Prefix_op
+      | Infix_op _
+      | Expression ( Pexp_apply _
+                   | Pexp_assert _
+                   | Pexp_lazy _
+                   | Pexp_construct _
+                   | Pexp_variant _
+                   | Pexp_send _
+                   )
+      | Record_field -> true
+      | _ -> false
+    end
+
   | Expression Pexp_sequence _ -> begin
       match parent with
       | Prefix_op

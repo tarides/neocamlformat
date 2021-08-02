@@ -712,8 +712,9 @@ end = struct
     | Pexp_ifthenelse (branches, else_) ->
       pp_if_then_else ~loc ps branches else_
     | Pexp_sequence (e1, e2) -> pp_sequence ps e1 e2
-    | Pexp_while (cond, body) -> pp_while ~loc cond body
-    | Pexp_for (it, start, stop, dir, body) -> pp_for ~loc it start stop dir body
+    | Pexp_while (cond, body) -> pp_while ~loc ps cond body
+    | Pexp_for (it, start, stop, dir, body) ->
+      pp_for ~loc ps it start stop dir body
     | Pexp_constraint (e, ct) -> pp_constraint e ct
     | Pexp_coerce (e, ct_start, ct) -> pp_coerce e ct_start ct
     | Pexp_send (e, meth) -> pp_send ps e meth
@@ -1064,23 +1065,26 @@ end = struct
     let doc = e1 ^^ semi ^/^ e2 in
     Printing_stack.parenthesize ps doc
 
-  and pp_while ~(loc:Location.t) cond body =
+  and pp_while ~(loc:Location.t) ps cond body =
     let cond = pp [] cond in
     let body = pp [] body in
     let do_ = token_between cond body Do in
     let while_ = token_before ~start:loc.loc_start cond While in
     let done_ = token_after body ~stop:loc.loc_end Done in
-    group (
+    let doc =
       group (
-        while_ ^^
-        nest 2 (break_before cond) ^/^
-        do_
-      ) ^^
-      nest 2 (break_before body) ^/^
-      done_
-    )
+        group (
+          while_ ^^
+          nest 2 (break_before cond) ^/^
+          do_
+        ) ^^
+        nest 2 (break_before body) ^/^
+        done_
+      )
+    in
+    Printing_stack.parenthesize ps doc
 
-  and pp_for ~(loc:Location.t) it start stop dir body =
+  and pp_for ~(loc:Location.t) ps it start stop dir body =
     let it = Pattern.pp [ Printing_stack.Value_binding ] it in
     let start = pp [] start in
     let equals = token_between it start Equals in
@@ -1095,19 +1099,22 @@ end = struct
     let do_ = token_between stop body Do in
     let loc_start = { loc with loc_end = it.loc.loc_start } in
     let loc_end = { loc with loc_start = body.loc.loc_end } in
-    group (
+    let doc =
       group (
-        string ~loc:loc_start "for" ^^
-        nest 2 (
-          break_before (group (it ^/^ equals ^/^ start)) ^/^
-          dir ^/^
-          stop
-        ) ^/^
-        do_
-      ) ^^
-      nest 2 (break_before body) ^/^
-      string ~loc:loc_end "done"
-    )
+        group (
+          string ~loc:loc_start "for" ^^
+          nest 2 (
+            break_before (group (it ^/^ equals ^/^ start)) ^/^
+            dir ^/^
+            stop
+          ) ^/^
+          do_
+        ) ^^
+        nest 2 (break_before body) ^/^
+        string ~loc:loc_end "done"
+      )
+    in
+    Printing_stack.parenthesize ps doc
 
   and pp_constraint exp ct =
     let exp = pp [] exp in
