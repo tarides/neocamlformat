@@ -10,7 +10,8 @@ type elt =
   | Core_type of core_type_desc
   | Pattern of pattern_desc
   | Expression of expression_desc
-  | Value_binding (* FIXME: currently also used for function parameters *)
+  | Function_parameter
+  | Value_binding
   | Cons_constr of { on_left: bool }
   | Pipe of { on_left: bool }
   | Prefix_op
@@ -87,6 +88,7 @@ let needs_parens elt parent =
 
   | Pattern Ppat_lazy _ -> begin
       match parent with
+      | Function_parameter
       | Value_binding -> true
       | Pattern (Ppat_construct _ | Ppat_variant _) ->
         (* Not necessary: but better style. *)
@@ -100,6 +102,7 @@ let needs_parens elt parent =
   | Pattern Ppat_construct (_, Some _) -> begin
       match parent with
       | Pattern Ppat_lazy _
+      | Function_parameter
       | Value_binding -> true
       | Pattern ( Ppat_construct _
                 | Ppat_variant _
@@ -113,6 +116,7 @@ let needs_parens elt parent =
       | Pattern ( Ppat_lazy _
                 | Ppat_construct _
                 | Ppat_variant _ )
+      | Function_parameter
       | Value_binding ->
         true
       | Pattern Ppat_exception _ ->
@@ -147,6 +151,7 @@ let needs_parens elt parent =
                 | Ppat_lazy _
                 | Ppat_exception _)
       | Cons_constr _
+      | Function_parameter
       | Value_binding -> true
       | _ -> false
     end
@@ -155,6 +160,7 @@ let needs_parens elt parent =
       match parent with
       | Pattern Ppat_alias _ (* Not necessary: but better style. *)
       | Pattern _
+      | Function_parameter
       | Value_binding ->
         true
       | Pipe { on_left } -> not on_left
@@ -163,8 +169,14 @@ let needs_parens elt parent =
   | Pattern Ppat_alias _ -> begin
       match parent with
       | Pattern _
+      | Function_parameter
       | Value_binding
       | Cons_constr _ -> true
+      | _ -> false
+    end
+  | Pattern Ppat_record _ -> begin
+      match parent with
+      | Function_parameter -> true
       | _ -> false
     end
 
@@ -247,6 +259,7 @@ let needs_parens elt parent =
         true
       | Cons_constr { on_left = false }
       | Expression Pexp_record _
+      | Function_parameter
       | Value_binding
       | Unpack ->
         (* Not described by the precedence table, but won't parse otherwise. *)

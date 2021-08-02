@@ -520,6 +520,7 @@ end = struct
       ~formatting:!Options.Record.pattern
       ~left:lbrace ~right:rbrace
       (fields @ extra_fields)
+    |> Printing_stack.parenthesize ps
 
   and pp_array ~loc ps pats =
     let pats = List.map (pp ps) pats in
@@ -1269,17 +1270,14 @@ end
 and Fun_param : sig
   val pp : fun_param -> document
 end = struct
-  let fresh_stack =
-    (* TODO: introduce a dedicated item. *)
-    [ Printing_stack.Value_binding ]
-
   let punned_label_with_annot prefix_token lbl ct =
     let lbl = str lbl in
     let ct = Core_type.pp [] ct in
     let colon = token_between lbl ct Colon in
     prefix_token ++ parens (lbl ^^ colon ^^ break_before ~spaces:0 ct)
 
-  let build_simple_label prefix_token lbl pat =
+  let build_simple_label ~optional lbl pat =
+    let prefix_token = if optional then qmark else tilde in
     match pat.ppat_desc with
     | Ppat_var v when lbl.txt = v.txt ->
       prefix_token ++ str lbl
@@ -1287,6 +1285,11 @@ end = struct
       when lbl.txt = v.txt ->
       punned_label_with_annot prefix_token lbl ct
     | _ ->
+      let fresh_stack =
+        Printing_stack.[
+          if optional then Function_parameter else Value_binding
+        ]
+      in
       let pat = Pattern.pp fresh_stack pat in
       let loc = lbl.loc in
       match token_before ~start:loc.loc_end pat Colon with
@@ -1297,6 +1300,7 @@ end = struct
 
   let build_optional_with_default lbl def pat =
     let pat_def =
+      let fresh_stack = [ Printing_stack.Value_binding ] in
       let pat = Pattern.pp fresh_stack pat in
       let def = Expression.pp fresh_stack def in
       let eq = token_between pat def Equals in
@@ -1316,10 +1320,10 @@ end = struct
   let term lbl default pat =
     match lbl with
     | Nolabel -> Pattern.pp [ Printing_stack.Value_binding ] pat
-    | Labelled lbl -> build_simple_label tilde lbl pat
+    | Labelled lbl -> build_simple_label ~optional:false lbl pat
     | Optional lbl ->
       match default with
-      | None -> build_simple_label qmark lbl pat
+      | None -> build_simple_label ~optional:true lbl pat
       | Some def -> build_optional_with_default lbl def pat
 
   let newtype typ =
