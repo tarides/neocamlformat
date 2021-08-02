@@ -2516,10 +2516,10 @@ end = struct
     let doc = pp_field_desc ~loc:pctf_loc pctf_desc in
     Attribute.attach_to_item doc pctf_attributes
 
-  let pp ~loc:_ { pcsig_self = _; pcsig_fields } =
+  let pp ~loc { pcsig_self = _; pcsig_fields } =
     (* FIXME *)
     match pcsig_fields with
-    | [] -> assert false
+    | [] -> string ~loc "object end"
     | f :: fs ->
       let fields = separate_map PPrint.(twice hardline) ~f:pp_field f fs in
       (* FIXME *)
@@ -2615,9 +2615,11 @@ and Class_type_declaration : sig
 end = struct
   let pp cds =
     let cds =
-      List.mapi (fun i cd ->
+      let i = ref 0 in
+      List.concat_map (fun cd ->
         let { pci_virt; pci_params; pci_name; pci_term_params; pci_type;
               pci_expr; pci_loc; pci_attributes } = cd in
+        let text, pci_attributes = Attribute.extract_text pci_attributes in
         let lhs =
           Type_declaration.with_params ~enclosing:brackets
             pci_params (str pci_name)
@@ -2634,11 +2636,12 @@ end = struct
         in
         let keyword =
           let fst =
-            if i <> 0 then
+            if !i <> 0 then
               token_before ~start:pci_loc.loc_start lhs And
             else
               let class_ = token_before ~start:pci_loc.loc_start lhs Class in
               let type_ = token_between class_ lhs Type in
+              incr i;
               group (class_ ^/^ type_)
           in
           match pci_virt with
@@ -2648,6 +2651,7 @@ end = struct
             group (fst ^/^ virt)
         in
         let doc = Binding.pp ~keyword binding in
+        Attribute.prepend_text text @@
         Attribute.attach_to_top_item doc pci_attributes
       ) cds
     in
