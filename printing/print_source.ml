@@ -309,9 +309,20 @@ end = struct
     | Some _ -> string ~loc ("' " ^ v)
 
   let rec pp ps { ptyp_loc; ptyp_desc; ptyp_attributes; ptyp_loc_stack = _ } =
-    let ps = Printing_stack.Core_type ptyp_desc :: ps in
+    let has_attrs = Attribute.has_non_doc ptyp_attributes in
+    let ps =
+      let new_item = Printing_stack.Core_type ptyp_desc in
+      if has_attrs then
+        new_item :: Attribute :: ps
+      else
+        new_item :: ps
+    in
     let doc = group (pp_desc ~loc:ptyp_loc ps ptyp_desc) in
-    Attribute.attach_to_item doc ptyp_attributes
+    let doc = Attribute.attach_to_item doc ptyp_attributes in
+    if has_attrs then
+      Printing_stack.parenthesize (List.tl ps) doc
+    else
+      doc
 
 
   and pp_desc ~loc ps = function
