@@ -795,11 +795,10 @@ end = struct
     | Pexp_string_set (str, idx, c) -> pp_string_set ps str idx c
     | Pexp_bigarray_get (ba, idx) -> pp_bigarray_get ps ba idx
     | Pexp_bigarray_set (ba, idx, c) -> pp_bigarray_set ps ba idx c
-      (* TODO *)
-    | Pexp_dotop_get _
-    | Pexp_dotop_set _
-      ->
-      assert false
+    | Pexp_dotop_get { accessed; op; left; right; indices } ->
+      pp_dotop_get ps accessed op left right indices
+    | Pexp_dotop_set { accessed; op; left; right; indices; value } ->
+      pp_dotop_set ps accessed op left right indices value
 
   and pp_ident = Longident.pp
 
@@ -1067,6 +1066,28 @@ end = struct
     in
     let idx = pp_tuple ps idx in
     pp_gen_set braces access_ps ps arr idx val_
+
+  and pp_dotop_get ps accessed op left right indices =
+    let enclose doc = group (Longident.pp op ^^ str left) ^^ doc ^^ str right in
+    let indices =
+      match indices with
+      | [] -> assert false (* I think *)
+      | idx :: ids -> separate_map semi ~f:(pp []) idx ids
+    in
+    pp_gen_get enclose ps accessed indices
+
+  and pp_dotop_set ps accessed op left right indices val_ =
+    let enclose doc = group (Longident.pp op ^^ str left) ^^ doc ^^ str right in
+    let access_ps =
+      [ Printing_stack.Expression
+          (Pexp_dotop_get { accessed; op; left; right; indices }) ]
+    in
+    let indices =
+      match indices with
+      | [] -> assert false (* I think *)
+      | idx :: ids -> separate_map semi ~f:(pp []) idx ids
+    in
+    pp_gen_set enclose access_ps ps accessed indices val_
 
   and pp_if_then_else ~loc ps if_branches else_opt =
     let if_branches =
