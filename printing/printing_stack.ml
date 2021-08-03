@@ -520,6 +520,7 @@ let needs_parens elt parent =
       | _ -> false
     end
 
+  | Expression Pexp_object _
   | Expression Pexp_for _
   | Expression Pexp_while _ -> begin
       match parent with

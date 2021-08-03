@@ -782,7 +782,7 @@ end = struct
     | Pexp_letexception (exn, exp) -> pp_letexception ~loc ps exn exp
     | Pexp_assert exp -> pp_assert ~loc ps exp
     | Pexp_lazy exp -> pp_lazy ~loc ps exp
-    | Pexp_object cl -> pp_object ~loc cl
+    | Pexp_object cl -> pp_object ~loc ps cl
     | Pexp_pack (me, pkg) -> pp_pack me pkg
     | Pexp_open (lid, exp) -> pp_open lid exp
     | Pexp_letopen (od, exp) -> pp_letopen ~loc ps od exp
@@ -1215,9 +1215,12 @@ end = struct
 
   and obj_field_override (lbl, exp) =
     let fld = str lbl in
-    let exp = pp [ Printing_stack.Record_field ] exp in
-    let equals = token_between fld exp Equals in
-    fld ^/^ equals ^/^ exp
+    match exp.pexp_desc with
+    | Pexp_ident Lident s when s.txt = lbl.txt -> fld
+    | _ ->
+      let exp = pp [ Printing_stack.Record_field ] exp in
+      let equals = token_between fld exp Equals in
+      fld ^/^ equals ^/^ exp
 
   and pp_override ~loc fields =
     List_like.pp ~loc
@@ -1279,7 +1282,9 @@ end = struct
     let doc = prefix ~indent:2 ~spaces:1 lazy_ exp in
     Printing_stack.parenthesize ps doc
 
-  and pp_object = Class_structure.pp
+  and pp_object ~loc ps cs =
+    let doc = Class_structure.pp ~loc cs in
+    Printing_stack.parenthesize ps doc
 
   and pp_pack me pkg =
     let me = Module_expr.pp me in
@@ -2014,7 +2019,8 @@ and Type_declaration : sig
 (*   val pp : type_declaration -> document * document *)
 
   val with_params
-    :  ?enclosing:(document -> document)
+    :  ?always_enclosed:bool
+    -> ?enclosing:(document -> document)
     -> (core_type * variance) list
     -> document
     -> document
@@ -2037,9 +2043,10 @@ end = struct
     | Covariant -> plus ++ ct
     | Contravariant -> minus ++ ct
 
-  let with_params ?(enclosing=parens) lst name =
+  let with_params ?(always_enclosed=false) ?(enclosing=parens) lst name =
     match lst with
     | [] -> name
+    | [ x ] when always_enclosed -> group (enclosing (pp_param x) ^/^ name)
     | [ x ] -> group (pp_param x ^/^ name)
     | x :: xs ->
       let params = separate_map PPrint.(comma ^^ break 1) ~f:pp_param x xs in
@@ -2291,9 +2298,12 @@ end = struct
       (group ((prefix ~indent:2 ~spaces:1 fun_ params) ^/^ arrow))
       body
 
-  and pp_apply ce args =
-    let ce = pp ce in
-    Application.pp_simple [] ce (List.hd args) (List.tl args)
+  and pp_apply ce = function
+    | [] -> assert false (* can't apply without args! *)
+    | arg :: args ->
+      let ce = pp ce in
+      let fake_ps = [ Printing_stack.Expression (Pexp_apply (snd arg, [])) ] in
+      Application.pp_simple fake_ps ce arg args
 
   and pp_let rf vbs ce =
     let vbs =
@@ -2459,7 +2469,7 @@ end = struct
 
   let pp_field { pcf_desc; pcf_loc; pcf_attributes } =
     let doc = pp_field_desc ~loc:pcf_loc pcf_desc in
-    Attribute.attach_to_item doc pcf_attributes
+    Attribute.attach_to_top_item doc pcf_attributes
 
   let pp ~loc { pcstr_self = _; pcstr_fields } =
     (* FIXME *)
@@ -2558,7 +2568,7 @@ end = struct
         let { pci_virt; pci_params; pci_name; pci_term_params; pci_type;
               pci_expr; pci_loc; pci_attributes } = cd in
         let lhs =
-          Type_declaration.with_params ~enclosing:brackets
+          Type_declaration.with_params ~always_enclosed:true ~enclosing:brackets
             pci_params (str pci_name)
         in
         let binding =
@@ -2597,7 +2607,7 @@ end = struct
         let { pci_virt; pci_params; pci_name; pci_term_params; pci_type;
               pci_expr; pci_loc; pci_attributes } = cd in
         let lhs =
-          Type_declaration.with_params ~enclosing:brackets
+          Type_declaration.with_params ~always_enclosed:true ~enclosing:brackets
             pci_params (str pci_name)
         in
         assert (Option.is_none pci_type);
@@ -2639,7 +2649,7 @@ end = struct
               pci_expr; pci_loc; pci_attributes } = cd in
         let text, pci_attributes = Attribute.extract_text pci_attributes in
         let lhs =
-          Type_declaration.with_params ~enclosing:brackets
+          Type_declaration.with_params ~always_enclosed:true ~enclosing:brackets
             pci_params (str pci_name)
         in
         assert (Option.is_none pci_type);
