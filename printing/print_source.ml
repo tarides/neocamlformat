@@ -1556,16 +1556,25 @@ and Module_type : sig
   val pp : module_type -> document
 end = struct
   let rec pp { pmty_desc; pmty_attributes; pmty_loc; _ } =
-    Attribute.attach_to_item (pp_desc ~loc:pmty_loc pmty_desc) pmty_attributes
+    let has_attrs = Attribute.has_non_doc pmty_attributes in
+    let ps =
+      let new_item = Printing_stack.Module_type pmty_desc in
+      if has_attrs then
+        [ new_item; Attribute ]
+      else
+        [ new_item ]
+    in
+    let doc = group (pp_desc ~loc:pmty_loc ps pmty_desc) in
+    Attribute.attach_to_item doc pmty_attributes
 
-  and pp_desc ~loc = function
+  and pp_desc ~loc ps = function
     | Pmty_alias lid (* [module type _ = A] *)
     | Pmty_ident lid (* [module _ : A] *)
       -> Longident.pp lid
     | Pmty_signature sg -> pp_signature ~loc sg
     | Pmty_functor (params, mty) -> pp_functor ~loc params mty
     | Pmty_with (mty, cstrs) -> pp_with mty cstrs
-    | Pmty_typeof me -> pp_typeof me
+    | Pmty_typeof me -> pp_typeof ps me
     | Pmty_extension ext -> Extension.pp Item ext
 
   and pp_signature ~loc = function
@@ -1614,12 +1623,12 @@ end = struct
       | Pwith_type (lid, td) ->
         let type_ = token_after keyword ~stop:td.ptype_loc.loc_start Type in
         let kw = keyword ^/^ type_ in
-        Type_declaration.pp ~override_name:(Longident.pp lid)
+        Type_declaration.pp_with_constraint ~override_name:(Longident.pp lid)
           ~keyword:(Formatted kw) td
       | Pwith_typesubst (lid, td) ->
         let type_ = token_after keyword ~stop:td.ptype_loc.loc_start Type in
         let kw = keyword ^/^ type_ in
-        Type_declaration.pp ~binder:Colonequals
+        Type_declaration.pp_with_constraint ~binder:Colonequals
           ~override_name:(Longident.pp lid)
           ~keyword:(Formatted kw) td
       | Pwith_module (lid1, lid2) ->
@@ -1655,10 +1664,11 @@ end = struct
     in
     with_constraints
 
-  and pp_typeof exp =
+  and pp_typeof ps exp =
     let me = Module_expr.pp exp in
     let pre = PPrint.flow (break 1) [ !^"module"; !^"type"; !^"of" ] in
     pre ++ break_before me
+    |> Printing_stack.parenthesize ps
 
 end
 
@@ -2061,12 +2071,16 @@ and Type_declaration : sig
     | String_prefix of string
     | Formatted of document
 
-  val pp : ?override_name:document -> ?binder:Tokens.t -> keyword:keyword ->
-    type_declaration -> document
-
   val pp_decl : rec_flag -> type_declaration list -> document
 
   val pp_subst : type_declaration list -> document
+
+  val pp_with_constraint
+    :  ?override_name:document
+    -> ?binder:Tokens.t
+    -> keyword:keyword
+    -> type_declaration
+    -> document
 end = struct
   let pp_param (ct, var) =
     let ct = Core_type.pp [] ct in
@@ -2150,12 +2164,12 @@ end = struct
     | String_prefix of string
     | Formatted of document
 
-  let pp ?override_name ?binder ~keyword
+  let pp ?override_name ?binder ~keyword manifest_ps
       { ptype_name; ptype_params; ptype_cstrs; ptype_kind; ptype_private;
         ptype_manifest; ptype_attributes; ptype_loc } =
     let name = Option.value override_name ~default:(str ptype_name) in
     let lhs = with_params ptype_params name in
-    let manifest_opt = Option.map (Core_type.pp []) ptype_manifest in
+    let manifest_opt = Option.map (Core_type.pp manifest_ps) ptype_manifest in
     let rhs =
       (* I didn't know how to express this nightmare more cleanly. *)
       match manifest_opt, ptype_private, ptype_kind with
@@ -2203,6 +2217,9 @@ end = struct
     | Recursive -> ""
     | Nonrecursive -> " nonrec"
 
+  let pp_with_constraint ?override_name ?binder ~keyword td =
+    pp ?override_name ?binder ~keyword [ Printing_stack.With_constraint ] td
+
   let pp_decl rf decls =
     let decls =
       let i = ref 0 in
@@ -2215,7 +2232,7 @@ end = struct
           String_prefix (if !i = 0 then "type" ^ rec_flag rf else "and")
         in
         incr i;
-        let binding = pp ~keyword decl in
+        let binding = pp ~keyword [] decl in
         Attribute.prepend_text text binding
       ) decls
     in
@@ -2231,7 +2248,7 @@ end = struct
         in
         let keyword = String_prefix (if !i = 0 then "type" else "and") in
         incr i;
-        let binding = pp ~binder:Colonequals ~keyword decl in
+        let binding = pp ~binder:Colonequals ~keyword [] decl in
         Attribute.prepend_text text binding
       ) decls
     in

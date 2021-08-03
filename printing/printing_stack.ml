@@ -7,10 +7,12 @@ type core_type_elt =
 
 type elt =
   | Attribute
+  | With_constraint
   | Core_type of core_type_desc
   | Pattern of pattern_desc
   | Expression of expression_desc
   | Class_expr of class_expr_desc
+  | Module_type of module_type_desc
   | Function_parameter
   | Value_binding
   | Cons_constr of { on_left: bool }
@@ -262,6 +264,7 @@ let needs_parens elt parent =
                    | Pexp_lazy _
                    ) ->
         true
+      | With_constraint
       | Row_field
       | Core_type (Ptyp_arrow _ | Ptyp_tuple _)
       | Cons_constr { on_left = false }
@@ -639,6 +642,12 @@ let needs_parens elt parent =
       | Cons_constr { on_left = true }
       | Record_field
       | Unpack -> true
+      | _ -> false
+    end
+
+  | Module_type (Pmty_typeof _) -> begin
+      match parent with
+      | Attribute -> true
       | _ -> false
     end
 
