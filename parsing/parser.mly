@@ -1699,8 +1699,8 @@ method_:
       { let newtypes = $7 in
         let core_type = $9 in
         let typ =
-          ghtyp ~loc:($startpos($7), $endpos($9))
-            (Ptyp_poly(newtypes, (* don't varify constructors *) core_type))
+          ghtyp ~loc:($startpos($6), $endpos($9))
+            (Ptype_poly(newtypes, (* don't varify constructors *) core_type))
         in
         let priv = match $3 with None -> Public | Some _ -> Private in
         ($4, priv, Cfk_concrete ($1, [], (Some typ, None), $11)), $2 }
@@ -2290,7 +2290,7 @@ let_binding_body:
   | let_ident COLON TYPE lident_list DOT core_type EQUAL seq_expr
       { let typ =
           ghtyp ~loc:($startpos($3), $endpos($6))
-            (Ptyp_poly ($4, $6))
+            (Ptype_poly ($4, $6))
         in
         ($1, ([], (Some typ, None), $8)) }
   | pattern_no_exn EQUAL seq_expr

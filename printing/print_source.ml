@@ -271,27 +271,31 @@ and Core_type : sig
 end = struct
   let rec starts_with_obj core_type =
     match core_type.ptyp_desc with
-    | Ptyp_arrow (lhs, _) -> starts_with_obj (snd @@ List.hd lhs)
+    | Ptyp_alias (lhs, _)
+    | Ptyp_tuple (lhs :: _)
+    | Ptyp_arrow ((_, lhs) :: _, _) -> starts_with_obj lhs
     | Ptyp_object (_, _) -> true
     | Ptyp_any
     | Ptyp_var _
     | Ptyp_tuple _
+    | Ptyp_arrow _
     | Ptyp_constr (_, _)
     | Ptyp_class (_, _)
-    | Ptyp_alias (_, _)
     | Ptyp_variant (_, _, _)
     | Ptyp_poly _
+    | Ptype_poly _
     | Ptyp_package _
     | Ptyp_extension _ -> false
 
   let rec ends_in_obj core_type =
     match core_type.ptyp_desc with
     | Ptyp_arrow (_, rhs)
+    | Ptype_poly (_, rhs)
     | Ptyp_poly (_, rhs) -> ends_in_obj rhs
+    | Ptyp_tuple lst -> ends_in_obj (List.hd (List.rev lst))
     | Ptyp_object (_, _) -> true
     | Ptyp_any
     | Ptyp_var _
-    | Ptyp_tuple _
     | Ptyp_constr (_, _)
     | Ptyp_class (_, _)
     | Ptyp_alias (_, _)
@@ -322,6 +326,7 @@ end = struct
     | Ptyp_variant (fields, closed, present) ->
       Polymorphic_variant.pp_row ~loc fields closed present
     | Ptyp_poly (vars, ct) -> pp_poly vars ct
+    | Ptype_poly (vars, ct) -> pp_newtype_poly ~loc vars ct
     | Ptyp_package pkg -> pp_package ~loc pkg
     | Ptyp_extension ext -> Extension.pp Item ext
 
@@ -407,6 +412,19 @@ end = struct
       let dot = token_between vars ct Dot in
       prefix ~indent:2 ~spaces:1
         (group (vars ^^ dot))
+        ct
+
+  and pp_newtype_poly ~loc vars ct =
+    (* FIXME: doesn't look right. *)
+    let ct = pp [] ct in
+    match vars with
+    | [] -> ct
+    | v :: vs ->
+      let type_ = token_before ~start:loc.loc_start v Type in
+      let vars = separate_map space ~f:str v vs in
+      let dot = token_between vars ct Dot in
+      prefix ~indent:2 ~spaces:1
+        (group (type_ ^/^ vars ^^ dot))
         ct
 
   and pp_package ~loc pkg =

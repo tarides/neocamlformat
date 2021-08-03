@@ -150,6 +150,8 @@ and core_type_desc =
 
            - As a core_type of a Ptyp_object node.
          *)
+  | Ptype_poly of string loc list * core_type
+        (* type a1 ... an. T *)
 
   | Ptyp_package of package_type
         (* (module S) *)
