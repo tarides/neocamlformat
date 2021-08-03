@@ -2274,20 +2274,32 @@ end = struct
 end
 
 and Class_expr : sig
-  val pp : class_expr -> document
+  val pp : Printing_stack.t -> class_expr -> document
 end = struct
-  let rec pp { pcl_desc; pcl_loc; pcl_attributes } =
-    let doc = pp_desc pcl_loc pcl_desc in
-    Attribute.attach_to_item doc pcl_attributes
-
   (* TODO: much of this is just copy pasted from Expression; factorize. *)
 
-  and pp_fun ~loc params ce =
+  let rec pp ps { pcl_desc; pcl_loc; pcl_attributes } =
+    let has_attrs = Attribute.has_non_doc pcl_attributes in
+    let ps' =
+      let new_item = Printing_stack.Class_expr pcl_desc in
+      if has_attrs then
+        new_item :: Attribute :: ps
+      else
+        new_item :: ps
+    in
+    let desc = group (pp_desc ~loc:pcl_loc ps' pcl_desc) in
+    let doc = Attribute.attach_to_item desc pcl_attributes in
+    if has_attrs then
+      Printing_stack.parenthesize (List.tl ps') doc
+    else
+      doc
+
+  and pp_fun ps ~loc params ce =
     let params =
       separate_map (PPrint.break 1) ~f:Fun_param.pp
         (List.hd params) (List.tl params)
     in
-    let body = pp ce in
+    let body = pp ps ce in
     (* FIXME: copied from expressions. factorize. *)
     let fun_ =
       let loc = { loc with Location.loc_end = params.loc.loc_start } in
@@ -2297,15 +2309,16 @@ end = struct
     prefix ~indent:2 ~spaces:1
       (group ((prefix ~indent:2 ~spaces:1 fun_ params) ^/^ arrow))
       body
+    |> Printing_stack.parenthesize ps
 
-  and pp_apply ce = function
+  and pp_apply ps ce = function
     | [] -> assert false (* can't apply without args! *)
     | arg :: args ->
-      let ce = pp ce in
-      let fake_ps = [ Printing_stack.Expression (Pexp_apply (snd arg, [])) ] in
-      Application.pp_simple fake_ps ce arg args
+      let ce = pp ps ce in
+      Application.pp_simple ps ce arg args
+      |> Printing_stack.parenthesize ps
 
-  and pp_let rf vbs ce =
+  and pp_let ps rf vbs ce =
     let vbs =
       let i = ref 0 in
       List.concat_map (fun vb ->
@@ -2328,35 +2341,37 @@ end = struct
       ) vbs
     in
     let vbs = separate hardline (List.hd vbs) (List.tl vbs) in
-    let ce = pp ce in
+    let ce = pp ps ce in
     let in_ = token_between vbs ce In in
     group (vbs ^/^ in_) ^^ hardline ++ ce
+    |> Printing_stack.parenthesize ps
 
-  and pp_constraint ce ct =
-    let ce = pp ce in
+  and pp_constraint ps ce ct =
+    let ce = pp ps ce in
     let ct = Class_type.pp ct in
     let colon = token_between ce ct Colon in
     group (parens (ce ^/^ colon ^/^ ct))
 
-  and pp_open ~loc od ce =
+  and pp_open ps ~loc od ce =
     let od = Open_description.pp od in
-    let ce = pp ce in
+    let ce = pp ps ce in
     let in_ = token_between od ce In in
     let let_ =
       let loc = { loc with Location.loc_end = od.loc.loc_start } in
       string ~loc "let"
     in
     group (let_ ^/^ od ^/^ in_) ^/^ ce
+    |> Printing_stack.parenthesize ps
 
-  and pp_desc loc = function
+  and pp_desc ps ~loc = function
     | Pcl_constr (name, args) -> Class_type.pp_constr name args
     | Pcl_structure str -> Class_structure.pp ~loc str
-    | Pcl_fun (params, ce) -> pp_fun ~loc params ce
-    | Pcl_apply (ce, args) -> pp_apply ce args
-    | Pcl_let (rf, vbs, ce) -> pp_let rf vbs ce
-    | Pcl_constraint (ce, ct) -> pp_constraint ce ct
+    | Pcl_fun (params, ce) -> pp_fun ps ~loc params ce
+    | Pcl_apply (ce, args) -> pp_apply ps ce args
+    | Pcl_let (rf, vbs, ce) -> pp_let ps rf vbs ce
+    | Pcl_constraint (ce, ct) -> pp_constraint ps ce ct
     | Pcl_extension ext -> Extension.pp Item ext
-    | Pcl_open (od, ce) -> pp_open ~loc od ce
+    | Pcl_open (od, ce) -> pp_open ps ~loc od ce
 end
 
 and Class_structure : sig
@@ -2366,7 +2381,7 @@ and Class_structure : sig
 end = struct
   let pp_inherit ~loc override ce alias =
     let pre =
-      let ce = Class_expr.pp ce in
+      let ce = Class_expr.pp [] ce in
       let inh_kw = token_before ~start:loc.Location.loc_start ce Inherit in
       group (
         match override with
@@ -2578,7 +2593,7 @@ end = struct
               { loc; txt = List.map Fun_param.pp pci_term_params });
             constr = Option.map Class_type.pp pci_type;
             coerce = None;
-            rhs = Some (Class_expr.pp pci_expr) }
+            rhs = Some (Class_expr.pp [] pci_expr) }
         in
         let keyword =
           let fst =

@@ -10,6 +10,7 @@ type elt =
   | Core_type of core_type_desc
   | Pattern of pattern_desc
   | Expression of expression_desc
+  | Class_expr of class_expr_desc
   | Function_parameter
   | Value_binding
   | Cons_constr of { on_left: bool }
@@ -124,6 +125,7 @@ let needs_parens elt parent =
         true
       | Prefix_op
       | Attribute
+      | Class_expr Pcl_apply _
       | Expression ( Pexp_field _
                    | Pexp_setfield _
                    | Pexp_array_get _
@@ -229,6 +231,7 @@ let needs_parens elt parent =
                    | Pexp_bigarray_get _
                    | Pexp_string_get _)
       | Infix_op { level = 9; _ }
+      | Class_expr Pcl_apply _
       | Expression ( Pexp_apply _
                    | Pexp_construct _
                    | Pexp_variant _
@@ -251,6 +254,7 @@ let needs_parens elt parent =
                    | Pexp_bigarray_get _
                    | Pexp_string_get _)
       | Infix_op { level = 9; _ }
+      | Class_expr Pcl_apply _
       | Expression ( Pexp_apply _
                    | Pexp_construct _
                    | Pexp_variant _
@@ -279,6 +283,7 @@ let needs_parens elt parent =
                    | Pexp_string_get _)
       | Infix_op { level = 9; _ }
       | Infix_op { level = 8; on_left = true }
+      | Class_expr Pcl_apply _
       | Expression ( Pexp_apply _
                    | Pexp_construct _
                    | Pexp_variant _
@@ -304,6 +309,7 @@ let needs_parens elt parent =
                    | Pexp_string_get _) -> true
       | Infix_op { level = (8 | 9); _ }
       | Infix_op { level = 7; on_left = false }
+      | Class_expr Pcl_apply _
       | Expression ( Pexp_apply _
                    | Pexp_construct _
                    | Pexp_variant _
@@ -329,6 +335,7 @@ let needs_parens elt parent =
                    | Pexp_string_get _) -> true
       | Infix_op { level = (7 | 8 | 9); _ }
       | Infix_op { level = 6; on_left = false }
+      | Class_expr Pcl_apply _
       | Expression ( Pexp_apply _
                    | Pexp_construct _
                    | Pexp_variant _
@@ -354,6 +361,7 @@ let needs_parens elt parent =
                    | Pexp_string_get _) -> true
       | Infix_op { level = (6 | 7 | 8 | 9); _ }
       | Infix_op { level = 5; on_left = true }
+      | Class_expr Pcl_apply _
       | Expression ( Pexp_apply _
                    | Pexp_construct _
                    | Pexp_variant _
@@ -380,6 +388,7 @@ let needs_parens elt parent =
                    | Pexp_string_get _) -> true
       | Infix_op { level = (5 | 6 | 7 | 8 | 9); _ }
       | Infix_op { level = 4; on_left = false }
+      | Class_expr Pcl_apply _
       | Expression ( Pexp_apply _
                    | Pexp_construct _
                    | Pexp_variant _
@@ -407,6 +416,7 @@ let needs_parens elt parent =
                    | Pexp_string_get _) -> true
       | Infix_op { level = (4 | 5 | 6 | 7 | 8 | 9); _ }
       | Infix_op { level = 3; on_left = true }
+      | Class_expr Pcl_apply _
       | Expression ( Pexp_apply _
                    | Pexp_construct _
                    | Pexp_variant _
@@ -433,6 +443,7 @@ let needs_parens elt parent =
                    | Pexp_string_get _) -> true
       | Infix_op { level = (3 | 4 | 5 | 6 | 7 | 8 | 9); _ }
       | Infix_op { level = 2; on_left = true }
+      | Class_expr Pcl_apply _
       | Expression ( Pexp_apply _
                    | Pexp_construct _
                    | Pexp_variant _
@@ -457,6 +468,7 @@ let needs_parens elt parent =
                    | Pexp_bigarray_get _
                    | Pexp_string_get _) -> true
       | Infix_op { level = (2 | 3 | 4 | 5 | 6 | 7 | 8 | 9); _ }
+      | Class_expr Pcl_apply _
       | Expression ( Pexp_apply _
                    | Pexp_construct _
                    | Pexp_variant _
@@ -484,6 +496,7 @@ let needs_parens elt parent =
                    | Pexp_string_get _) -> true
       | Infix_op { level = (2 | 3 | 4 | 5 | 6 | 7 | 8 | 9); _ }
       | Infix_op { level = 1; on_left = true }
+      | Class_expr Pcl_apply _
       | Expression ( Pexp_apply _
                    | Pexp_construct _
                    | Pexp_variant _
@@ -505,6 +518,7 @@ let needs_parens elt parent =
       | Attribute
       | Prefix_op
       | Infix_op _
+      | Class_expr Pcl_apply _
       | Expression ( Pexp_apply _
                    | Pexp_assert _
                    | Pexp_lazy _
@@ -526,6 +540,7 @@ let needs_parens elt parent =
       match parent with
       | Prefix_op
       | Infix_op _
+      | Class_expr Pcl_apply _
       | Expression ( Pexp_apply _
                    | Pexp_assert _
                    | Pexp_lazy _
@@ -542,6 +557,7 @@ let needs_parens elt parent =
       | Attribute
       | Prefix_op
       | Infix_op _
+      | Class_expr Pcl_apply _
       | Expression ( Pexp_apply _
                    | Pexp_assert _
                    | Pexp_lazy _
@@ -559,10 +575,20 @@ let needs_parens elt parent =
       | _ -> false
     end
 
+  | Class_expr Pcl_fun _
+  | Class_expr Pcl_let _
+  | Class_expr Pcl_open _ -> begin
+      match parent with
+      | Attribute
+      | Class_expr Pcl_apply _ -> true
+      | _ -> false
+    end
+
   | Expression Pexp_letopen _
   | Expression Pexp_let _ -> begin
       match parent with
       | Attribute
+      | Class_expr Pcl_apply _
       | Expression ( Pexp_apply _
                    | Pexp_construct _
                    | Pexp_variant _
@@ -593,6 +619,7 @@ let needs_parens elt parent =
   | Expression Pexp_try _ -> begin
       match parent with
       | Attribute
+      | Class_expr Pcl_apply _
       | Expression ( Pexp_apply _
                    | Pexp_construct _
                    | Pexp_variant _
