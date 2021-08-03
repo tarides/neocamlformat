@@ -2242,11 +2242,11 @@ end = struct
       args ^/^ name
 
   let rec pp { pcty_desc; pcty_loc; pcty_attributes } =
-    let doc = pp_desc pcty_loc pcty_desc in
-    Attribute.attach_to_item doc pcty_attributes
+    let doc, attrs = pp_desc pcty_loc pcty_desc pcty_attributes in
+    Attribute.attach_to_item doc attrs
 
-  and pp_open ~loc od ct =
-    let od = Open_description.pp od in
+  and pp_open ~loc od ct attrs =
+    let od = Open_description.pp ~extra_attrs:attrs od in
     let ct = pp ct in
     let in_ = token_between od ct In in
     let let_ =
@@ -2265,12 +2265,13 @@ end = struct
     let arrow = token_between param cty Rarrow in
     param ^/^ group (arrow ^/^ cty)
 
-  and pp_desc loc = function
-    | Pcty_constr (ct, args) -> pp_constr ct args
-    | Pcty_signature sg -> Class_signature.pp ~loc sg
-    | Pcty_arrow (lbl, ct, cty) -> pp_arrow lbl ct cty
-    | Pcty_extension ext -> Extension.pp Item ext
-    | Pcty_open (od, ct) -> pp_open ~loc od ct
+  and pp_desc loc desc attrs =
+    match desc with
+    | Pcty_constr (ct, args) -> pp_constr ct args, attrs
+    | Pcty_signature sg -> Class_signature.pp ~loc sg, attrs
+    | Pcty_arrow (lbl, ct, cty) -> pp_arrow lbl ct cty, attrs
+    | Pcty_extension ext -> Extension.pp Item ext, attrs
+    | Pcty_open (od, ct) -> pp_open ~loc od ct attrs, []
 end
 
 and Class_expr : sig
@@ -2486,18 +2487,25 @@ end = struct
     let doc = pp_field_desc ~loc:pcf_loc pcf_desc in
     Attribute.attach_to_top_item doc pcf_attributes
 
-  let pp ~loc { pcstr_self = _; pcstr_fields } =
-    (* FIXME *)
+  let pp ~(loc:Location.t) { pcstr_self; pcstr_fields } =
+    let obj_with_self =
+      match pcstr_self.ppat_desc with
+      | Ppat_any -> (* no self *)
+        string ~loc:pcstr_self.ppat_loc "object"
+      | _ ->
+        let self = Pattern.pp [] pcstr_self in
+        let obj = token_before ~start:loc.loc_start self Object in
+        group (obj ^/^ parens self)
+    in
     match pcstr_fields with
     | [] ->
-      (* FIXME: get the tokens, to get the comments. *)
-      string ~loc "object end"
+      let end_ = token_after ~stop:loc.loc_end obj_with_self End in
+      obj_with_self ^/^ end_
     | f :: fs ->
       let fields = separate_map PPrint.(twice hardline) ~f:pp_field f fs in
-      (* FIXME *)
+      let end_ = token_after ~stop:loc.loc_end fields End in
       group (
-        enclose ~before:!^"object" ~after:PPrint.(break 1 ^^ !^"end")
-          (nest 2 (break_before fields))
+        obj_with_self ^^ (nest 2 (break_before fields)) ^/^ end_
       )
 end
 
@@ -2579,9 +2587,11 @@ and Class_declaration : sig
 end = struct
   let pp cds =
     let cds =
-      List.mapi (fun i cd ->
+      let i = ref 0 in
+      List.concat_map (fun cd ->
         let { pci_virt; pci_params; pci_name; pci_term_params; pci_type;
               pci_expr; pci_loc; pci_attributes } = cd in
+        let text, pci_attributes = Attribute.extract_text pci_attributes in
         let lhs =
           Type_declaration.with_params ~always_enclosed:true ~enclosing:brackets
             pci_params (str pci_name)
@@ -2598,8 +2608,9 @@ end = struct
         let keyword =
           let fst =
             token_before ~start:pci_loc.loc_start lhs
-              (if i = 0 then Class else And)
+              (if !i = 0 then Class else And)
           in
+          incr i;
           match pci_virt with
           | Concrete -> fst
           | Virtual ->
@@ -2607,6 +2618,7 @@ end = struct
             group (fst ^/^ virt)
         in
         let doc = Binding.pp ~keyword binding in
+        Attribute.prepend_text text @@
         Attribute.attach_to_top_item doc pci_attributes
       ) cds
     in
@@ -2702,9 +2714,10 @@ end = struct
 end
 
 and Open_description : sig
-  val pp : open_description -> document
+  val pp : ?extra_attrs:attributes -> open_description -> document
 end = struct
-  let pp { popen_expr; popen_override; popen_attributes; popen_loc } =
+  let pp ?(extra_attrs=[])
+      { popen_expr; popen_override; popen_attributes; popen_loc } =
     let expr = Longident.pp popen_expr in
     let kw =
       let loc = { popen_loc with loc_end = expr.loc.loc_start } in
@@ -2713,7 +2726,7 @@ end = struct
          | Override -> "open!"
          | _ -> "open")
     in
-    let opn = group (kw ^/^ expr) in
+    let opn = group (Attribute.attach_to_item kw extra_attrs ^/^ expr) in
     Attribute.attach_to_top_item opn popen_attributes
 end
 

@@ -46,6 +46,8 @@ type t =
   | Type
   | Underscore
   | Module
+  | Object
+  | End
 
 let to_parser_token t : Source_parsing.Parser.token =
   match t with
@@ -96,6 +98,8 @@ let to_parser_token t : Source_parsing.Parser.token =
   | Type -> TYPE
   | Underscore -> UNDERSCORE
   | Module -> MODULE
+  | Object -> OBJECT
+  | End -> END
 
 let to_string = function
   | Colon -> ":"
@@ -145,3 +149,5 @@ let to_string = function
   | Type -> "type"
   | Underscore -> "_"
   | Module -> "module"
+  | Object -> "object"
+  | End -> "end"
