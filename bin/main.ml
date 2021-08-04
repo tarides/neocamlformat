@@ -53,12 +53,12 @@ let fmt_file ~width fn =
     close_out oc;
     begin match e with
     | Syntaxerr.Error _ ->
-      Format.eprintf "neocamlformat: formated file doesn't parse:@.%a@."
-        Location.report_exception e
+      Format.eprintf "neocamlformat: formated %S doesn't parse:@.%a@."
+        fn Location.report_exception e
     | Assert_failure _ ->
-      Format.eprintf "neocamlformat: AST changed by formater@."
+      Format.eprintf "neocamlformat: AST of %S changed by formater@." fn
     | _ ->
-      Format.eprintf "neocamlformat: internal error:@;%s@."
+      Format.eprintf "neocamlformat: (%S) internal error:@;%s@." fn
         (Printexc.to_string e)
     end;
     exit 2
