@@ -713,7 +713,9 @@ end = struct
       let op = str op in
       let arg = argument ps arg in
       let doc = nest 2 (op ^^ arg) in
-      Printing_stack.parenthesize ps doc
+      match ps with
+      | _ :: Function_parameter :: _ -> break_before ~spaces:1 doc
+      | _ -> Printing_stack.parenthesize ps doc
 
   let infix_op ps (exp, op) arg args =
     match arg, args with
@@ -1435,7 +1437,7 @@ end = struct
     let pat_def =
       let fresh_stack = [ Printing_stack.Value_binding ] in
       let pat = Pattern.pp fresh_stack pat in
-      let def = Expression.pp fresh_stack def in
+      let def = Expression.pp [ Printing_stack.Function_parameter ] def in
       let eq = token_between pat def Equals in
       parens (group (pat ^^ eq ^^ break_before ~spaces:0 def))
     in
