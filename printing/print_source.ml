@@ -123,8 +123,7 @@ end = struct
       ] ->
       let doc =
         let open PPrint in
-        let doc = separate hardline (lines s) in
-        !^"(**" ^^ doc ^^ !^"*)"
+        !^"(**" ^^ pp_verbatim_string s ^^ !^"*)"
       in
       Location.mkloc doc loc
     | _ -> assert false
