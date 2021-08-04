@@ -2,6 +2,36 @@ include PPrint
 open Source_parsing
 open Location
 
+class verbatim_string s : PPrint.custom =
+  let req = if String.contains s '\n' then infinity else String.length s in
+  object
+    method requirement = req
+
+    method pretty output state _indent flattening =
+      let rec aux i =
+        match String.index_from_opt s i '\n' with
+        | Some j ->
+          assert (not flattening);
+          if j - i > 0 then output#substring s i (j - i);
+          output#char '\n';
+          state.line <- state.line + 1;
+          state.column <- 0;
+          aux (j + 1)
+        | None ->
+          let len = String.length s - i in
+          output#substring s i len;
+          state.column <- state.column + len;
+      in
+      aux 0
+
+    method compact output =
+      assert (req != infinity);
+      output#substring s 0 req
+  end
+
+let pp_verbatim_string s =
+  custom (new verbatim_string s)
+
 let merge_locs l1 l2 =
   { Location.loc_start = l1.loc_start; loc_end = l2.loc_end }
 
@@ -9,7 +39,7 @@ let loc_between t1 t2 =
   { Location.loc_start = t1.loc.loc_end; loc_end = t2.loc.loc_start }
 
 let comment (s, _) =
-  !^"(*" ^^ arbitrary_string s ^^ !^"*)"
+  !^"(*" ^^ pp_verbatim_string s ^^ !^"*)"
 
 type comments =
   | No_comment
@@ -42,36 +72,6 @@ let str s = { s with txt = string s.txt }
 
 let arbitrary_string ~loc x =
   { txt = arbitrary_string x; loc }
-
-class verbatim_string s : PPrint.custom =
-  let req = if String.contains s '\n' then infinity else String.length s in
-  object
-    method requirement = req
-
-    method pretty output state _indent flattening =
-      let rec aux i =
-        match String.index_from_opt s i '\n' with
-        | Some j ->
-          assert (not flattening);
-          if j - i > 0 then output#substring s i (j - i);
-          output#char '\n';
-          state.line <- state.line + 1;
-          state.column <- 0;
-          aux (j + 1)
-        | None ->
-          let len = String.length s - i in
-          output#substring s i len;
-          state.column <- state.column + len;
-      in
-      aux 0
-
-    method compact output =
-      assert (req != infinity);
-      output#substring s 0 req
-  end
-
-let pp_verbatim_string s =
-  custom (new verbatim_string s)
 
 let quoted_string ~loc s =
   let txt = pp_verbatim_string s in
