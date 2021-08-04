@@ -681,6 +681,11 @@ end = struct
     let suffix ~prefix lbl =
       match exp.pexp_desc with
       | Pexp_ident Lident id when lbl.txt = id.txt -> prefix ++ str lbl
+      | Pexp_fun (params, body) when exp.pexp_attributes = [] ->
+        let lbl = string ~loc:lbl.loc (lbl.txt ^ ":") in
+        let ps = Printing_stack.Expression exp.pexp_desc :: ps in
+        Expression.pp_fun ~pre_label:(prefix ++ lbl) ~loc:exp.pexp_loc
+          ps params body
       | _ ->
         let lbl = string ~loc:lbl.loc (lbl.txt ^ ":") in
         let exp = Expression.pp ps exp in
@@ -741,6 +746,14 @@ end
 
 and Expression : sig
   val pp : Printing_stack.t -> expression -> document
+
+  val pp_fun
+    : ?pre_label:document
+    -> loc:Location.t
+    -> Printing_stack.t
+    -> fun_param list
+    -> expression
+    -> document
 end = struct
   let rec pp ps { pexp_desc; pexp_attributes; pexp_loc; _ } =
     let has_attrs = Attribute.has_non_doc pexp_attributes in
@@ -877,24 +890,38 @@ end = struct
       let doc = !^"function" ++ cases ps c cs in
       Printing_stack.parenthesize ps doc
 
-  and fun_ ~loc ~args ~body =
+  and fun_ ?pre_label ~loc ~args body =
     let fun_ =
-      let loc = { loc with Location.loc_end = args.loc.loc_start } in
-      string ~loc "fun"
+      match pre_label with
+      | None ->
+        let loc = { loc with Location.loc_end = args.loc.loc_start } in
+        string ~loc "fun"
+      | Some lbl ->
+        let fun_ = token_between lbl args Fun in
+        group (lbl ^^ lparen ++ break_before ~spaces:0 fun_)
     in
     let arrow = token_between args body Rarrow in
-    prefix ~indent:2 ~spaces:1
-      (group ((prefix ~indent:2 ~spaces:1 fun_ args) ^/^ arrow))
-      body
+    let doc =
+      prefix ~indent:2 ~spaces:1
+        (group ((prefix ~indent:2 ~spaces:1 fun_ args) ^/^ arrow))
+        body
+    in
+    if Option.is_some pre_label then
+      doc +++ rparen
+    else
+      doc
 
-  and pp_fun ~loc ps params exp =
+  and pp_fun ?pre_label ~loc ps params exp =
     match params with
     | [] -> assert false
     | param :: params ->
       let body = pp ps exp in
       let args = left_assoc_map ~f:Fun_param.pp param params in
-      let doc = fun_ ~loc ~args ~body in
-      Printing_stack.parenthesize ps doc
+      let doc = fun_ ?pre_label ~loc ~args body in
+      if Option.is_none pre_label then
+        Printing_stack.parenthesize ps doc
+      else
+        doc
 
   and pp_match ps arg = function
     | [] -> assert false (* always at least one case *)

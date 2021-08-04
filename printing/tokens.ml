@@ -48,6 +48,7 @@ type t =
   | Module
   | Object
   | End
+  | Fun
 
 let to_parser_token t : Source_parsing.Parser.token =
   match t with
@@ -100,6 +101,7 @@ let to_parser_token t : Source_parsing.Parser.token =
   | Module -> MODULE
   | Object -> OBJECT
   | End -> END
+  | Fun -> FUN
 
 let to_string = function
   | Colon -> ":"
@@ -151,3 +153,4 @@ let to_string = function
   | Module -> "module"
   | Object -> "object"
   | End -> "end"
+  | Fun -> "fun"

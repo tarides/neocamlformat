@@ -117,6 +117,10 @@ let (++) doc t =
   { txt = doc ^^ t.txt
   ; loc = t.loc }
 
+let (+++) t doc =
+  { txt = t.txt ^^ doc
+  ; loc = t.loc }
+
 let suffix ~after:t doc =
   { txt = t.txt ^^ doc
   ; loc = t.loc }
