@@ -1898,7 +1898,7 @@ labeled_simple_pattern:
     QUESTION LPAREN label_let_pattern opt_default RPAREN
       { (Optional (fst $3), $4, snd $3) }
   | QUESTION label_var
-      { (Optional (fst $2), None, snd $2) }
+      { (Optional $2, None, (None, None)) }
   | mkrhs(OPTLABEL) LPAREN let_pattern opt_default RPAREN
       { (Optional $1, $4, $3) }
   | mkrhs(OPTLABEL) pattern_var
@@ -1906,18 +1906,18 @@ labeled_simple_pattern:
   | TILDE LPAREN label_let_pattern RPAREN
       { (Labelled (fst $3), None, snd $3) }
   | TILDE label_var
-      { (Labelled (fst $2), None, snd $2) }
+      { (Labelled $2, None, (None, None)) }
   | mkrhs(LABEL) simple_pattern
-      { (Labelled $1, None, $2) }
+      { (Labelled $1, None, (Some $2, None)) }
   | simple_pattern
-      { (Nolabel, None, $1) }
+      { (Nolabel, None, (Some $1, None)) }
 ;
 
 pattern_var:
   mkpat(
       mkrhs(LIDENT)     { Ppat_var $1 }
     | UNDERSCORE        { Ppat_any }
-  ) { $1 }
+  ) { Some $1, None }
 ;
 
 %inline opt_default:
@@ -1926,22 +1926,19 @@ pattern_var:
 ;
 label_let_pattern:
     x = label_var
-      { x }
+      { x, (None, None) }
   | x = label_var COLON cty = core_type
-      { let lab, pat = x in
-        lab,
-        mkpat ~loc:$sloc (Ppat_constraint (pat, cty)) }
+      { x, (None, Some cty) }
 ;
 %inline label_var:
     mkrhs(LIDENT)
-      { ($1, mkpat ~loc:$sloc (Ppat_var $1)) }
+      { $1 }
 ;
 let_pattern:
     pattern
-      { $1 }
-  | mkpat(pattern COLON core_type
-      { Ppat_constraint($1, $3) })
-      { $1 }
+      { Some $1, None }
+  | pattern COLON core_type
+      { Some $1, Some $3 }
 ;
 
 expr:

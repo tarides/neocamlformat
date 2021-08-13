@@ -279,7 +279,8 @@ and expression =
     }
 
 and fun_param =
-  | Term of arg_label * expression option * pattern (* FIXME? location *)
+  | Term of arg_label * expression option * (pattern option * core_type option)
+  (* FIXME? location *)
   | Type of string loc
         (* fun (type t) -> E *)
 

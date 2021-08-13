@@ -49,7 +49,7 @@ module Constant : sig
   val pp_string_lit : loc:Location.t -> string -> document
   val pp_quoted_string : loc:Location.t -> delim:string -> string -> document
 end = struct
-  let pp_string_lit ~loc s = arbitrary_string ~loc (String.escaped s)
+  let pp_string_lit ~loc s = quoted_string ~loc (String.escaped s)
   let pp_quoted_string ~loc ~delim s =
     let delim = PPrint.string delim in
     braces (
@@ -1426,15 +1426,14 @@ end = struct
     let colon = token_between lbl ct Colon in
     prefix_token ++ parens (lbl ^^ colon ^^ break_before ~spaces:0 ct)
 
-  let build_simple_label ~optional lbl pat =
+  let build_simple_label ~optional lbl (pat_opt, cty_opt) =
     let prefix_token = if optional then qmark else tilde in
-    match pat.ppat_desc with
-    | Ppat_var v when lbl.txt = v.txt ->
+    match pat_opt, cty_opt with
+    | None, None ->
       prefix_token ++ str lbl
-    | Ppat_constraint ({ ppat_desc=Ppat_var v; _ }, ct)
-      when lbl.txt = v.txt ->
+    | None, Some ct ->
       punned_label_with_annot prefix_token lbl ct
-    | _ ->
+    | Some pat, None ->
       let fresh_stack =
         Printing_stack.[
           if optional then Function_parameter else Value_binding
@@ -1442,39 +1441,69 @@ end = struct
       in
       let pat = Pattern.pp fresh_stack pat in
       let loc = lbl.loc in
-      match token_before ~start:loc.loc_end pat Colon with
+      begin match token_before ~start:loc.loc_end pat Colon with
       | colon -> prefix_token ++ str lbl ^^ colon ^^ pat
       | exception (Not_found | Assert_failure _ (* gloups. *)) ->
         let label = string ~loc (lbl.txt ^ ":") in
         prefix_token ++ label ^^ pat
+      end
+    | Some pat, Some ct ->
+      let fresh_stack =
+        Printing_stack.[
+          if optional then Function_parameter else Value_binding
+        ]
+      in
+      let pat = Pattern.pp fresh_stack pat in
+      let ct = Core_type.pp [] ct in
+      let rhs =
+        let colon = token_between pat ct Colon in
+        parens (pat ^^ colon ^^ ct)
+      in
+      match token_before ~start:lbl.loc.loc_end pat Colon with
+      | colon -> prefix_token ++ str lbl ^^ colon ^^ rhs
+      | exception (Not_found | Assert_failure _ (* gloups. *)) ->
+        let label = string ~loc:lbl.loc (lbl.txt ^ ":") in
+        prefix_token ++ label ^^ rhs
 
-  let build_optional_with_default lbl def pat =
-    let pat_def =
+  let build_optional_with_default lbl def (pat_opt, ct_opt) =
+    let lbl = str lbl in
+    let def = Expression.pp [ Printing_stack.Function_parameter ] def in
+    qmark ++ match pat_opt, ct_opt with
+    | None, None ->
+      let eq = token_between lbl def Equals in
+      parens (lbl ^^ eq ^^ def)
+    | None, Some ct ->
+      let ct = Core_type.pp [] ct in
+      let colon = token_between lbl def Colon in
+      let eq = token_between ct def Equals in
+      parens (lbl ^^ colon ^^ ct ^^ eq ^^ def)
+    | Some pat, None ->
       let fresh_stack = [ Printing_stack.Value_binding ] in
       let pat = Pattern.pp fresh_stack pat in
-      let def = Expression.pp [ Printing_stack.Function_parameter ] def in
       let eq = token_between pat def Equals in
-      parens (group (pat ^^ eq ^^ break_before ~spaces:0 def))
-    in
-    let rhs =
-      match pat.ppat_desc with
-      | Ppat_var v when lbl.txt = v.txt -> pat_def
-      | _ ->
-        let lbl = str lbl in
-        let colon = token_between lbl pat_def Colon in
-        lbl ^^ colon ^^ pat_def
-    in
-    qmark ++ rhs
+      lbl ^^ colon ++ break_before ~spaces:0 (parens (group (pat ^^ eq ^^ def)))
+    | Some pat, Some ct ->
+      let fresh_stack = [ Printing_stack.Value_binding ] in
+      let pat = Pattern.pp fresh_stack pat in
+      let ct = Core_type.pp [] ct in
+      let eq = token_between ct def Equals in
+      let col = token_between pat ct Colon in
+      lbl ^^ colon ++ break_before ~spaces:0
+               (parens (group (pat ^^ col ^^ ct ^^ eq ^^ def)))
 
 
-  let term lbl default pat =
+  let term lbl default pat_and_ty =
     match lbl with
-    | Nolabel -> Pattern.pp [ Printing_stack.Value_binding ] pat
-    | Labelled lbl -> build_simple_label ~optional:false lbl pat
+    | Nolabel ->
+      begin match pat_and_ty with
+      | Some pat, None -> Pattern.pp [ Printing_stack.Value_binding ] pat
+      | _ -> assert false
+      end
+    | Labelled lbl -> build_simple_label ~optional:false lbl pat_and_ty
     | Optional lbl ->
       match default with
-      | None -> build_simple_label ~optional:true lbl pat
-      | Some def -> build_optional_with_default lbl def pat
+      | None -> build_simple_label ~optional:true lbl pat_and_ty
+      | Some def -> build_optional_with_default lbl def pat_and_ty
 
   let newtype typ =
     parens (!^"type " ++ str typ)
