@@ -27,7 +27,7 @@ let pp ?(binder=Source_parsing.Parser.EQUAL) ?keyword
   let pre =
     match keyword with
     | None -> lhs
-    | Some keyword -> group (keyword ^^ nest 2 (break_before lhs))
+    | Some keyword -> prefix ~indent:2 ~spaces:1 keyword lhs
   in
   let params = pp_params params in
   let with_constraint = attach_annot params ~sep:COLON constr in
@@ -37,7 +37,7 @@ let pp ?(binder=Source_parsing.Parser.EQUAL) ?keyword
   | Some rhs ->
     let binder = token_between with_coercion rhs binder in
     let lhs = pre ^^ group (with_coercion ^/^ binder) in
-    group (lhs ^^ nest 2 (break_before rhs))
+    prefix ~indent:2 ~spaces:1 lhs rhs
 
 let pp_simple ?binder ~keyword lhs rhs =
   let loc = { lhs.loc with loc_start = lhs.loc.loc_end } in

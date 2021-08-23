@@ -168,12 +168,12 @@ let merge_possibly_swapped ?(sep=PPrint.empty) d1 d2 =
   { txt; loc = merge_locs t1.loc t2.loc }
 
 (* FIXME: sep is shit, remove. *)
-let concat ?(sep=PPrint.empty) t1 t2 =
+let concat ?(sep=PPrint.empty) ?(indent=0) t1 t2 =
   let txt =
     match comments_between t1 t2 with
     | No_comment -> t1.txt ^^ sep ^^ t2.txt
-    | Attach_fst cmts -> t1.txt ^/^ cmts ^^ sep ^^ t2.txt
-    | Attach_snd cmts -> t1.txt ^^ sep ^^ cmts ^/^ t2.txt
+    | Attach_fst cmts -> t1.txt ^^ nest indent (break 1 ^^ cmts) ^^ sep ^^ t2.txt
+    | Attach_snd cmts -> t1.txt ^^ sep ^^ nest indent cmts ^/^ t2.txt
   in
   { txt; loc = merge_locs t1.loc t2.loc }
 
@@ -264,7 +264,7 @@ let optional ~loc f = function
   | Some d -> f d
 
 let prefix ~indent ~spaces x y =
-  group (x ^^ nest indent (break_before ~spaces y))
+  group (concat ~indent x (nest indent (break_before ~spaces y)))
 
 let infix ~indent ~spaces op x y =
   prefix ~indent ~spaces (concat x ~sep:PPrint.(blank spaces) op) y
