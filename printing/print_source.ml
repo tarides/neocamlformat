@@ -156,13 +156,6 @@ end = struct
     | _ ->
       pp_attr kind attr_name attr_payload
 
-  let pp_item_attr { attr_name; attr_payload; attr_loc = _ } =
-    match attr_name.txt with
-    | "ocaml.doc"
-    | "ocaml.text" ->
-      assert false
-    | _ -> pp_attr Attached_to_item attr_name attr_payload
-
   let attach ?(spaces=1) kind doc = function
     | [] -> doc
     | attr :: attrs ->
@@ -183,7 +176,6 @@ end = struct
 
   let () = Constructor_decl.attach_attributes := attach_to_item
   let () = Polymorphic_variant.attach_attributes := attach_to_item
-  let () = Binding.pp_item_attr := pp_item_attr
 
   let attach_to_top_item doc =
     attach Attached_to_structure_item doc

@@ -1,7 +1,5 @@
 open Source_parsing.Location
 
-val pp_item_attr : (Source_parsing.Source_tree.attribute -> Document.t) ref
-
 type t = {
   lhs : Document.t;
   params: Document.t list loc;

@@ -2,9 +2,6 @@ open Source_parsing.Location
 open Document
 type document = t
 
-let pp_item_attr : (Source_parsing.Source_tree.attribute -> document) ref =
-  ref (fun _ -> failwith "not instantiated yet")
-
 type t = {
   lhs : document;
   params: document list loc;
