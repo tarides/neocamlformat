@@ -764,7 +764,7 @@ and Expression : sig
     -> expression
     -> document
 end = struct
-  let rec pp ps { pexp_desc; pexp_attributes; pexp_loc; _ } =
+  let rec pp ps { pexp_desc;pexp_attributes;pexp_ext_attributes;pexp_loc;_ } =
     let ps, enclose =
       if Attribute.has_non_doc pexp_attributes then
         Printing_stack.parenthesize (Attribute :: ps)
@@ -772,14 +772,16 @@ end = struct
         ps, Fun.id
     in
     let ps = Printing_stack.Expression pexp_desc :: ps in
-    let desc = group (pp_desc ~loc:pexp_loc ps pexp_desc) in
+    let desc =
+      group (pp_desc ~ext_attrs:pexp_ext_attributes ~loc:pexp_loc ps pexp_desc)
+    in
     let doc = Attribute.attach_to_item desc pexp_attributes in
     enclose doc
 
-  and pp_desc ~loc ps = function
+  and pp_desc ~loc ~ext_attrs ps = function
     | Pexp_ident id -> pp_ident id
     | Pexp_constant c -> Constant.pp ~loc c
-    | Pexp_let (rf, vbs, body) -> pp_let ps rf vbs body
+    | Pexp_let (rf, vbs, body) -> pp_let ~loc ~ext_attrs ps rf vbs body
     | Pexp_function cases -> pp_function ps cases
     | Pexp_fun (params, exp) ->
       pp_fun ~loc ps params exp
@@ -831,25 +833,47 @@ end = struct
 
   and pp_ident = Longident.pp
 
-  and pp_let ps rf vbs body =
+  and pp_let ~ext_attrs:(ext, attrs) ~loc ps rf vbs body =
+    assert (attrs = []);
     let vbs =
-      let i = ref 0 in
+      let previous_vb = ref None in
       List.concat_map (fun vb ->
         let text, vb =
           let text, attrs = Attribute.extract_text vb.pvb_attributes in
           text, { vb with pvb_attributes = attrs }
         in
         let binding = Value_binding.pp Attached_to_item vb in
-        let keyword = if !i = 0 then "let" ^ rec_flag rf else "and" in
-        incr i;
         let keyword =
-          (* FIXME: pvb_loc should be pvb_start_loc *)
-          let loc =
-            { vb.pvb_loc with loc_end = vb.pvb_pat.ppat_loc.loc_start }
+          let lhs = binding.lhs in
+          let add_vb_attrs kw =
+            match vb.pvb_ext_attributes with
+            | Some _, _ -> assert false
+            | None, [] -> kw
+            | None, attrs -> Attribute.attach_to_item kw attrs
           in
-          string ~loc keyword
+          match !previous_vb with
+          | None ->
+            let let_ = token_before ~start:loc.Location.loc_start lhs Let in
+            let let_ =
+              match ext with
+              | None -> let_
+              | Some ext ->
+                let percent = token_between let_ lhs Percent in
+                let_ ^^ percent ^^ str ext
+            in
+            let let_ = add_vb_attrs let_ in
+            begin match rf with
+            | Nonrecursive -> let_
+            | Recursive ->
+              let rec_ = token_between let_ lhs Rec in
+              let_ ^/^ rec_
+            end
+          | Some prev_vb ->
+            token_between prev_vb lhs And
+            |> add_vb_attrs
         in
         let binding = Binding.pp ~keyword binding in
+        previous_vb := Some binding;
         Attribute.prepend_text text binding
       ) vbs
     in

@@ -172,6 +172,7 @@ module Exp = struct
     {pexp_desc = d;
      pexp_loc = loc;
      pexp_loc_stack = [];
+     pexp_ext_attributes = None, [];
      pexp_attributes = attrs}
   let attr d a = {d with pexp_attributes = d.pexp_attributes @ [a]}
 
@@ -489,8 +490,8 @@ module Incl = struct
 end
 
 module Vb = struct
-  let mk ?(loc = !default_loc) ?(attrs = []) ?(docs = empty_docs)
-        ?(text = []) pat params typ expr =
+  let mk ?(loc = !default_loc) ?(attrs = []) ?(ext_attrs = None, [])
+        ?(docs = empty_docs) ?(text = []) pat params typ expr =
     {
      pvb_pat = pat;
      pvb_params = params;
@@ -498,6 +499,7 @@ module Vb = struct
      pvb_expr = expr;
      pvb_attributes =
        add_text_attrs text (add_docs_attrs docs attrs);
+     pvb_ext_attributes = ext_attrs;
      pvb_loc = loc;
     }
 end

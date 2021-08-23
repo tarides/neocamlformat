@@ -49,6 +49,9 @@ type t =
   | Object
   | End
   | Fun
+  | Percent
+  | Let
+  | Rec
 
 let to_parser_token t : Source_parsing.Parser.token =
   match t with
@@ -102,6 +105,9 @@ let to_parser_token t : Source_parsing.Parser.token =
   | Object -> OBJECT
   | End -> END
   | Fun -> FUN
+  | Percent -> PERCENT
+  | Let -> LET
+  | Rec -> REC
 
 let to_string = function
   | Colon -> ":"
@@ -154,3 +160,6 @@ let to_string = function
   | Object -> "object"
   | End -> "end"
   | Fun -> "fun"
+  | Percent -> "%"
+  | Let -> "let"
+  | Rec -> "rec"

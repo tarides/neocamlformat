@@ -228,13 +228,8 @@ let mk_newtypes ~loc newtypes exp =
   in
   mkexp (Pexp_fun (params, exp))
 
-let wrap_exp_attrs ~loc body (ext, attrs) =
-  let ghexp = ghexp ~loc in
-  (* todo: keep exact location for the entire attribute *)
-  let body = {body with pexp_attributes = attrs @ body.pexp_attributes} in
-  match ext with
-  | None -> body
-  | Some id -> ghexp(Pexp_extension (id, PStr [mkstrexp body []]))
+let wrap_exp_attrs ~loc:_ body pexp_ext_attributes =
+  { body with pexp_ext_attributes }
 
 let mkexp_attrs ~loc d attrs =
   wrap_exp_attrs ~loc (mkexp ~loc d) attrs
@@ -313,6 +308,7 @@ type let_binding =
     lb_type: core_type option * core_type option;
     lb_expression: expression;
     lb_attributes: attributes;
+    lb_post_attrs: attributes;
     lb_docs: docs Lazy.t;
     lb_text: text Lazy.t;
     lb_loc: Location.t; }
@@ -323,13 +319,14 @@ type let_bindings =
     lbs_extension: string Asttypes.loc option;
     lbs_loc: Location.t }
 
-let mklb first ~loc (p, (params, typ, e)) attrs =
+let mklb first ~loc (p, (params, typ, e)) attrs post_attrs =
   {
     lb_pattern = p;
     lb_params = params;
     lb_type = typ;
     lb_expression = e;
     lb_attributes = attrs;
+    lb_post_attrs = post_attrs;
     lb_docs = symbol_docs_lazy loc;
     lb_text = (if first then empty_text_lazy
                else symbol_text_lazy (fst loc));
@@ -351,7 +348,8 @@ let val_of_let_bindings ~loc lbs =
   let bindings =
     List.map
       (fun lb ->
-         Vb.mk ~loc:lb.lb_loc ~attrs:lb.lb_attributes
+         Vb.mk ~loc:lb.lb_loc ~attrs:lb.lb_post_attrs
+           ~ext_attrs:(None, lb.lb_attributes)
            ~docs:(Lazy.force lb.lb_docs)
            ~text:(Lazy.force lb.lb_text)
            lb.lb_pattern lb.lb_params lb.lb_type lb.lb_expression)
@@ -366,7 +364,8 @@ let expr_of_let_bindings ~loc lbs body =
   let bindings =
     List.map
       (fun lb ->
-         Vb.mk ~loc:lb.lb_loc ~attrs:lb.lb_attributes
+         Vb.mk ~loc:lb.lb_loc ~attrs:lb.lb_post_attrs
+           ~ext_attrs:(None, lb.lb_attributes)
            lb.lb_pattern lb.lb_params lb.lb_type lb.lb_expression)
       lbs.lbs_bindings
   in
@@ -377,7 +376,8 @@ let class_of_let_bindings ~loc lbs body =
   let bindings =
     List.map
       (fun lb ->
-         Vb.mk ~loc:lb.lb_loc ~attrs:lb.lb_attributes
+         Vb.mk ~loc:lb.lb_loc ~attrs:lb.lb_post_attrs
+           ~ext_attrs:(None, lb.lb_attributes)
            lb.lb_pattern lb.lb_params lb.lb_type lb.lb_expression)
       lbs.lbs_bindings
   in
@@ -2309,8 +2309,7 @@ let_bindings(EXT):
   body = let_binding_body
   attrs2 = post_item_attributes
     {
-      let attrs = attrs1 @ attrs2 in
-      mklbs ~loc:$sloc ext rec_flag (mklb ~loc:$sloc true body attrs)
+      mklbs ~loc:$sloc ext rec_flag (mklb ~loc:$sloc true body attrs1 attrs2)
     }
 ;
 and_let_binding:
@@ -2319,8 +2318,7 @@ and_let_binding:
   body = let_binding_body
   attrs2 = post_item_attributes
     {
-      let attrs = attrs1 @ attrs2 in
-      mklb ~loc:$sloc false body attrs
+      mklb ~loc:$sloc false body attrs1 attrs2
     }
 ;
 letop_binding_body:

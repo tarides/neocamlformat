@@ -361,7 +361,8 @@ module Incl:
 (** Value bindings *)
 module Vb:
   sig
-    val mk: ?loc: loc -> ?attrs:attrs -> ?docs:docs -> ?text:text ->
+    val mk: ?loc: loc -> ?attrs:attrs ->
+      ?ext_attrs:string with_loc option * attributes -> ?docs:docs -> ?text:text ->
       pattern -> fun_param list -> core_type option * core_type option ->
       expression -> value_binding
   end

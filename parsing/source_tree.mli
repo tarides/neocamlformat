@@ -276,6 +276,7 @@ and expression =
      pexp_loc: Location.t;
      pexp_loc_stack: location_stack;
      pexp_attributes: attributes; (* ... [@id1] [@id2] *)
+     pexp_ext_attributes: string loc option * attributes;
     }
 
 and fun_param =
@@ -994,6 +995,7 @@ and value_binding =
     pvb_type: core_type option * core_type option;
     pvb_expr: expression;
     pvb_attributes: attributes;
+    pvb_ext_attributes: string loc option * attributes;
     pvb_loc: Location.t;
   }
 
