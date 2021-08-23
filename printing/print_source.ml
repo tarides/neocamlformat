@@ -156,13 +156,39 @@ end = struct
     | _ ->
       pp_attr kind attr_name attr_payload
 
-  let attach ?(spaces=1) kind doc = function
-    | [] -> doc
-    | attr :: attrs ->
-      group (
-        prefix ~indent:2 ~spaces doc
-          (separate_map (PPrint.break 0) ~f:(pp kind) attr attrs)
-      )
+  let attach ?(spaces=1) kind doc attrs =
+    let predoc, postdoc, attrs =
+      match
+        List.partition (fun { attr_name; _ } -> attr_name.txt = "ocaml.doc")
+          attrs
+      with
+      | [], attrs -> None, None, attrs
+      | [ doc ], attrs -> None, Some doc, attrs
+      | [ doc1; doc2 ], attrs -> Some doc1, Some doc2, attrs
+      | doc1 :: rest, attrs ->
+        let rev_rest = List.rev rest in
+        let doc2 = List.hd rev_rest in
+        Some doc1, Some doc2, List.rev_append (List.tl rev_rest) attrs
+    in
+    let with_attrs =
+      match attrs with
+      | [] -> doc
+      | attr :: attrs ->
+        group (
+          prefix ~indent:2 ~spaces doc
+            (separate_map (PPrint.break 0) ~f:(pp kind) attr attrs)
+        )
+    in
+    let with_pre_doc =
+      match predoc with
+      | None -> with_attrs
+      | Some { attr_payload; attr_loc; _ } ->
+        pp_doc attr_payload ~loc:attr_loc ^^ break_before ~spaces with_attrs
+    in
+    match postdoc with
+    | None -> with_pre_doc
+    | Some { attr_payload; attr_loc; _ } ->
+      with_pre_doc ^^ break_before ~spaces (pp_doc attr_payload ~loc:attr_loc)
 
   let has_non_doc =
     List.exists (fun attr ->
