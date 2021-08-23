@@ -94,8 +94,8 @@ module rec Attribute : sig
 
   val pp : kind -> attribute -> document
 
-  val attach : kind -> document -> attributes -> document
-  val attach_to_item : document -> attributes -> document
+  val attach : ?spaces:int -> kind -> document -> attributes -> document
+  val attach_to_item : ?spaces:int -> document -> attributes -> document
   val attach_to_top_item : document -> attributes -> document
 
   val extract_text : attributes -> attributes * attributes
@@ -163,11 +163,11 @@ end = struct
       assert false
     | _ -> pp_attr Attached_to_item attr_name attr_payload
 
-  let attach kind doc = function
+  let attach ?(spaces=1) kind doc = function
     | [] -> doc
     | attr :: attrs ->
       group (
-        prefix ~indent:2 ~spaces:1 doc
+        prefix ~indent:2 ~spaces doc
           (separate_map (PPrint.break 0) ~f:(pp kind) attr attrs)
       )
 
@@ -178,8 +178,8 @@ end = struct
       | _ -> true
     )
 
-  let attach_to_item doc =
-    attach Attached_to_item doc
+  let attach_to_item ?spaces doc =
+    attach ?spaces Attached_to_item doc
 
   let () = Constructor_decl.attach_attributes := attach_to_item
   let () = Polymorphic_variant.attach_attributes := attach_to_item
@@ -220,6 +220,22 @@ end = struct
   let pp kind ({ Location.txt = ext_name; loc }, ext_payload) =
     let tag = string ~loc (percents kind ^ ext_name) in
     brackets (Payload.pp_after ~tag ext_payload)
+end
+
+and Keyword : sig
+  val decorate :
+    document -> extension:string loc option -> attributes -> later:_ loc ->
+    document
+end = struct
+  let decorate token ~extension attrs ~later =
+    let kw =
+      match extension with
+      | None -> token
+      | Some ext ->
+        let percent = token_between token later PERCENT in
+        token ^^ percent ^^ str ext
+    in
+    Attribute.attach_to_item ~spaces:0 kw attrs
 end
 
 and Payload : sig
@@ -796,7 +812,7 @@ end = struct
     | Pexp_fun (params, exp) ->
       pp_fun ~loc ps params exp
     | Pexp_apply (expr, args) -> Application.pp ps expr args
-    | Pexp_match (arg, cases) -> pp_match ps arg cases
+    | Pexp_match (arg, cases) -> pp_match ~loc ~ext_attrs ps arg cases
     | Pexp_try (arg, cases) -> pp_try ps arg cases
     | Pexp_tuple exps -> pp_tuple ps exps
     | Pexp_list_lit exps -> pp_list_literal ~loc ps exps
@@ -952,7 +968,7 @@ end = struct
       let doc = fun_ ?pre_label ~loc ~args body in
       enclose doc
 
-  and pp_match ps arg = function
+  and pp_match ~loc ~ext_attrs:(extension, attrs) ps arg = function
     | [] -> assert false (* always at least one case *)
     | c :: cs ->
       let arg = pp [] arg in
@@ -962,11 +978,14 @@ end = struct
           ~style:!Options.Match.parens_style
       in
       let cases = cases ps c cs in
+      let match_ =
+        let token = token_before ~start:loc.Location.loc_start arg MATCH in
+        Keyword.decorate token ~extension attrs ~later:arg
+      in
       let with_ = token_between arg cases WITH in
       let doc =
         group (
-          (* FIXME: location for match. *)
-          !^"match" ++
+          match_ ^^
           nest 2 (break_before arg) ^/^
           with_
         ) ^^ cases
