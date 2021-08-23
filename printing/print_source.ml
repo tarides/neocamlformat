@@ -1926,25 +1926,39 @@ end = struct
     then doc
     else !^";; " ++ doc
 
-  let pp_value rf vbs =
+  let pp_value ~loc rf vbs =
     let vbs =
-      let i = ref 0 in
+      let previous_vb = ref None in
       List.concat_map (fun vb ->
         let text, vb =
           let text, attrs = Attribute.extract_text vb.pvb_attributes in
           text, { vb with pvb_attributes = attrs }
         in
         let binding = Value_binding.pp Attached_to_structure_item vb in
-        let keyword = if !i = 0 then "let" ^ rec_flag rf else "and" in
-        incr i;
         let keyword =
-          (* FIXME: pvb_loc should be pvb_start_loc *)
-          let loc =
-            { vb.pvb_loc with loc_end = vb.pvb_pat.ppat_loc.loc_start }
+          let lhs = binding.lhs in
+          let add_vb_attrs kw =
+            match vb.pvb_ext_attributes with
+            | Some _, _ -> assert false
+            | None, [] -> kw
+            | None, attrs -> Attribute.attach_to_item kw attrs
           in
-          string ~loc keyword
+          match !previous_vb with
+          | None ->
+            let let_ = token_before ~start:loc.Location.loc_start lhs LET in
+            let let_ = add_vb_attrs let_ in
+            begin match rf with
+            | Nonrecursive -> let_
+            | Recursive ->
+              let rec_ = token_between let_ lhs REC in
+              let_ ^/^ rec_
+            end
+          | Some prev_vb ->
+            token_between prev_vb lhs AND
+            |> add_vb_attrs
         in
         let binding = Binding.pp ~keyword binding in
+        previous_vb := Some binding;
         Attribute.prepend_text text binding
       ) vbs
     in
@@ -1993,10 +2007,10 @@ end = struct
     let ext = Extension.pp Structure_item ext in
     Attribute.attach_to_top_item ext attrs
 
-  let pp_item ?(first=false) ({ pstr_desc; _ } as _item) =
+  let pp_item ?(first=false) ({ pstr_desc; pstr_loc; _ } as _item) =
     match pstr_desc with
     | Pstr_eval (e, attrs) -> pp_eval ~first e attrs
-    | Pstr_value (rf, vbs) -> pp_value rf vbs
+    | Pstr_value (rf, vbs) -> pp_value ~loc:pstr_loc rf vbs
     | Pstr_primitive vd -> Value_description.pp vd
     | Pstr_type (rf, tds) -> Type_declaration.pp_decl rf tds
     | Pstr_typext te -> Type_extension.pp te
