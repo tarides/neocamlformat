@@ -713,7 +713,7 @@ end = struct
         let lbl = string ~loc:lbl.loc (lbl.txt ^ ":") in
         let ps = Printing_stack.Expression exp.pexp_desc :: ps in
         Expression.pp_fun ~pre_label:(prefix ++ lbl) ~loc:exp.pexp_loc
-          ps params body
+          ~ext_attrs:exp.pexp_ext_attributes ps params body
       | _ ->
         let lbl = string ~loc:lbl.loc (lbl.txt ^ ":") in
         let exp = Expression.pp ps exp in
@@ -785,6 +785,7 @@ and Expression : sig
   val pp_fun
     : ?pre_label:document
     -> loc:Location.t
+    -> ext_attrs:string loc option * attributes
     -> Printing_stack.t
     -> fun_param list
     -> expression
@@ -808,12 +809,11 @@ end = struct
     | Pexp_ident id -> pp_ident id
     | Pexp_constant c -> Constant.pp ~loc c
     | Pexp_let (rf, vbs, body) -> pp_let ~loc ~ext_attrs ps rf vbs body
-    | Pexp_function cases -> pp_function ps cases
-    | Pexp_fun (params, exp) ->
-      pp_fun ~loc ps params exp
+    | Pexp_function cases -> pp_function ~loc ~ext_attrs ps cases
+    | Pexp_fun (params, exp) -> pp_fun ~loc ~ext_attrs ps params exp
     | Pexp_apply (expr, args) -> Application.pp ps expr args
     | Pexp_match (arg, cases) -> pp_match ~loc ~ext_attrs ps arg cases
-    | Pexp_try (arg, cases) -> pp_try ps arg cases
+    | Pexp_try (arg, cases) -> pp_try ~loc ~ext_attrs ps arg cases
     | Pexp_tuple exps -> pp_tuple ps exps
     | Pexp_list_lit exps -> pp_list_literal ~loc ps exps
     | Pexp_cons (hd, tl) -> pp_cons ps hd tl
@@ -826,23 +826,24 @@ end = struct
     | Pexp_ifthenelse (branches, else_) ->
       pp_if_then_else ~loc ps branches else_
     | Pexp_sequence (e1, e2) -> pp_sequence ps e1 e2
-    | Pexp_while (cond, body) -> pp_while ~loc ps cond body
+    | Pexp_while (cond, body) -> pp_while ~loc ~ext_attrs ps cond body
     | Pexp_for (it, start, stop, dir, body) ->
-      pp_for ~loc ps it start stop dir body
+      pp_for ~loc ~ext_attrs ps it start stop dir body
     | Pexp_constraint (e, ct) -> pp_constraint e ct
     | Pexp_coerce (e, ct_start, ct) -> pp_coerce e ct_start ct
     | Pexp_send (e, meth) -> pp_send ps e meth
     | Pexp_new lid -> pp_new ~loc ps lid
     | Pexp_setinstvar (lbl, exp) -> pp_setinstvar ps lbl exp
     | Pexp_override fields -> pp_override ~loc fields
-    | Pexp_letmodule (name, mb, body) -> pp_letmodule ~loc ps name mb body
-    | Pexp_letexception (exn, exp) -> pp_letexception ~loc ps exn exp
-    | Pexp_assert exp -> pp_assert ~loc ps exp
-    | Pexp_lazy exp -> pp_lazy ~loc ps exp
-    | Pexp_object cl -> pp_object ~loc ps cl
-    | Pexp_pack (me, pkg) -> pp_pack me pkg
+    | Pexp_letmodule (name, mb, body) ->
+      pp_letmodule ~loc ~ext_attrs ps name mb body
+    | Pexp_letexception (exn, exp) -> pp_letexception ~loc ~ext_attrs ps exn exp
+    | Pexp_assert exp -> pp_assert ~loc ~ext_attrs ps exp
+    | Pexp_lazy exp -> pp_lazy ~loc ~ext_attrs ps exp
+    | Pexp_object cl -> pp_object ~loc ~ext_attrs ps cl
+    | Pexp_pack (me, pkg) -> pp_pack ~loc ~ext_attrs me pkg
     | Pexp_open (lid, exp) -> pp_open lid exp
-    | Pexp_letopen (od, exp) -> pp_letopen ~loc ps od exp
+    | Pexp_letopen (od, exp) -> pp_letopen ~loc ~ext_attrs ps od exp
     | Pexp_letop letop -> pp_letop ps letop
     | Pexp_extension ext -> Extension.pp Item ext
     | Pexp_unreachable -> string ~loc "."
@@ -876,13 +877,14 @@ end = struct
             | Some _, _ -> assert false
             | None, attrs -> attrs
           in
-          let token, modifier =
+          let token, extension, modifier =
             match !previous_vb with
             | None ->
               token_before ~start:loc.Location.loc_start lhs LET,
+              extension,
               rec_token ~recursive_by_default:false rf
             | Some prev_vb ->
-              token_between prev_vb lhs AND, None
+              token_between prev_vb lhs AND, None, None
           in
           let kw = Keyword.decorate token ~extension attrs ~later:lhs in
           match modifier with
@@ -930,14 +932,18 @@ end = struct
     in
     prefix ++ cases
 
-  and pp_function ps = function
+  and pp_function ~loc ~ext_attrs:(extension, attrs) ps = function
     | [] -> assert false (* always at least one case *)
     | c :: cs ->
       let ps, enclose = Printing_stack.parenthesize ps in
-      let doc = !^"function" ++ cases ps c cs in
-      enclose doc
+      let cases = cases ps c cs in
+      let keyword =
+        let kw = token_before ~start:loc.Location.loc_start cases FUNCTION in
+        Keyword.decorate kw ~extension attrs ~later:cases
+      in
+      enclose (keyword ^^ cases)
 
-  and fun_ ?pre_label ~loc ~args body =
+  and fun_ ?pre_label ~loc ~ext_attrs:(extension, attrs) ~args body =
     let fun_ =
       match pre_label with
       | None ->
@@ -947,6 +953,7 @@ end = struct
         let fun_ = token_between lbl args FUN in
         group (lbl ^^ lparen ++ break_before ~spaces:0 fun_)
     in
+    let fun_ = Keyword.decorate fun_ ~extension attrs ~later:args in
     let arrow = token_between args body MINUSGREATER in
     let doc =
       prefix ~indent:2 ~spaces:1
@@ -958,7 +965,7 @@ end = struct
     else
       doc
 
-  and pp_fun ?pre_label ~loc ps params exp =
+  and pp_fun ?pre_label ~loc ~ext_attrs ps params exp =
     match params with
     | [] -> assert false
     | param :: params ->
@@ -969,7 +976,7 @@ end = struct
       in
       let body = pp ps exp in
       let args = left_assoc_map ~f:Fun_param.pp param params in
-      let doc = fun_ ?pre_label ~loc ~args body in
+      let doc = fun_ ?pre_label ~loc ~ext_attrs ~args body in
       enclose doc
 
   and pp_match ~loc ~ext_attrs:(extension, attrs) ps arg = function
@@ -996,17 +1003,20 @@ end = struct
       in
       enclose doc
 
-  and pp_try ps arg = function
+  and pp_try ~loc ~ext_attrs:(extension, attrs) ps arg = function
     | [] -> assert false
     | c :: cs ->
       let arg = pp [] arg in
       let ps, enclose = Printing_stack.parenthesize ps in
       let cases = cases ps c cs in
+      let try_ =
+        let token = token_before ~start:loc.Location.loc_start arg TRY in
+        Keyword.decorate token ~extension attrs ~later:arg
+      in
       let with_ = token_between arg cases WITH in
       let doc =
         group (
-          (* FIXME: location for try *)
-          !^"try" ++
+          try_ ^^
           nest 2 (break_before arg)
         ) ^/^
         with_ ^^
@@ -1268,11 +1278,12 @@ end = struct
     let doc = e1 ^^ semi ^/^ e2 in
     enclose doc
 
-  and pp_while ~(loc:Location.t) ps cond body =
+  and pp_while ~(loc:Location.t) ~ext_attrs:(extension, attrs) ps cond body =
     let cond = pp [] cond in
     let body = pp [] body in
     let do_ = token_between cond body DO in
     let while_ = token_before ~start:loc.loc_start cond WHILE in
+    let while_ = Keyword.decorate while_ ~extension attrs ~later:cond in
     let done_ = token_after body ~stop:loc.loc_end DONE in
     let doc =
       group (
@@ -1288,7 +1299,8 @@ end = struct
     let _, enclose = Printing_stack.parenthesize ps in
     enclose doc
 
-  and pp_for ~(loc:Location.t) ps it start stop dir body =
+  and pp_for ~(loc:Location.t) ~ext_attrs:(extension, attrs) ps it start stop
+      dir body =
     let it = Pattern.pp [ Printing_stack.Value_binding ] it in
     let start = pp [] start in
     let equals = token_between it start EQUAL in
@@ -1303,10 +1315,12 @@ end = struct
     let do_ = token_between stop body DO in
     let loc_start = { loc with loc_end = it.loc.loc_start } in
     let loc_end = { loc with loc_start = body.loc.loc_end } in
+    let for_ = string ~loc:loc_start "for" in
+    let for_ = Keyword.decorate for_ ~extension attrs ~later:it in
     let doc =
       group (
         group (
-          string ~loc:loc_start "for" ^^
+          for_ ^^
           nest 2 (
             break_before (group (it ^/^ equals ^/^ start)) ^/^
             dir ^/^
@@ -1381,12 +1395,14 @@ end = struct
       ~right:PPrint.(rangle ^^ rbrace)
       (List.map obj_field_override fields)
 
-  and pp_letmodule ~loc ps name (params, typ, mexp) expr =
+  and pp_letmodule ~loc ~ext_attrs:(extension, attrs) ps name
+      (params, typ, mexp) expr =
     let binding = Module_binding.pp_raw name params typ mexp [] in
     let bind =
       let keyword =
-        let loc = { loc with loc_end = name.loc.loc_start } in
-        string ~loc "let module"
+        let let_ = token_before ~start:loc.loc_start binding.name LET in
+        let mod_ = token_between let_ binding.name MODULE in
+        Keyword.decorate (let_ ^/^ mod_) ~extension attrs ~later:binding.name
       in
       Binding.Module.pp ~keyword ~context:Struct binding
     in
@@ -1396,13 +1412,15 @@ end = struct
     let doc = bind ^/^ in_ ^/^ expr in
     enclose doc
 
-  and pp_letexception ~(loc:Location.t) ps exn exp =
+  and pp_letexception ~(loc:Location.t) ~ext_attrs:(extension, attrs) ps exn
+      exp =
     let exn = Constructor_decl.pp_extension exn in
     let ps, enclose = Printing_stack.parenthesize ps in
     let exp = pp (List.tl ps) exp in
     let keyword =
-      let loc = { loc with loc_end = exn.loc.loc_start } in
-      string ~loc "let exception"
+      let let_ = token_before ~start:loc.loc_start exn LET in
+      let exc = token_between let_ exn EXCEPTION in
+      Keyword.decorate (let_ ^/^ exc) ~extension attrs ~later:exn
     in
     let in_ = token_between exn exp IN in
     let doc =
@@ -1412,32 +1430,34 @@ end = struct
     in
     enclose doc
 
-  and pp_assert ~(loc:Location.t) ps exp =
+  and pp_assert ~(loc:Location.t) ~ext_attrs:(extension, attrs) ps exp =
     let ps, enclose = Printing_stack.parenthesize ps in
     let exp = pp ps exp in
     let assert_ =
       let loc = { loc with loc_end = exp.loc.loc_start } in
-      string ~loc "assert"
+      Keyword.decorate (string ~loc "assert")
+        ~extension attrs ~later:exp
     in
     let doc = prefix ~indent:2 ~spaces:1 assert_ exp in
     enclose doc
 
-  and pp_lazy ~(loc:Location.t) ps exp =
+  and pp_lazy ~(loc:Location.t) ~ext_attrs:(extension, attrs) ps exp =
     let ps, enclose = Printing_stack.parenthesize ps in
     let exp = pp ps exp in
     let lazy_ =
       let loc = { loc with loc_end = exp.loc.loc_start } in
-      string ~loc "lazy"
+      Keyword.decorate (string ~loc "lazy")
+        ~extension attrs ~later:exp
     in
     let doc = prefix ~indent:2 ~spaces:1 lazy_ exp in
     enclose doc
 
-  and pp_object ~loc ps cs =
-    let doc = Class_structure.pp ~loc cs in
+  and pp_object ~loc ~ext_attrs ps cs =
+    let doc = Class_structure.pp ~loc ~ext_attrs cs in
     let _, enclose = Printing_stack.parenthesize ps in
     enclose doc
 
-  and pp_pack me pkg =
+  and pp_pack ~loc ~ext_attrs:(extension, attrs) me pkg =
     let me = Module_expr.pp me in
     let with_constraint =
       match pkg with
@@ -1447,8 +1467,12 @@ end = struct
         let colon = token_between me constr COLON in
         me ^/^ colon ^/^ constr
     in
-    enclose ~before:PPrint.(!^"(module ") ~after:PPrint.(!^")")
-      with_constraint
+    let mod_ =
+      token_before ~start:loc.Location.loc_start with_constraint MODULE
+    in
+    let mod_ = Keyword.decorate mod_ ~extension attrs ~later:with_constraint in
+    (* FIXME: comments between "(" and "module" are going to be moved ... *)
+    group (lparen ++ mod_) ^/^ with_constraint +++ !^")"
 
   and pp_open lid exp =
     let lid = Longident.pp lid in
@@ -1461,8 +1485,8 @@ end = struct
     in
     lid ^^ dot ^^ exp
 
-  and pp_letopen ~(loc:Location.t) ps od exp =
-    let od = Open_declaration.pp Attached_to_item od in
+  and pp_letopen ~(loc:Location.t) ~ext_attrs ps od exp =
+    let od = Open_declaration.pp ~ext_attrs Attached_to_item od in
     let ps, enclose = Printing_stack.parenthesize ps in
     let exp = pp (List.tl ps) exp in
     let in_ = token_between od exp IN in
@@ -2598,7 +2622,11 @@ end = struct
 end
 
 and Class_structure : sig
-  val pp : loc:Location.t -> class_structure -> document
+  val pp
+    :  loc:Location.t
+    -> ?ext_attrs:string loc option * attributes
+    -> class_structure
+    -> document
 
   val pp_constraint : loc:Location.t -> core_type -> core_type -> document
 end = struct
@@ -2708,14 +2736,23 @@ end = struct
     let doc = pp_field_desc ~loc:pcf_loc pcf_desc in
     Attribute.attach_to_top_item doc pcf_attributes
 
-  let pp ~(loc:Location.t) { pcstr_self; pcstr_fields } =
+  let pp ~(loc:Location.t) ?ext_attrs:(extension, attrs = None, [])
+      { pcstr_self; pcstr_fields } =
     let obj_with_self =
       match pcstr_self.ppat_desc with
       | Ppat_any -> (* no self *)
-        string ~loc:pcstr_self.ppat_loc "object"
+        let kw = string ~loc:pcstr_self.ppat_loc "object" in
+        let later =
+          (* We don't know what comes next yet! *)
+          { txt = (); loc = { loc with loc_start = loc.loc_end }}
+        in
+        Keyword.decorate kw ~extension attrs ~later
       | _ ->
         let self = Pattern.pp [] pcstr_self in
-        let obj = token_before ~start:loc.loc_start self OBJECT in
+        let obj =
+          Keyword.decorate (token_before ~start:loc.loc_start self OBJECT)
+            ~extension attrs ~later:self
+        in
         group (obj ^/^ parens self)
     in
     match pcstr_fields with
@@ -2958,9 +2995,11 @@ end = struct
 end
 
 and Open_declaration : sig
-  val pp : Attribute.kind -> open_declaration -> document
+  val pp : ?ext_attrs:string loc option * attributes -> Attribute.kind ->
+    open_declaration -> document
 end = struct
-  let pp kind { popen_expr; popen_override; popen_attributes; popen_loc } =
+  let pp ?ext_attrs:(extension, attrs = None, []) kind
+      { popen_expr; popen_override; popen_attributes; popen_loc } =
     let expr = Module_expr.pp popen_expr in
     let kw =
       let loc = { popen_loc with loc_end = expr.loc.loc_start } in
@@ -2969,6 +3008,7 @@ end = struct
          | Override -> "open!"
          | _ -> "open")
     in
+    let kw = Keyword.decorate kw ~extension attrs ~later:expr in
     let opn = group (kw ^/^ expr) in
     Attribute.attach kind opn popen_attributes
 end
