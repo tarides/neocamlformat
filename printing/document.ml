@@ -87,12 +87,12 @@ let underscore ~loc : t=
   { txt = underscore; loc }
 
 let token ~loc t =
-  string ~loc (Tokens.to_string t)
+  string ~loc (Source_parsing.Source.print_tok t)
 
 let token_between_locs start stop tok =
   let loc =
     Source_parsing.Source.loc_of_token_between ~start ~stop
-      (Tokens.to_parser_token tok)
+      tok
   in
   token ~loc tok
 
@@ -322,7 +322,7 @@ module Enclosed_separated = struct
              if has_semi then
                acc * elt
              else
-               let semi = token_between acc elt.doc Semi in
+               let semi = token_between acc elt.doc SEMI in
                group (acc ^^ semi) * elt)
           (fmt x)
           xs
@@ -361,7 +361,7 @@ module Enclosed_separated = struct
               if has_semi then
                 acc * elt
               else
-                let semi = token_between acc elt.doc Semi in
+                let semi = token_between acc elt.doc SEMI in
                 group (acc ^^ semi) * elt)
             (fmt x) xs
       in

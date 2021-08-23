@@ -29,7 +29,7 @@ let constructor_arguments = function
       (* morally equivalent to: *)
       [ Printing_stack.Core_type (Ptyp_tuple args) ]
     in
-    left_assoc_map ~sep:Star
+    left_assoc_map ~sep:STAR
       ~f:(!pp_core_type printing_stack) a1 args
 
 let constructor_name name =

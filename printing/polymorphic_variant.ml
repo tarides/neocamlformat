@@ -29,7 +29,7 @@ end = struct
       let tag = Tag.pp tag in
       let params = pp_params p ps in
       let of_params =
-        let of_ = token_between tag params Of in
+        let of_ = token_between tag params OF in
         if has_empty_constr then
           let sep = PPrint.(break 1 ^^ ampersand ^^ break 1) in
           concat of_ ~sep params
@@ -51,15 +51,15 @@ let dock_fields ~opening_token x xs =
   List.fold_left
     (fun acc elt ->
         let elt = fmt elt in
-        let pipe = token_between acc elt Pipe in
+        let pipe = token_between acc elt BAR in
         acc ^/^ group (pipe ^^ elt))
     (group (opening_token ^^ fmt x))
     xs
 
 let pp_row_prefix ~prefix_if_necessary ~loc ~opening_token x xs =
   let needs_prefix =
-    prefix_if_necessary && opening_token = Tokens.Lbracket && xs = [] &&
-    (match x.prf_desc with Rinherit _ -> true | _ -> false)
+    prefix_if_necessary && opening_token = Source_parsing.Parser.LBRACKET &&
+    xs = [] && (match x.prf_desc with Rinherit _ -> true | _ -> false)
   in
   let x = Row_field.pp x in
   let xs = List.map Row_field.pp xs in
@@ -68,7 +68,7 @@ let pp_row_prefix ~prefix_if_necessary ~loc ~opening_token x xs =
     if not needs_prefix then
       opening_token
     else
-      let pipe = token_between opening_token x Pipe in
+      let pipe = token_between opening_token x BAR in
       opening_token ^/^ pipe
   in
   dock_fields ~opening_token x xs
@@ -76,13 +76,13 @@ let pp_row_prefix ~prefix_if_necessary ~loc ~opening_token x xs =
 let pp_simple_row ~loc ~opening_token ~hang_indent = function
   | [] -> 
     let lbracket = token_between_locs loc.loc_start loc.loc_end opening_token in
-    let rbracket = token_after ~stop:loc.loc_end lbracket Rbracket in
+    let rbracket = token_after ~stop:loc.loc_end lbracket RBRACKET in
     group (lbracket ^/^ rbracket)
   | x :: xs ->
     let fields =
       pp_row_prefix ~prefix_if_necessary:true ~loc ~opening_token x xs
     in
-    let rbracket = token_after ~stop:loc.loc_end fields Rbracket in
+    let rbracket = token_after ~stop:loc.loc_end fields RBRACKET in
     hang hang_indent (fields ^/^ rbracket)
 
 let pp_mixed_row ~loc ~labels:(l, ls) = function
@@ -90,21 +90,21 @@ let pp_mixed_row ~loc ~labels:(l, ls) = function
   | x :: xs ->
     let fields =
       pp_row_prefix ~prefix_if_necessary:false ~loc
-        ~opening_token:Closed_variant x xs
+        ~opening_token:LBRACKETLESS x xs
     in
     let labels = flow_map (PPrint.break 1) Tag.pp l ls in
-    let sep = token_between fields labels Rangle in
-    let rbracket = token_after ~stop:loc.loc_end labels Rbracket in
+    let sep = token_between fields labels GREATER in
+    let rbracket = token_after ~stop:loc.loc_end labels RBRACKET in
     hang 1 (fields ^/^ sep ^/^ labels ^/^ rbracket)
 
 let pp_row ~loc fields closed present =
   match closed, present with
   | Open, Some _ -> assert false
   | Closed, None ->
-    pp_simple_row ~loc ~opening_token:Lbracket ~hang_indent:0 fields
+    pp_simple_row ~loc ~opening_token:LBRACKET ~hang_indent:0 fields
   | Open, None -> 
-    pp_simple_row ~loc ~opening_token:Open_variant ~hang_indent:1 fields
+    pp_simple_row ~loc ~opening_token:LBRACKETGREATER ~hang_indent:1 fields
   | Closed, Some [] ->
-    pp_simple_row ~loc ~opening_token:Closed_variant ~hang_indent:1 fields
+    pp_simple_row ~loc ~opening_token:LBRACKETLESS ~hang_indent:1 fields
   | Closed, Some (l::ls) ->
     pp_mixed_row ~loc ~labels:(l, ls) fields

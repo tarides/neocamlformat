@@ -22,15 +22,16 @@ let attach_annot doc ~sep annot =
     let sep = token_between doc annot sep in
     group (doc ^^ nest 2 (break_before sep)) ^^ nest 2 (break_before annot)
 
-let pp ?(binder=Tokens.Equals) ?keyword { lhs; params; constr; coerce; rhs } =
+let pp ?(binder=Source_parsing.Parser.EQUAL) ?keyword
+    { lhs; params; constr; coerce; rhs } =
   let pre =
     match keyword with
     | None -> lhs
     | Some keyword -> group (keyword ^^ nest 2 (break_before lhs))
   in
   let params = pp_params params in
-  let with_constraint = attach_annot params ~sep:Colon constr in
-  let with_coercion = attach_annot with_constraint ~sep:Coerce coerce in
+  let with_constraint = attach_annot params ~sep:COLON constr in
+  let with_coercion = attach_annot with_constraint ~sep:COLONGREATER coerce in
   match rhs with
   | None -> pre ^^ with_coercion
   | Some rhs ->
@@ -81,7 +82,7 @@ module Module = struct
         in
         doc, "end ="
       | Mty constraint_, Struct ->
-        let doc = attach_annot params ~sep:Colon (Some constraint_) in
+        let doc = attach_annot params ~sep:COLON (Some constraint_) in
         doc, "="
       | _ , Sig -> assert false
     in
@@ -100,8 +101,8 @@ module Module = struct
       let fake =
         token_between with_constraint rhs
           (match context with
-           | Struct -> Equals
-           | Sig -> Colon)
+           | Struct -> EQUAL
+           | Sig -> COLON)
       in
       string ~loc:fake.loc binder
     in

@@ -9,13 +9,13 @@ type t = {
 }
 
 val pp
-  : ?binder:Tokens.t
+  : ?binder:Source_parsing.Parser.token
   -> ?keyword:Document.t
   -> t
   -> Document.t
 
 val pp_simple
-  : ?binder:Tokens.t
+  : ?binder:Source_parsing.Parser.token
   -> keyword:Document.t
   -> Document.t
   -> Document.t
