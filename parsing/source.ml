@@ -50,7 +50,7 @@ let print_tok : Parser.token -> string = function
   | INFIXOP2 _ -> "INFIXOP2"
   | INFIXOP3 _ -> "INFIXOP3"
   | INFIXOP4 _ -> "INFIXOP4"
-  | DOTOP _ -> "DOTOP"
+  | DOTOP op -> "." ^ op
   | LETOP _ -> "LETOP"
   | ANDOP _ -> "ANDOP"
   | INHERIT -> "inherit"

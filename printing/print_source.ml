@@ -1104,15 +1104,23 @@ end = struct
       ~left:PPrint.(lbracket ^^ bar)
       ~right:PPrint.(bar ^^ rbracket) elts
 
-  and pp_gen_get enclosing ps arr idx =
+  and pp_gen_get ?prefix ?dot enclosing ps arr idx =
     let ps, enclose = Printing_stack.parenthesize ps in
     let arr = pp ps arr in
-    let dot = token_between arr idx DOT in
+    let dot =
+      match prefix, dot with
+      | None, None -> token_between arr idx DOT
+      | Some path, Some dotop ->
+        let fstdot = token_between arr path DOT in
+        group (fstdot ^^ path ^^ break_before ~spaces:0 dotop)
+      | None, Some dotop -> dotop
+      | Some _, None -> assert false
+    in
     let doc = flow (break 0) arr [ dot; enclosing idx ] in
     enclose doc
 
-  and pp_gen_set enclosing access_ps ps arr idx val_ =
-    let access = pp_gen_get enclosing access_ps arr idx in
+  and pp_gen_set ?prefix:p ?dot enclosing access_ps ps arr idx val_ =
+    let access = pp_gen_get ?prefix:p ?dot enclosing access_ps arr idx in
     let ps, enclose = Printing_stack.parenthesize ps in
     let value = pp (List.tl ps) val_ in
     let larrow = token_between access value LESSMINUS in
@@ -1149,13 +1157,19 @@ end = struct
     pp_gen_set braces access_ps ps arr idx val_
 
   and pp_dotop_get ps accessed op left right indices =
-    let enclose doc = group (Longident.pp op ^^ str left) ^^ doc ^^ str right in
+    let enclose doc = str left ^^ doc ^^ str right in
     let indices =
       match indices with
       | [] -> assert false (* I think *)
       | idx :: ids -> separate_map semi ~f:(pp []) idx ids
     in
-    pp_gen_get enclose ps accessed indices
+    let prefix, op =
+      match op with
+      | Lident s -> None, str s
+      | Ldot (lid, s) -> Some (Longident.pp lid), str s
+      | Lapply _ -> assert false
+    in
+    pp_gen_get ?prefix ~dot:(!^"." ++ op) enclose ps accessed indices
 
   and pp_dotop_set ps accessed op left right indices val_ =
     let enclose doc = group (Longident.pp op ^^ str left) ^^ doc ^^ str right in
@@ -1168,7 +1182,14 @@ end = struct
       | [] -> assert false (* I think *)
       | idx :: ids -> separate_map semi ~f:(pp []) idx ids
     in
-    pp_gen_set enclose access_ps ps accessed indices val_
+    let prefix, op =
+      match op with
+      | Lident s -> None, str s
+      | Ldot (lid, s) -> Some (Longident.pp lid), str s
+      | Lapply _ -> assert false
+    in
+    pp_gen_set ?prefix ~dot:(!^"." ++ op) enclose access_ps ps accessed indices
+      val_
 
   and pp_if_then_else ~loc ps if_branches else_opt =
     let ps, enclose = Printing_stack.parenthesize ps in
@@ -1227,7 +1248,7 @@ end = struct
   and pp_while ~(loc:Location.t) ps cond body =
     let cond = pp [] cond in
     let body = pp [] body in
-    let do_ = token_between cond body DOT in
+    let do_ = token_between cond body DO in
     let while_ = token_before ~start:loc.loc_start cond WHILE in
     let done_ = token_after body ~stop:loc.loc_end DONE in
     let doc =
