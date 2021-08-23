@@ -1,5 +1,7 @@
 open Source_parsing.Location
 
+val pp_item_attr : (Source_parsing.Source_tree.attribute -> Document.t) ref
+
 type t = {
   lhs : Document.t;
   params: Document.t list loc;
@@ -8,9 +10,16 @@ type t = {
   rhs : Document.t option;
 }
 
+type binding_kw = {
+  token: Document.t;
+  extension: string loc option;
+  attrs: Source_parsing.Source_tree.attributes;
+  modifier: Source_parsing.Parser.token option;
+}
+
 val pp
   : ?binder:Source_parsing.Parser.token
-  -> ?keyword:Document.t
+  -> ?keyword:binding_kw
   -> t
   -> Document.t
 

@@ -10,9 +10,11 @@ let module_name { txt; loc} =
   | None -> underscore ~loc
   | Some name -> string ~loc name
 
-let rec_flag = function
-  | Recursive -> " rec"
-  | Nonrecursive -> ""
+let rec_token ~recursive_by_default rf : Source_parsing.Parser.token option =
+  match rf, recursive_by_default with
+  | Recursive, false   -> Some REC
+  | Nonrecursive, true -> Some NONREC
+  | _, _ -> None
 
 module Longident : sig
   include module type of struct include Longident end
@@ -154,6 +156,13 @@ end = struct
     | _ ->
       pp_attr kind attr_name attr_payload
 
+  let pp_item_attr { attr_name; attr_payload; attr_loc = _ } =
+    match attr_name.txt with
+    | "ocaml.doc"
+    | "ocaml.text" ->
+      assert false
+    | _ -> pp_attr Attached_to_item attr_name attr_payload
+
   let attach kind doc = function
     | [] -> doc
     | attr :: attrs ->
@@ -174,6 +183,7 @@ end = struct
 
   let () = Constructor_decl.attach_attributes := attach_to_item
   let () = Polymorphic_variant.attach_attributes := attach_to_item
+  let () = Binding.pp_item_attr := pp_item_attr
 
   let attach_to_top_item doc =
     attach Attached_to_structure_item doc
@@ -845,32 +855,21 @@ end = struct
         let binding = Value_binding.pp Attached_to_item vb in
         let keyword =
           let lhs = binding.lhs in
-          let add_vb_attrs kw =
+          let attrs =
             match vb.pvb_ext_attributes with
             | Some _, _ -> assert false
-            | None, [] -> kw
-            | None, attrs -> Attribute.attach_to_item kw attrs
+            | None, attrs -> attrs
           in
-          match !previous_vb with
-          | None ->
-            let let_ = token_before ~start:loc.Location.loc_start lhs LET in
-            let let_ =
-              match ext with
-              | None -> let_
-              | Some ext ->
-                let percent = token_between let_ lhs PERCENT in
-                let_ ^^ percent ^^ str ext
-            in
-            let let_ = add_vb_attrs let_ in
-            begin match rf with
-            | Nonrecursive -> let_
-            | Recursive ->
-              let rec_ = token_between let_ lhs REC in
-              let_ ^/^ rec_
-            end
-          | Some prev_vb ->
-            token_between prev_vb lhs AND
-            |> add_vb_attrs
+          let token, extension, modifier =
+            match !previous_vb with
+            | None ->
+              token_before ~start:loc.Location.loc_start lhs LET,
+              ext,
+              rec_token ~recursive_by_default:false rf
+            | Some prev_vb ->
+              token_between prev_vb lhs AND, None, None
+          in
+          { Binding.token; extension; modifier; attrs }
         in
         let binding = Binding.pp ~keyword binding in
         previous_vb := Some binding;
@@ -1433,7 +1432,8 @@ end = struct
   and pp_binding_op (bop : binding_op) =
     let binding = Value_binding.pp_bop Attached_to_item bop in
     let keyword = Longident.pp_ident bop.pbop_op in
-    Binding.pp ~keyword binding
+    Binding.pp binding
+      ~keyword:{ token = keyword; extension = None; attrs = []; modifier = None }
 
   and pp_letop ps { let_; ands; body } =
     let let_ = pp_binding_op let_ in
@@ -1941,25 +1941,21 @@ end = struct
         let binding = Value_binding.pp Attached_to_structure_item vb in
         let keyword =
           let lhs = binding.lhs in
-          let add_vb_attrs kw =
+          let attrs =
             match vb.pvb_ext_attributes with
             | Some _, _ -> assert false
-            | None, [] -> kw
-            | None, attrs -> Attribute.attach_to_item kw attrs
+            | None, attrs -> attrs
           in
-          match !previous_vb with
-          | None ->
-            let let_ = token_before ~start:loc.Location.loc_start lhs LET in
-            let let_ = add_vb_attrs let_ in
-            begin match rf with
-            | Nonrecursive -> let_
-            | Recursive ->
-              let rec_ = token_between let_ lhs REC in
-              let_ ^/^ rec_
-            end
-          | Some prev_vb ->
-            token_between prev_vb lhs AND
-            |> add_vb_attrs
+          let token, extension, modifier =
+            match !previous_vb with
+            | None ->
+              token_before ~start:loc.Location.loc_start lhs LET,
+              None,
+              rec_token ~recursive_by_default:false rf
+            | Some prev_vb ->
+              token_between prev_vb lhs AND, None, None
+          in
+          { Binding.token; extension; modifier; attrs }
         in
         let binding = Binding.pp ~keyword binding in
         previous_vb := Some binding;
@@ -2482,25 +2478,34 @@ end = struct
       Application.pp_simple ps ce arg args
       |> enclose
 
-  and pp_let ps rf vbs ce =
+  and pp_let ~loc ps rf vbs ce =
     let vbs =
-      let i = ref 0 in
+      let previous_vb = ref None in
       List.concat_map (fun vb ->
         let text, vb =
           let text, attrs = Attribute.extract_text vb.pvb_attributes in
           text, { vb with pvb_attributes = attrs }
         in
         let binding = Value_binding.pp Attached_to_item vb in
-        let keyword = if !i = 0 then "let" ^ rec_flag rf else "and" in
-        incr i;
         let keyword =
-          (* FIXME: pvb_loc should be pvb_start_loc *)
-          let loc =
-            { vb.pvb_loc with loc_end = vb.pvb_pat.ppat_loc.loc_start }
+          let lhs = binding.lhs in
+          let attrs =
+            match vb.pvb_ext_attributes with
+            | Some _, _ -> assert false
+            | None, attrs -> attrs
           in
-          string ~loc keyword
+          let token, modifier =
+            match !previous_vb with
+            | None ->
+              token_before ~start:loc.Location.loc_start lhs LET,
+              rec_token ~recursive_by_default:false rf
+            | Some prev_vb ->
+              token_between prev_vb lhs AND, None
+          in
+          { Binding.token; extension = None; modifier; attrs }
         in
         let binding = Binding.pp ~keyword binding in
+        previous_vb := Some binding;
         Attribute.prepend_text text binding
       ) vbs
     in
@@ -2534,7 +2539,7 @@ end = struct
     | Pcl_structure str -> Class_structure.pp ~loc str
     | Pcl_fun (params, ce) -> pp_fun ps ~loc params ce
     | Pcl_apply (ce, args) -> pp_apply ps ce args
-    | Pcl_let (rf, vbs, ce) -> pp_let ps rf vbs ce
+    | Pcl_let (rf, vbs, ce) -> pp_let ~loc ps rf vbs ce
     | Pcl_constraint (ce, ct) -> pp_constraint ps ce ct
     | Pcl_extension ext -> Extension.pp Item ext
     | Pcl_open (od, ce) -> pp_open ps ~loc od ce
@@ -2604,7 +2609,8 @@ end = struct
       let loc = { name.loc with loc_start = name.loc.loc_end } in
       { txt = params; loc }
     in
-    Binding.pp ~keyword
+    Binding.pp
+      ~keyword:{ token = keyword; attrs = []; extension = None; modifier = None}
       { lhs = name; params; constr; coerce; rhs }
 
   let pp_field_kind ~loc:{ Location.loc_start; _ } kind name mod_tok = function
@@ -2752,7 +2758,7 @@ and Class_declaration : sig
 end = struct
   let pp cds =
     let cds =
-      let i = ref 0 in
+      let previous_cd = ref None in
       List.concat_map (fun cd ->
         let { pci_virt; pci_params; pci_name; pci_term_params; pci_type;
               pci_expr; pci_loc; pci_attributes } = cd in
@@ -2771,18 +2777,20 @@ end = struct
             rhs = Some (Class_expr.pp [] pci_expr) }
         in
         let keyword =
-          let fst =
-            token_before ~start:pci_loc.loc_start lhs
-              (if !i = 0 then CLASS else AND)
-          in
-          incr i;
-          match pci_virt with
-          | Concrete -> fst
-          | Virtual ->
-            let virt = token_between fst lhs VIRTUAL in
-            group (fst ^/^ virt)
+          match !previous_cd with
+          | None -> token_before ~start:pci_loc.loc_start lhs CLASS
+          | Some cd -> token_between cd lhs AND
         in
-        let doc = Binding.pp ~keyword binding in
+        let modifier : Source_parsing.Parser.token option =
+          match pci_virt with
+          | Concrete -> None
+          | Virtual -> Some VIRTUAL
+        in
+        let doc =
+          Binding.pp binding
+            ~keyword:{ token = keyword; modifier; extension = None; attrs = [] }
+        in
+        previous_cd := Some doc;
         Attribute.prepend_text text @@
         Attribute.attach_to_top_item doc pci_attributes
       ) cds
@@ -2795,47 +2803,7 @@ and Class_description : sig
 end = struct
   let pp cds =
     let cds =
-      List.mapi (fun i cd ->
-        let { pci_virt; pci_params; pci_name; pci_term_params; pci_type;
-              pci_expr; pci_loc; pci_attributes } = cd in
-        let lhs =
-          Type_declaration.with_params ~always_enclosed:true ~enclosing:brackets
-            pci_params (str pci_name)
-        in
-        assert (Option.is_none pci_type);
-        let binding =
-          { Binding.lhs;
-            params =
-              (let loc = { lhs.loc with loc_start = lhs.loc.loc_end } in
-              { loc; txt = List.map Fun_param.pp pci_term_params });
-            constr = None;
-            coerce = None;
-            rhs = Some (Class_type.pp pci_expr) }
-        in
-        let keyword =
-          let fst =
-            token_before ~start:pci_loc.loc_start lhs
-              (if i = 0 then CLASS else AND)
-          in
-          match pci_virt with
-          | Concrete -> fst
-          | Virtual ->
-            let virt = token_between fst lhs VIRTUAL in
-            group (fst ^/^ virt)
-        in
-        let doc = Binding.pp ~keyword ~binder:COLON binding in
-        Attribute.attach_to_top_item doc pci_attributes
-      ) cds
-    in
-    separate PPrint.(twice hardline) (List.hd cds) (List.tl cds)
-end
-
-and Class_type_declaration : sig
-  val pp : class_description list -> document
-end = struct
-  let pp cds =
-    let cds =
-      let i = ref 0 in
+      let previous_cd = ref None in
       List.concat_map (fun cd ->
         let { pci_virt; pci_params; pci_name; pci_term_params; pci_type;
               pci_expr; pci_loc; pci_attributes } = cd in
@@ -2855,22 +2823,69 @@ end = struct
             rhs = Some (Class_type.pp pci_expr) }
         in
         let keyword =
-          let fst =
-            if !i <> 0 then
-              token_before ~start:pci_loc.loc_start lhs AND
-            else
-              let class_ = token_before ~start:pci_loc.loc_start lhs CLASS in
-              let type_ = token_between class_ lhs TYPE in
-              incr i;
-              group (class_ ^/^ type_)
-          in
-          match pci_virt with
-          | Concrete -> fst
-          | Virtual ->
-            let virt = token_between fst lhs VIRTUAL in
-            group (fst ^/^ virt)
+          match !previous_cd with
+          | None -> token_before ~start:pci_loc.loc_start lhs CLASS
+          | Some cd -> token_between cd lhs AND
         in
-        let doc = Binding.pp ~keyword binding in
+        let modifier : Source_parsing.Parser.token option =
+          match pci_virt with
+          | Concrete -> None
+          | Virtual -> Some VIRTUAL
+        in
+        let doc =
+          Binding.pp binding ~binder:COLON
+            ~keyword:{ token = keyword; modifier; extension = None; attrs = [] }
+        in
+        previous_cd := Some doc;
+        Attribute.prepend_text text @@
+        Attribute.attach_to_top_item doc pci_attributes
+      ) cds
+    in
+    separate PPrint.(twice hardline) (List.hd cds) (List.tl cds)
+end
+
+and Class_type_declaration : sig
+  val pp : class_description list -> document
+end = struct
+  let pp cds =
+    let cds =
+      let previous_cd = ref None in
+      List.concat_map (fun cd ->
+        let { pci_virt; pci_params; pci_name; pci_term_params; pci_type;
+              pci_expr; pci_loc; pci_attributes } = cd in
+        let text, pci_attributes = Attribute.extract_text pci_attributes in
+        let lhs =
+          Type_declaration.with_params ~always_enclosed:true ~enclosing:brackets
+            pci_params (str pci_name)
+        in
+        assert (Option.is_none pci_type);
+        let binding =
+          { Binding.lhs;
+            params =
+              (let loc = { lhs.loc with loc_start = lhs.loc.loc_end } in
+              { loc; txt = List.map Fun_param.pp pci_term_params });
+            constr = None;
+            coerce = None;
+            rhs = Some (Class_type.pp pci_expr) }
+        in
+        let keyword =
+          match !previous_cd with
+          | Some cd -> token_between cd lhs AND
+          | None ->
+            let class_ = token_before ~start:pci_loc.loc_start lhs CLASS in
+            let type_ = token_between class_ lhs TYPE in
+            group (class_ ^/^ type_)
+        in
+        let modifier : Source_parsing.Parser.token option =
+          match pci_virt with
+          | Concrete -> None
+          | Virtual -> Some VIRTUAL
+        in
+        let doc =
+          Binding.pp binding
+            ~keyword:{ token = keyword; modifier; extension = None; attrs = [] }
+        in
+        previous_cd := Some doc;
         Attribute.prepend_text text @@
         Attribute.attach_to_top_item doc pci_attributes
       ) cds
