@@ -934,7 +934,7 @@ end = struct
         lhs ^/^ group (when_ ^/^ guard)
     in
     let arrow = token_between lhs rhs MINUSGREATER in
-    let lhs = group (lhs ^^ nest 2 (break_before arrow)) in
+    let lhs = prefix ~indent:2 ~spaces:1 lhs arrow in
     match !Options.Cases.body_on_separate_line with
     | Always -> lhs ^^ nest !Options.Cases.body_indent (hardline ++ rhs)
     | When_needed -> prefix ~indent:!Options.Cases.body_indent ~spaces:1 lhs rhs
@@ -1497,8 +1497,8 @@ end = struct
     let exp = pp [] exp in
     let dot = token_between lid exp DOT in
     let exp =
-      enclose exp
-        ~before:PPrint.(lparen ^^ break 0)
+      enclose (nest 2 @@ break_before ~spaces:0 exp)
+        ~before:PPrint.lparen
         ~after:PPrint.(break 0 ^^ rparen)
     in
     lid ^^ dot ^^ exp
@@ -2410,7 +2410,7 @@ end = struct
         let rhs = Attribute.attach_to_top_item rhs ptype_attributes in
         Binding.pp_simple ?binder ~keyword lhs rhs
     | None ->
-        let decl = group (keyword ^^ nest 2 (break_before lhs)) in
+        let decl = prefix ~indent:2 ~spaces:1 keyword lhs in
         let decl = add_constraints decl ptype_cstrs in
         Attribute.attach_to_top_item decl ptype_attributes
 

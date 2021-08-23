@@ -20,7 +20,7 @@ let attach_annot doc ~sep annot =
   | None -> doc
   | Some annot ->
     let sep = token_between doc annot sep in
-    group (doc ^^ nest 2 (break_before sep)) ^^ nest 2 (break_before annot)
+    (prefix ~indent:2 ~spaces:1 doc sep) ^^ nest 2 (break_before annot)
 
 let pp ?(binder=Source_parsing.Parser.EQUAL) ?keyword
     { lhs; params; constr; coerce; rhs } =
@@ -62,7 +62,7 @@ module Module = struct
   }
 
   let pp ~keyword ~context { name; params; constr; body; attributes } =
-    let pre = group (keyword ^^ nest 2 (break_before name)) in
+    let pre = prefix ~indent:2 ~spaces:1 keyword name in
     let params = pp_params params in
     let with_constraint, binder =
       match constr, context with
