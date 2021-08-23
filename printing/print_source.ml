@@ -859,7 +859,7 @@ end = struct
 
   and pp_ident = Longident.pp
 
-  and pp_let ~ext_attrs:(ext, attrs) ~loc ps rf vbs body =
+  and pp_let ~ext_attrs:(extension, attrs) ~loc ps rf vbs body =
     assert (attrs = []);
     let vbs =
       let previous_vb = ref None in
@@ -876,16 +876,20 @@ end = struct
             | Some _, _ -> assert false
             | None, attrs -> attrs
           in
-          let token, extension, modifier =
+          let token, modifier =
             match !previous_vb with
             | None ->
               token_before ~start:loc.Location.loc_start lhs LET,
-              ext,
               rec_token ~recursive_by_default:false rf
             | Some prev_vb ->
-              token_between prev_vb lhs AND, None, None
+              token_between prev_vb lhs AND, None
           in
-          { Binding.token; extension; modifier; attrs }
+          let kw = Keyword.decorate token ~extension attrs ~later:lhs in
+          match modifier with
+          | None -> kw
+          | Some tok ->
+            let modif = token_between kw lhs tok in
+            kw ^/^ modif
         in
         let binding = Binding.pp ~keyword binding in
         previous_vb := Some binding;
@@ -1130,7 +1134,7 @@ end = struct
       match prefix, dot with
       | None, None -> token_between arr idx DOT
       | Some path, Some dotop ->
-        let fstdot = token_between arr path DOT in
+        let fstdot = token_between arr path DOT in 
         group (fstdot ^^ path ^^ break_before ~spaces:0 dotop)
       | None, Some dotop -> dotop
       | Some _, None -> assert false
@@ -1472,8 +1476,7 @@ end = struct
   and pp_binding_op (bop : binding_op) =
     let binding = Value_binding.pp_bop Attached_to_item bop in
     let keyword = Longident.pp_ident bop.pbop_op in
-    Binding.pp binding
-      ~keyword:{ token = keyword; extension = None; attrs = []; modifier = None }
+    Binding.pp ~keyword binding
 
   and pp_letop ps { let_; ands; body } =
     let let_ = pp_binding_op let_ in
@@ -1986,16 +1989,20 @@ end = struct
             | Some _, _ -> assert false
             | None, attrs -> attrs
           in
-          let token, extension, modifier =
+          let token, modifier =
             match !previous_vb with
             | None ->
               token_before ~start:loc.Location.loc_start lhs LET,
-              None,
               rec_token ~recursive_by_default:false rf
             | Some prev_vb ->
-              token_between prev_vb lhs AND, None, None
+              token_between prev_vb lhs AND, None
           in
-          { Binding.token; extension; modifier; attrs }
+          let kw = Keyword.decorate token ~extension:None attrs ~later:lhs in
+          match modifier with
+          | None -> kw
+          | Some tok ->
+            let modif = token_between kw lhs tok in
+            kw ^/^ modif
         in
         let binding = Binding.pp ~keyword binding in
         previous_vb := Some binding;
@@ -2542,7 +2549,12 @@ end = struct
             | Some prev_vb ->
               token_between prev_vb lhs AND, None
           in
-          { Binding.token; extension = None; modifier; attrs }
+          let kw = Keyword.decorate token ~extension:None attrs ~later:lhs in
+          match modifier with
+          | None -> kw
+          | Some tok ->
+            let modif = token_between kw lhs tok in
+            kw ^/^ modif
         in
         let binding = Binding.pp ~keyword binding in
         previous_vb := Some binding;
@@ -2649,9 +2661,7 @@ end = struct
       let loc = { name.loc with loc_start = name.loc.loc_end } in
       { txt = params; loc }
     in
-    Binding.pp
-      ~keyword:{ token = keyword; attrs = []; extension = None; modifier = None}
-      { lhs = name; params; constr; coerce; rhs }
+    Binding.pp ~keyword { lhs = name; params; constr; coerce; rhs }
 
   let pp_field_kind ~loc:{ Location.loc_start; _ } kind name mod_tok = function
     | Cfk_virtual ct -> pp_virtual ~start:loc_start kind name mod_tok ct
@@ -2821,15 +2831,14 @@ end = struct
           | None -> token_before ~start:pci_loc.loc_start lhs CLASS
           | Some cd -> token_between cd lhs AND
         in
-        let modifier : Source_parsing.Parser.token option =
+        let keyword =
           match pci_virt with
-          | Concrete -> None
-          | Virtual -> Some VIRTUAL
+          | Concrete -> keyword
+          | Virtual ->
+            let virt = token_between keyword lhs VIRTUAL in
+            group (keyword ^/^ virt)
         in
-        let doc =
-          Binding.pp binding
-            ~keyword:{ token = keyword; modifier; extension = None; attrs = [] }
-        in
+        let doc = Binding.pp binding ~keyword in
         previous_cd := Some doc;
         Attribute.prepend_text text @@
         Attribute.attach_to_top_item doc pci_attributes
@@ -2867,15 +2876,14 @@ end = struct
           | None -> token_before ~start:pci_loc.loc_start lhs CLASS
           | Some cd -> token_between cd lhs AND
         in
-        let modifier : Source_parsing.Parser.token option =
+        let keyword =
           match pci_virt with
-          | Concrete -> None
-          | Virtual -> Some VIRTUAL
+          | Concrete -> keyword
+          | Virtual ->
+            let virt = token_between keyword lhs VIRTUAL in
+            group (keyword ^/^ virt)
         in
-        let doc =
-          Binding.pp binding ~binder:COLON
-            ~keyword:{ token = keyword; modifier; extension = None; attrs = [] }
-        in
+        let doc = Binding.pp binding ~binder:COLON ~keyword in
         previous_cd := Some doc;
         Attribute.prepend_text text @@
         Attribute.attach_to_top_item doc pci_attributes
@@ -2916,15 +2924,14 @@ end = struct
             let type_ = token_between class_ lhs TYPE in
             group (class_ ^/^ type_)
         in
-        let modifier : Source_parsing.Parser.token option =
+        let keyword =
           match pci_virt with
-          | Concrete -> None
-          | Virtual -> Some VIRTUAL
+          | Concrete -> keyword
+          | Virtual ->
+            let virt = token_between keyword lhs VIRTUAL in
+            group (keyword ^/^ virt)
         in
-        let doc =
-          Binding.pp binding
-            ~keyword:{ token = keyword; modifier; extension = None; attrs = [] }
-        in
+        let doc = Binding.pp binding ~keyword in
         previous_cd := Some doc;
         Attribute.prepend_text text @@
         Attribute.attach_to_top_item doc pci_attributes

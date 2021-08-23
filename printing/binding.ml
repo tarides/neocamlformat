@@ -25,39 +25,8 @@ let attach_annot doc ~sep annot =
     let sep = token_between doc annot sep in
     group (doc ^^ nest 2 (break_before sep)) ^^ nest 2 (break_before annot)
 
-type binding_kw = {
-  token: document;
-  extension: string loc option;
-  attrs: Source_parsing.Source_tree.attributes;
-  modifier: Source_parsing.Parser.token option;
-}
-
-let pp_kw lhs { token; extension; attrs; modifier } =
-  let kw =
-    match extension with
-    | None -> token
-    | Some ext ->
-      let percent = token_between token lhs PERCENT in
-      token ^^ percent ^^ str ext
-  in
-  let kw =
-    match attrs with
-    | [] -> kw
-    | attr :: attrs ->
-      group (
-        prefix ~indent:2 ~spaces:0 kw
-          (separate_map (PPrint.break 0) ~f:!pp_item_attr attr attrs)
-      )
-  in
-  match modifier with
-  | None -> kw
-  | Some tok ->
-    let modif = token_between kw lhs tok in
-    kw ^/^ modif
-
 let pp ?(binder=Source_parsing.Parser.EQUAL) ?keyword
     { lhs; params; constr; coerce; rhs } =
-  let keyword = Option.map (pp_kw lhs) keyword in
   let pre =
     match keyword with
     | None -> lhs
@@ -75,8 +44,7 @@ let pp ?(binder=Source_parsing.Parser.EQUAL) ?keyword
 
 let pp_simple ?binder ~keyword lhs rhs =
   let loc = { lhs.loc with loc_start = lhs.loc.loc_end } in
-  pp ?binder
-    ~keyword:{ token = keyword; extension = None; attrs = []; modifier = None }
+  pp ?binder ~keyword
     { lhs; params = { loc; txt = [] }; constr = None; coerce = None;
       rhs = Some rhs }
 

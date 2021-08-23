@@ -10,16 +10,9 @@ type t = {
   rhs : Document.t option;
 }
 
-type binding_kw = {
-  token: Document.t;
-  extension: string loc option;
-  attrs: Source_parsing.Source_tree.attributes;
-  modifier: Source_parsing.Parser.token option;
-}
-
 val pp
   : ?binder:Source_parsing.Parser.token
-  -> ?keyword:binding_kw
+  -> ?keyword:Document.t
   -> t
   -> Document.t
 
