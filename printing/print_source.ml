@@ -2298,7 +2298,7 @@ end = struct
     (* FIXME: loc won't be use since the list is nonempty *)
     let fields = List.map label_declaration lbl_decls in
     Record_like.pp ~loc:Location.none
-      ~formatting:!Options.Record.expression
+      ~formatting:Fit_or_vertical (* never wrap decls *)
       ~left:lbrace
       ~right:rbrace
       fields

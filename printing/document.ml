@@ -342,30 +342,27 @@ module Enclosed_separated = struct
   end = struct
     let fmt (doc, attrs) =
       match attrs with
-      | [] -> { doc; has_semi = false }
+      | [] -> { doc = group doc; has_semi = false }
       | x :: xs ->
         let attrs = separate (PPrint.break 0) x xs in
         { doc = group (group (suffix ~after:doc semi) ^/^ attrs)
         ; has_semi = true }
 
-    let ( * ) before after =
-      { after with doc = before ^^ break_before after.doc }
+    let rec pp_fields_aux = function
+      | [] -> assert false
+      | [ x ] -> (fmt x).doc
+      | x :: ((_ :: _) as rest) ->
+        let elt = fmt x in
+        if elt.has_semi then
+          elt.doc ^^ break_before (pp_fields_aux rest)
+        else
+          let rest = pp_fields_aux rest in
+          let semi = token_between elt.doc rest SEMI in
+          group (elt.doc ^^ semi) ^^ break_before rest
 
     let pp_fields x xs =
-      let fields =
-        match xs with
-        | [] -> fmt x
-        | _ ->
-          List.fold_left (fun { doc = acc; has_semi } elt ->
-              let elt = fmt elt in
-              if has_semi then
-                acc * elt
-              else
-                let semi = token_between acc elt.doc SEMI in
-                group (acc ^^ semi) * elt)
-            (fmt x) xs
-      in
-      nest 2 (break_before fields.doc)
+      let fields = pp_fields_aux (x :: xs) in
+      nest 2 (break_before fields)
 
     let pp ~left ~right x xs  =
       let fields = pp_fields x xs in
