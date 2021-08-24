@@ -725,34 +725,111 @@ and Application : sig
     -> document
 end = struct
   let argument ps (lbl, exp) =
-    let suffix ~prefix lbl =
+    let suffix ~prefix:sym lbl =
       match exp.pexp_desc with
-      | Pexp_ident Lident id when lbl.txt = id.txt -> prefix ++ str lbl
+      | Pexp_ident Lident id when lbl.txt = id.txt -> sym ++ str lbl
       | Pexp_fun (params, body) when exp.pexp_attributes = [] ->
         let lbl = string ~loc:lbl.loc (lbl.txt ^ ":") in
         let ps = Printing_stack.Expression exp.pexp_desc :: ps in
-        Expression.pp_fun ~pre_label:(prefix ++ lbl) ~loc:exp.pexp_loc
-          ~ext_attrs:exp.pexp_ext_attributes ps params body
+        let fun_, args, arrow, body =
+          Expression.fun_chunks ~loc:exp.pexp_loc
+            ~ext_attrs:exp.pexp_ext_attributes ps params body
+        in
+        let open_ = (sym ++ lbl) ^^ (lparen ++ break_before ~spaces:0 fun_) in
+        let unclosed =
+          prefix ~indent:2 ~spaces:1
+            (group ((prefix ~indent:2 ~spaces:1 open_ args) ^/^ arrow))
+            body
+        in
+        break_after ~spaces:0 unclosed +++ rparen
       | _ ->
         let lbl = string ~loc:lbl.loc (lbl.txt ^ ":") in
         let exp = Expression.pp ps exp in
-        group (prefix ++ lbl ^^ break_before ~spaces:0 exp)
+        group (sym ++ lbl ^^ break_before ~spaces:0 exp)
     in
     match lbl with
     | Nolabel -> Expression.pp ps exp
     | Labelled lbl -> suffix ~prefix:tilde lbl
     | Optional lbl -> suffix ~prefix:qmark lbl
 
+  let rec combine_app_chunks acc = function
+    | [] -> acc
+    | `Rparen :: _ -> assert false
+    | `Normal d1 :: `Normal d2 :: `Rparen :: rest ->
+      (* we're layouting (fun p -> exp)! *)
+      let flat_fun = nest 2 @@ break_before d1 ^/^ d2 +++ rparen in
+      let broken_fun =
+        break_after ~spaces:0 (
+           nest 2 (group (break_before d1))
+           ^^ nest 2 (break_before d2)
+         ) +++ rparen
+      in
+      let acc = acc ^^ group (ifflat flat_fun broken_fun) in
+      combine_app_chunks acc rest
+    | `Normal doc :: rest ->
+      combine_app_chunks (acc ^^ nest 2 @@ group (break_before doc)) rest
+
+  let smart_arg ps ~prefix:p lbl = function
+    | { pexp_desc = Pexp_fun (params, body); pexp_attributes = []; _ } as exp ->
+      let ps = [ Printing_stack.Expression exp.pexp_desc ] in
+      let fun_, args, arrow, body =
+        Expression.fun_chunks ~loc:exp.pexp_loc
+          ~ext_attrs:exp.pexp_ext_attributes ps params body
+      in
+      let first_chunk =
+        group ((prefix ~indent:2 ~spaces:1 fun_ args) ^/^ arrow)
+      in
+      let first_chunk =
+        p ^^ group @@ lparen ++ break_before ~spaces:0 first_chunk
+      in
+      let second_chunk = group body in
+      [ `Normal first_chunk; `Normal second_chunk; `Rparen ]
+    | arg ->
+      [ `Normal (argument ps (lbl, arg)) ]
+
+  let smart_arg ps (lbl, exp) =
+    match lbl with
+    | Nolabel ->
+      let prefix =
+        empty ~loc:{ exp.pexp_loc with loc_end = exp.pexp_loc.loc_start }
+      in
+      smart_arg ps ~prefix lbl exp
+    | Labelled l ->
+      let prefix = tilde ++ string ~loc:l.loc (l.txt ^ ":") in
+      smart_arg ps ~prefix lbl exp
+    | Optional l ->
+      let prefix = qmark ++ string ~loc:l.loc (l.txt ^ ":") in
+      smart_arg ps ~prefix lbl exp
+
   let pp_simple ps applied arg args =
     let ps, enclose = Printing_stack.parenthesize ps in
+    let fit_or_vertical () =
+      let args = separate_map (break 1) ~f:(argument ps) arg args in
+      prefix ~indent:2 ~spaces:1 applied args
+    in
     let doc =
       match !Options.Applications.layout with
-      | Fit_or_vertical ->
-        let args = separate_map (break 1) ~f:(argument ps) arg args in
-        prefix ~indent:2 ~spaces:1 applied args
+      | Fit_or_vertical -> fit_or_vertical ()
       | Wrap ->
         let args = List.map (argument ps) (arg :: args) in
         nest 2 @@ left_assoc_map ~f:Fun.id applied args
+      | Smart ->
+        let nb_labels, len_labels =
+          List.fold_left (fun (nb, len) (lbl, _) ->
+              match lbl with
+              | Nolabel -> nb, len
+              | Labelled lbl
+              | Optional lbl -> nb + 1, len + String.length lbl.txt
+            ) (0, 0) args
+        in
+        (* It would be nice if I could have "current indent + len_labels" ...
+           maybe. *)
+        (* HACKISH *)
+        if nb_labels > 4 && len_labels > 8 then
+          fit_or_vertical ()
+        else
+          let args = List.concat_map (smart_arg ps) (arg :: args) in
+          combine_app_chunks applied args
     in
     enclose doc
 
@@ -808,14 +885,13 @@ end
 and Expression : sig
   val pp : Printing_stack.t -> expression -> document
 
-  val pp_fun
-    : ?pre_label:document
-    -> loc:Location.t
+  val fun_chunks
+    : loc:Location.t
     -> ext_attrs:string loc option * attributes
     -> Printing_stack.t
     -> fun_param list
     -> expression
-    -> document
+    -> document * document * document * document
 end = struct
   let rec pp ps { pexp_desc;pexp_attributes;pexp_ext_attributes;pexp_loc;_ } =
     let ps, enclose =
@@ -976,41 +1052,30 @@ end = struct
       in
       enclose (keyword ^^ cases)
 
-  and fun_ ?pre_label ~loc ~ext_attrs:(extension, attrs) ~args body =
-    let fun_ =
-      match pre_label with
-      | None ->
-        let loc = { loc with Location.loc_end = args.loc.loc_start } in
-        string ~loc "fun"
-      | Some lbl ->
-        let fun_ = token_between lbl args FUN in
-        group (lbl ^^ lparen ++ break_before ~spaces:0 fun_)
-    in
-    let fun_ = Keyword.decorate fun_ ~extension attrs ~later:args in
+  and fun_syntactic_elts ~loc ~ext_attrs:(extension, attrs) ~args body =
+    let kw = token_before ~start:loc.Location.loc_start args FUN in
+    let kw = Keyword.decorate kw ~extension attrs ~later:args in
     let arrow = token_between args body MINUSGREATER in
+    kw, arrow
+
+  and fun_chunks ~loc ~ext_attrs ps params exp =
+    match params with
+    | [] -> assert false
+    | param :: params ->
+      let args = left_assoc_map ~f:Fun_param.pp param params in
+      let body = pp ps exp in
+      let kw, arrow = fun_syntactic_elts ~loc ~ext_attrs ~args body in
+      kw, args, arrow, body
+
+  and pp_fun ~loc ~ext_attrs ps params exp =
+    let ps, enclose = Printing_stack.parenthesize ps in
+    let fun_, args, arrow, body = fun_chunks ~loc ~ext_attrs ps params exp in
     let doc =
       prefix ~indent:2 ~spaces:1
         (group ((prefix ~indent:2 ~spaces:1 fun_ args) ^/^ arrow))
         body
     in
-    if Option.is_some pre_label then
-      doc +++ rparen
-    else
-      doc
-
-  and pp_fun ?pre_label ~loc ~ext_attrs ps params exp =
-    match params with
-    | [] -> assert false
-    | param :: params ->
-      let ps, enclose =
-        match pre_label with
-        | None -> Printing_stack.parenthesize ps
-        | Some _ -> [], Fun.id
-      in
-      let body = pp ps exp in
-      let args = left_assoc_map ~f:Fun_param.pp param params in
-      let doc = fun_ ?pre_label ~loc ~ext_attrs ~args body in
-      enclose doc
+    enclose doc
 
   and pp_match ~loc ~ext_attrs:(extension, attrs) ps arg = function
     | [] -> assert false (* always at least one case *)
@@ -1177,7 +1242,7 @@ end = struct
       match prefix, dot with
       | None, None -> token_between arr idx DOT
       | Some path, Some dotop ->
-        let fstdot = token_between arr path DOT in 
+        let fstdot = token_between arr path DOT in
         group (fstdot ^^ path ^^ break_before ~spaces:0 dotop)
       | None, Some dotop -> dotop
       | Some _, None -> assert false

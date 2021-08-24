@@ -19,6 +19,27 @@ module Wrappable = struct
   let t = Arg.conv (parse, print)
 end
 
+module Smartly_wrappable = struct
+  type t = Fit_or_vertical | Wrap | Smart
+
+  let parse = function
+    | "fit-or-vertical" -> Ok Fit_or_vertical
+    | "wrap" -> Ok Wrap
+    | "smart" -> Ok Smart
+    | s ->
+      let msg = Printf.sprintf "accepted fit-or-vertical | wrap, got %S" s in
+      Error (`Msg msg)
+
+  let print ppf t =
+    Format.pp_print_string ppf
+      (match t with
+       | Fit_or_vertical -> "fit-or-vertical"
+       | Wrap -> "wrap"
+       | Smart -> "smart")
+
+  let t = Arg.conv (parse, print)
+end
+
 module Parenthesing = struct
   type t = Parens | Begin_end
 
@@ -123,9 +144,9 @@ module Cases = struct
 end
 
 module Applications = struct
-  let layout = ref Wrappable.Wrap
+  let layout = ref Smartly_wrappable.Wrap
   let layout_cmd =
     let open Arg in
     let info = info ~doc:"formatting of function applications" ["fun-app"] in
-    layout := value & opt Wrappable.t Wrap info
+    layout := value & opt Smartly_wrappable.t Wrap info
 end

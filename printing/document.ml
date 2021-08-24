@@ -223,6 +223,10 @@ let (^^) t1 t2 = concat t1 t2
 
 let (^/^) t1 t2 = concat t1 t2 ~sep:(break 1)
 
+let ifflat t1 t2 =
+  (* TODO: assert same locs *)
+  { t1 with txt = ifflat t1.txt t2.txt }
+
 let group t = { t with txt = group t.txt }
 
 let nest n t = { t with txt = nest n t.txt }
