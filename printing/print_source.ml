@@ -157,18 +157,16 @@ end = struct
       pp_attr kind attr_name attr_payload
 
   let attach ?(spaces=1) kind doc attrs =
-    let predoc, postdoc, attrs =
+    let postdoc, attrs =
       match
         List.partition (fun { attr_name; _ } -> attr_name.txt = "ocaml.doc")
           attrs
       with
-      | [], attrs -> None, None, attrs
-      | [ doc ], attrs -> None, Some doc, attrs
-      | [ doc1; doc2 ], attrs -> Some doc1, Some doc2, attrs
-      | doc1 :: rest, attrs ->
-        let rev_rest = List.rev rest in
-        let doc2 = List.hd rev_rest in
-        Some doc1, Some doc2, List.rev_append (List.tl rev_rest) attrs
+      | [], attrs -> None, attrs
+      | docs, attrs ->
+        let rev_docs = List.rev docs in
+        let doc = List.hd rev_docs in
+        Some doc, List.rev_append (List.tl rev_docs) attrs
     in
     let with_attrs =
       match attrs with
@@ -179,24 +177,15 @@ end = struct
             (separate_map (PPrint.break 0) ~f:(pp kind) attr attrs)
         )
     in
-    let with_pre_doc =
-      match predoc with
-      | None -> with_attrs
-      | Some { attr_payload; attr_loc; _ } ->
-        concat ~sep:hardline
-          (pp_doc attr_payload ~loc:attr_loc)
-          with_attrs
-    in
     match postdoc with
-    | None -> with_pre_doc
+    | None -> with_attrs
     | Some { attr_payload; attr_loc; _ } ->
       let doc =
         prefix ~indent:0 ~spaces
-          with_pre_doc
+          with_attrs
           (pp_doc attr_payload ~loc:attr_loc)
       in
-      if kind = Attached_to_structure_item
-      && requirement doc.txt < 80 (* Ugly! *)
+      if kind = Attached_to_structure_item && requirement doc.txt < 80 (* Ugly! *)
       then
         break_after ~spaces:0 doc
       else
@@ -2490,8 +2479,8 @@ end = struct
     match rhs with
     | Some rhs ->
         let rhs = add_constraints rhs ptype_cstrs in
-        let rhs = Attribute.attach_to_top_item rhs ptype_attributes in
-        Binding.pp_simple ?binder ~keyword lhs rhs
+        let binding = Binding.pp_simple ?binder ~keyword lhs rhs in
+        Attribute.attach_to_top_item binding ptype_attributes
     | None ->
         let decl = prefix ~indent:2 ~spaces:1 keyword lhs in
         let decl = add_constraints decl ptype_cstrs in
