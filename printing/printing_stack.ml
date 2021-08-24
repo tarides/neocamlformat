@@ -619,7 +619,8 @@ let needs_parens elt parents =
     List.exists (function
       | Value_binding
       | Expression Pexp_fun _
-      | Expression Pexp_function _ ->
+      | Expression Pexp_function _
+      | Infix_op { on_left = false; _ }->
         false
       | _ -> true) parents
   | Expression Pexp_match _
@@ -667,7 +668,8 @@ let rec normalize = function
       | Pexp_match _
       | Pexp_open _
       | Pexp_try _ ) as keep ::
-    (Then_branch | Expression Pexp_ifthenelse _) :: tl
+    ( Then_branch | Expression Pexp_ifthenelse _
+    | Infix_op { on_left = false; _ }) :: tl
     -> normalize (keep :: tl)
 
   | x :: xs -> x :: normalize xs
