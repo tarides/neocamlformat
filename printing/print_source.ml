@@ -183,12 +183,24 @@ end = struct
       match predoc with
       | None -> with_attrs
       | Some { attr_payload; attr_loc; _ } ->
-        pp_doc attr_payload ~loc:attr_loc ^^ break_before ~spaces with_attrs
+        concat ~sep:hardline
+          (pp_doc attr_payload ~loc:attr_loc)
+          with_attrs
     in
     match postdoc with
     | None -> with_pre_doc
     | Some { attr_payload; attr_loc; _ } ->
-      with_pre_doc ^^ break_before ~spaces (pp_doc attr_payload ~loc:attr_loc)
+      let doc =
+        prefix ~indent:0 ~spaces
+          with_pre_doc
+          (pp_doc attr_payload ~loc:attr_loc)
+      in
+      if kind = Attached_to_structure_item
+      && requirement doc.txt < 80 (* Ugly! *)
+      then
+        break_after ~spaces:0 doc
+      else
+        doc
 
   let has_non_doc =
     List.exists (fun attr ->
