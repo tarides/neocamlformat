@@ -742,6 +742,18 @@ end = struct
             body
         in
         break_after ~spaces:0 unclosed +++ rparen
+      | Pexp_function (c :: cs) when exp.pexp_attributes = [] ->
+        let lbl = string ~loc:lbl.loc (lbl.txt ^ ":") in
+        let ps = Printing_stack.Expression exp.pexp_desc :: ps in
+        let function_, cases =
+          Expression.function_chunks ~loc:exp.pexp_loc
+            ~ext_attrs:exp.pexp_ext_attributes ps c cs
+        in
+        let open_ =
+          (sym ++ lbl) ^^ (lparen ++ break_before ~spaces:0 function_)
+        in
+        let unclosed = open_ ^^ cases in
+        break_after ~spaces:0 unclosed +++ rparen
       | _ ->
         let lbl = string ~loc:lbl.loc (lbl.txt ^ ":") in
         let exp = Expression.pp ps exp in
@@ -754,7 +766,6 @@ end = struct
 
   let rec combine_app_chunks acc = function
     | [] -> acc
-    | `Rparen :: _ -> assert false
     | `Normal d1 :: `Normal d2 :: `Rparen :: rest ->
       (* we're layouting (fun p -> exp)! *)
       let flat_fun = nest 2 @@ break_before d1 ^/^ d2 +++ rparen in
@@ -766,8 +777,20 @@ end = struct
       in
       let acc = acc ^^ group (ifflat flat_fun broken_fun) in
       combine_app_chunks acc rest
+    | `Normal d1 :: `Nobreak d2 :: `Rparen :: rest ->
+      (* we're layouting (function p -> exp ...)! *)
+      let flat_fun = nest 2 @@ break_before d1 ^^ d2 +++ rparen in
+      let broken_fun =
+        break_after ~spaces:0 (
+           nest 2 (group (break_before d1))
+           ^^ nest 2 d2
+         ) +++ rparen
+      in
+      let acc = acc ^^ group (ifflat flat_fun broken_fun) in
+      combine_app_chunks acc rest
     | `Normal doc :: rest ->
       combine_app_chunks (acc ^^ nest 2 @@ group (break_before doc)) rest
+    | _ -> assert false
 
   let smart_arg ps ~prefix:p lbl = function
     | { pexp_desc = Pexp_fun (params, body); pexp_attributes = []; _ } as exp ->
@@ -784,6 +807,17 @@ end = struct
       in
       let second_chunk = group body in
       [ `Normal first_chunk; `Normal second_chunk; `Rparen ]
+    | { pexp_desc = Pexp_function (c :: cs); pexp_attributes = []; _ } as exp ->
+      let ps = [ Printing_stack.Expression exp.pexp_desc ] in
+      let function_, cases =
+        Expression.function_chunks ~loc:exp.pexp_loc
+          ~ext_attrs:exp.pexp_ext_attributes ps c cs
+      in
+      let first_chunk =
+        p ^^ group @@ lparen ++ break_before ~spaces:0 function_
+      in
+      let second_chunk = group cases in
+      [ `Normal first_chunk; `Nobreak second_chunk; `Rparen ]
     | arg ->
       [ `Normal (argument ps (lbl, arg)) ]
 
@@ -884,6 +918,14 @@ end
 
 and Expression : sig
   val pp : Printing_stack.t -> expression -> document
+
+  val function_chunks
+    : loc:Location.t
+    -> ext_attrs:string loc option * attributes
+    -> Printing_stack.t
+    -> case
+    -> case list
+    -> document * document
 
   val fun_chunks
     : loc:Location.t
@@ -1041,15 +1083,19 @@ end = struct
     in
     prefix ++ cases
 
-  and pp_function ~loc ~ext_attrs:(extension, attrs) ps = function
+  and function_chunks ~loc ~ext_attrs:(extension, attrs) ps c cs =
+    let cases = cases ps c cs in
+    let keyword =
+      let kw = token_before ~start:loc.Location.loc_start cases FUNCTION in
+      Keyword.decorate kw ~extension attrs ~later:cases
+    in
+    keyword, cases
+
+  and pp_function ~loc ~ext_attrs ps = function
     | [] -> assert false (* always at least one case *)
     | c :: cs ->
       let ps, enclose = Printing_stack.parenthesize ps in
-      let cases = cases ps c cs in
-      let keyword =
-        let kw = token_before ~start:loc.Location.loc_start cases FUNCTION in
-        Keyword.decorate kw ~extension attrs ~later:cases
-      in
+      let keyword, cases = function_chunks ~loc ~ext_attrs ps c cs in
       enclose (keyword ^^ cases)
 
   and fun_syntactic_elts ~loc ~ext_attrs:(extension, attrs) ~args body =
