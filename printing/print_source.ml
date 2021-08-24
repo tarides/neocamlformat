@@ -381,7 +381,7 @@ end = struct
     | Ptyp_extension ext -> Extension.pp Item ext
 
   and pp_param ps (arg_label, ct) =
-    let ct = pp ps ct in
+    let ct = hang 0 @@ pp ps ct in
     match arg_label with
     | Nolabel -> ct
     | Labelled l ->
