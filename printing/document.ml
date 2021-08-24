@@ -243,7 +243,7 @@ let left_assoc_map ?sep ~f first rest =
   List.fold_left (fun t elt ->
     let elt = f elt in
     match sep with
-    | None -> t ^/^ elt
+    | None -> t ^^ group (break_before elt)
     | Some sep ->
       let sep = token_between t elt sep in
       t ^/^ group (sep ^/^ elt)

@@ -745,8 +745,15 @@ end = struct
 
   let pp_simple ps applied arg args =
     let ps, enclose = Printing_stack.parenthesize ps in
-    let args = separate_map (break 1) ~f:(argument ps) arg args in
-    let doc = prefix ~indent:2 ~spaces:1 applied args in
+    let doc =
+      match !Options.Applications.layout with
+      | Fit_or_vertical ->
+        let args = separate_map (break 1) ~f:(argument ps) arg args in
+        prefix ~indent:2 ~spaces:1 applied args
+      | Wrap ->
+        let args = List.map (argument ps) (arg :: args) in
+        nest 2 @@ left_assoc_map ~f:Fun.id applied args
+    in
     enclose doc
 
   let simple_apply ps exp arg args =

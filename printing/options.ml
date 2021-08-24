@@ -120,5 +120,12 @@ module Cases = struct
         [ "cases-body-on-separate-line" ]
     in
     body_on_separate_line := value & opt Situations.t When_needed info
+end
 
+module Applications = struct
+  let layout = ref Wrappable.Wrap
+  let layout_cmd =
+    let open Arg in
+    let info = info ~doc:"formatting of function applications" ["fun-app"] in
+    layout := value & opt Wrappable.t Wrap info
 end

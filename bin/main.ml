@@ -78,6 +78,7 @@ let cmd =
   and+ () = Match.parens_situations_cmd
   and+ () = Cases.body_indent_cmd
   and+ () = Cases.body_on_separate_line_cmd
+  and+ () = Applications.layout_cmd
   and+ width = Arg.(value & opt int 80 & info ["w"; "width"])
   and+ files = Arg.(value & pos_all file [] & info ~doc:"files to format" [])
   and+ ignore_docstrings = Arg.(value & flag & info ["ignore-docstrings"])
