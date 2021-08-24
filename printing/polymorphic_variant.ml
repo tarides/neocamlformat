@@ -45,7 +45,7 @@ end
 (* Looks a lot like [left_assoc_map] … except for the first element...
    TODO: generalize a bit [left_assoc_map] and rename it to [dock] *)
 let dock_fields ~opening_token x xs =
-  let fmt x = nest 2 (group (break_before x)) in
+  let fmt x = nest 2 (PPrint.space ++ x) in
   List.fold_left
     (fun acc elt ->
         let elt = fmt elt in
