@@ -931,7 +931,8 @@ end = struct
       | Some guard ->
         let guard = pp ps guard in
         let when_ = token_between lhs guard WHEN in
-        lhs ^/^ group (when_ ^/^ guard)
+        prefix ~spaces:1 ~indent:2 lhs
+          (group (prefix ~indent:2 ~spaces:1 when_ guard))
     in
     let arrow = token_between lhs rhs MINUSGREATER in
     let lhs = prefix ~indent:2 ~spaces:1 lhs arrow in
