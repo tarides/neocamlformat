@@ -114,7 +114,8 @@ let needs_parens elt parents =
   | Pattern Ppat_lazy _ ->
     List.exists (function
         | Function_parameter
-        | Value_binding -> true
+        | Value_binding
+        | Pattern Ppat_open _ -> true
         | Pattern (Ppat_construct _ | Ppat_variant _) ->
           (* Not necessary: but better style. *)
           true
@@ -125,7 +126,7 @@ let needs_parens elt parents =
   | Pattern Ppat_variant (_, Some _)
   | Pattern Ppat_construct (_, Some _) ->
     List.exists (function
-        | Pattern Ppat_lazy _
+        | Pattern (Ppat_lazy _ | Ppat_open _)
         | Function_parameter
         | Value_binding -> true
         | Pattern ( Ppat_construct _
@@ -138,7 +139,8 @@ let needs_parens elt parents =
     List.exists (function
         | Pattern ( Ppat_lazy _
                   | Ppat_construct _
-                  | Ppat_variant _ )
+                  | Ppat_variant _
+                  | Ppat_open _)
         | Function_parameter
         | Value_binding ->
           true
@@ -172,7 +174,8 @@ let needs_parens elt parents =
                   | Ppat_construct _
                   | Ppat_variant _
                   | Ppat_lazy _
-                  | Ppat_exception _)
+                  | Ppat_exception _
+                  | Ppat_open _)
         | Cons_constr _
         | Function_parameter
         | Value_binding -> true

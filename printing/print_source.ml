@@ -681,11 +681,11 @@ end = struct
   and pp_exception ~loc ps p =
     string ~loc "exception" ^/^ pp ps p
 
-  and pp_open lid p =
+  and pp_open ps lid p =
     let lid = Longident.pp lid in
-    let pat = pp [] p in
+    let pat = pp ps p in
     let dot = token_between lid pat DOT in
-    lid ^^ dot ^^ parens (break_before ~spaces:0 pat)
+    lid ^^ dot ^^ break_before ~spaces:0 pat
 
   and pp_var v = Longident.pp_ident v
 
@@ -713,7 +713,7 @@ end = struct
         | Ppat_unpack (name, typ) -> pp_unpack name typ
         | Ppat_exception p -> pp_exception ~loc ps p
         | Ppat_extension ext -> Extension.pp Item ext
-        | Ppat_open (lid, p) -> pp_open lid p
+        | Ppat_open (lid, p) -> pp_open ps lid p
       )
 end
 
