@@ -191,62 +191,6 @@ let break_after ?(spaces=1) t =
 let break_before ?(spaces=1) t =
   { t with txt = break spaces ^^ t.txt }
 
-module Two_separated_parts = struct
-  (** Degrades in the following way:
-      {v
-        Foo of bar
-
-        Foo of
-          bar
-
-        Foo
-          of
-          bar
-      v}
-  *)
-  let sep_with_first fst snd ~sep =
-    let cmts_doc =
-      match comments_between fst snd with
-      | No_comment -> PPrint.empty
-      | Attach_fst doc
-      | Attach_snd doc -> doc ^^ break 1
-    in
-    let txt =
-      group (
-        group (fst.txt ^^ nest 2 (break 1 ^^ cmts_doc ^^ sep))
-        ^^ nest 2 (break 1 ^^ snd.txt)
-      )
-    in
-    { txt; loc = merge_locs fst.loc snd.loc}
-
-  (** Degrades in the following way:
-      {v
-        Foo of bar
-
-        Foo
-          of bar
-
-        Foo
-          of
-          bar
-      v}
-  *)
-  let sep_with_second fst snd ~sep =
-    let cmts_doc =
-      match comments_between fst snd with
-      | No_comment -> PPrint.empty
-      | Attach_fst doc
-      | Attach_snd doc -> doc ^^ break 1
-    in
-    let txt =
-      group (
-        fst.txt ^^
-        nest 2 (break 1 ^^ cmts_doc ^^ group (sep ^/^ snd.txt))
-      )
-    in
-    { txt; loc = merge_locs fst.loc snd.loc }
-end
-
 (* Wrapping PPrint combinators *)
 
 let (^^) t1 t2 = concat t1 t2
@@ -288,6 +232,43 @@ let flow_map sep f first rest =
 
 let flow sep first rest =
   flow_map sep (fun x -> x) first rest
+
+module Two_separated_parts = struct
+  (** Degrades in the following way:
+      {v
+        Foo of bar
+
+        Foo of
+          bar
+
+        Foo
+          of
+          bar
+      v}
+  *)
+  let sep_with_first fst snd ~sep =
+    let sep = token_between fst snd sep in
+    prefix ~indent:2 ~spaces:1
+      (group (fst ^^ nest 2 (break_before sep)))
+      snd
+
+  (** Degrades in the following way:
+      {v
+        Foo of bar
+
+        Foo
+          of bar
+
+        Foo
+          of
+          bar
+      v}
+  *)
+  let sep_with_second fst snd ~sep =
+    let sep = token_between fst snd sep in
+    prefix ~indent:2 ~spaces:1
+      fst (group (sep ^/^ snd))
+end
 
 module Enclosed_separated = struct
   type raw = t * t list

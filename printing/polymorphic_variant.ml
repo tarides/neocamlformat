@@ -28,15 +28,13 @@ end = struct
     | Rtag (tag, has_empty_constr, p :: ps) ->
       let tag = Tag.pp tag in
       let params = pp_params p ps in
-      let of_params =
-        let of_ = token_between tag params OF in
-        if has_empty_constr then
-          let sep = PPrint.(break 1 ^^ ampersand ^^ break 1) in
-          concat of_ ~sep params
+      let params =
+        if not has_empty_constr then
+          params
         else
-          of_ ^/^ params
+          PPrint.ampersand ++ break_before params
       in
-      tag ^/^ of_params
+      Two_separated_parts.sep_with_first tag params ~sep:OF
 
   let pp { prf_desc; prf_attributes; _ } =
     let desc = pp_desc prf_desc in

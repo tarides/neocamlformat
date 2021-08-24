@@ -43,8 +43,8 @@ let gadt_constructor name args res_ty attributes =
     if has_args args then
       let args = constructor_arguments args in
       let res  = !pp_core_type [] (Option.get res_ty) in
-      let colon = string ~loc:(loc_between name args) ":" in
-      let arrow = string ~loc:(loc_between args res) "->" in
+      let colon = token_between name args COLON in
+      let arrow = token_between args res MINUSGREATER in
       group (
         name ^^
         nest 2 (
@@ -54,7 +54,7 @@ let gadt_constructor name args res_ty attributes =
       )
     else
       let res  = !pp_core_type [] (Option.get res_ty) in
-      Two_separated_parts.sep_with_second name res ~sep:colon
+      Two_separated_parts.sep_with_second name res ~sep:COLON
   in
   !attach_attributes decl attributes
 
@@ -63,7 +63,7 @@ let simple_constructor name args attributes =
   let decl =
     if has_args args then
       let args = constructor_arguments args in
-      Two_separated_parts.sep_with_first name args ~sep:!^"of"
+      Two_separated_parts.sep_with_first name args ~sep:OF
     else
       name
   in
@@ -77,7 +77,7 @@ let pp_constructor name args res_ty attributes =
 let pp_rebind name rebound attributes =
   let name = str name in
   let rebound = !pp_longident rebound in
-  let decl = Two_separated_parts.sep_with_first name rebound ~sep:equals in
+  let decl = Two_separated_parts.sep_with_first name rebound ~sep:EQUAL in
   !attach_attributes decl attributes
 
 let pp_decl { pcd_name; pcd_args; pcd_res; pcd_attributes; _ } =
