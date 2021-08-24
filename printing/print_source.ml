@@ -927,15 +927,21 @@ end = struct
     let rhs = pp ps pc_rhs in
     let lhs =
       match pc_guard with
-      | None -> lhs
+      | None ->
+        let arrow = token_between lhs rhs MINUSGREATER in
+        prefix ~indent:2 ~spaces:1 lhs arrow
       | Some guard ->
-        let guard = pp ps guard in
-        let when_ = token_between lhs guard WHEN in
-        prefix ~spaces:1 ~indent:2 lhs
-          (group (prefix ~indent:2 ~spaces:1 when_ guard))
+        let guarded =
+          let guard = pp ps guard in
+          let when_ = token_between lhs guard WHEN in
+          group (prefix ~indent:2 ~spaces:1 when_ guard)
+        in
+        let with_arrow =
+          let arrow = token_between guarded rhs MINUSGREATER in
+          group (guarded ^/^ arrow)
+        in
+        prefix ~spaces:1 ~indent:2 lhs with_arrow
     in
-    let arrow = token_between lhs rhs MINUSGREATER in
-    let lhs = prefix ~indent:2 ~spaces:1 lhs arrow in
     match !Options.Cases.body_on_separate_line with
     | Always -> lhs ^^ nest !Options.Cases.body_indent (hardline ++ rhs)
     | When_needed -> prefix ~indent:!Options.Cases.body_indent ~spaces:1 lhs rhs
