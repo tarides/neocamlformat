@@ -2121,10 +2121,40 @@ end = struct
     | Pstr_attribute attr -> Attribute.pp Free_floating attr
     | Pstr_extension (ext, attrs) -> pp_extension ext attrs
 
+  let rec group_by_desc acc = function
+    | [] -> [ List.rev acc ]
+    | i :: is ->
+      if same_group i (List.hd acc) then
+        group_by_desc (i :: acc) is
+      else
+        List.rev acc :: group_by_desc [ i ] is
+  and same_group d1 d2 =
+    match d1.pstr_desc, d2.pstr_desc with
+    | Pstr_value _, Pstr_value _
+    | Pstr_primitive _, Pstr_primitive _
+    | Pstr_type _, Pstr_type _
+    | Pstr_typext _, Pstr_typext _
+    | Pstr_exception _, Pstr_exception _
+    | Pstr_module _, Pstr_module _
+    | Pstr_recmodule _, Pstr_recmodule _
+    | Pstr_modtype _, Pstr_modtype _
+    | Pstr_open _, Pstr_open _
+    | Pstr_class _, Pstr_class _
+    | Pstr_class_type _, Pstr_class_type _
+    | Pstr_include _, Pstr_include _
+    | Pstr_attribute _, Pstr_attribute _
+    | Pstr_extension _, Pstr_extension _ -> true
+    | _ -> false
+
   let pp_nonempty i is =
-    let i = pp_item ~first:true i in
-    let is = List.map pp_item is in
-    separate (twice hardline) i is
+    match
+      group_by_desc [ i ] is
+      |> List.map (List.map pp_item)
+      |> List.map collate_toplevel_items
+    with
+    | [] -> assert false
+    | [ doc ] -> doc
+    | doc :: docs -> separate (twice hardline) doc docs
 end
 
 and Signature : sig
@@ -2185,7 +2215,41 @@ end = struct
     | Psig_class cds -> Class_description.pp cds
     | Psig_class_type ctds -> Class_type_declaration.pp ctds
 
-  let pp_nonempty = separate_map (twice hardline) ~f:pp_item
+  let rec group_by_desc acc = function
+    | [] -> [ List.rev acc ]
+    | i :: is ->
+      if same_group i (List.hd acc) then
+        group_by_desc (i :: acc) is
+      else
+        List.rev acc :: group_by_desc [ i ] is
+  and same_group d1 d2 =
+    match d1.psig_desc, d2.psig_desc with
+    | Psig_value _, Psig_value _
+    | Psig_type _, Psig_type _
+    | Psig_typesubst _, Psig_typesubst _
+    | Psig_typext _, Psig_typext _
+    | Psig_exception _, Psig_exception _
+    | Psig_module _, Psig_module _
+    | Psig_recmodule _, Psig_recmodule _
+    | Psig_modsubst _, Psig_modsubst _
+    | Psig_modtype _, Psig_modtype _
+    | Psig_open _, Psig_open _
+    | Psig_include _, Psig_include _
+    | Psig_attribute _, Psig_attribute _
+    | Psig_extension _, Psig_extension _
+    | Psig_class _, Psig_class _
+    | Psig_class_type _, Psig_class_type _ -> true
+    | _ -> false
+
+  let pp_nonempty i is =
+    match
+      group_by_desc [ i ] is
+      |> List.map (List.map pp_item)
+      |> List.map collate_toplevel_items
+    with
+    | [] -> assert false
+    | [ doc ] -> doc
+    | doc :: docs -> separate (twice hardline) doc docs
 end
 
 and Value_description : sig

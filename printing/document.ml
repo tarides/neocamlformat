@@ -177,6 +177,32 @@ let concat ?(sep=PPrint.empty) ?(indent=0) t1 t2 =
   in
   { txt; loc = merge_locs t1.loc t2.loc }
 
+let collate_toplevel_items lst =
+  let rec insert_blanks = function
+    | [] -> invalid_arg "collate_toplevel_items"
+    | [ x ] -> [ `Doc x ]
+    | x1 :: x2 :: rest ->
+      `Doc x1
+      :: (if requirement x1.txt > 80 (* TODO: width in config *)
+          || requirement x2.txt > 80 (* TODO: width in config *)
+          then `Twice
+          else `Once)
+      :: insert_blanks (x2 :: rest)
+  in
+  let rec join = function
+    | `Doc x1 :: `Twice :: `Doc x2 :: rest ->
+      let joined = concat x1 x2 ~sep:(twice hardline) in
+      join (`Doc joined :: rest)
+    | `Doc x1 :: `Once :: `Doc x2 :: rest ->
+      let joined = concat x1 x2 ~sep:hardline in
+      join (`Doc joined :: rest)
+    | otherwise ->
+      otherwise
+  in
+  match join (insert_blanks lst) with
+  | [ `Doc x ] -> x
+  | _ -> assert false
+
 let separate sep doc docs =
   match docs with
   | [] -> doc
