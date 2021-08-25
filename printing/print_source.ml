@@ -786,31 +786,26 @@ end = struct
     | Labelled lbl -> suffix ~prefix:tilde lbl
     | Optional lbl -> suffix ~prefix:qmark lbl
 
+  type argument =
+    | Function of {
+        fst_chunk: document;
+        break: bool;
+        snd_chunk: document;
+      }
+    | Fully_built of document
+
   let rec combine_app_chunks acc = function
     | [] -> acc
-    | `Normal d1 :: `Normal d2 :: `Rparen :: rest ->
-      (* we're layouting (fun p -> exp)! *)
-      let d1 = break_before d1 in
-      let fun_ =
-        break_after ~spaces:0 (
-           nest 2 @@ (ifflat d1 (group d1)) ^/^ d2
-         ) +++ rparen
+    | Function { fst_chunk; break; snd_chunk } :: rest ->
+      let d1 = break_before fst_chunk in
+      let d2 = if break then break_before snd_chunk else snd_chunk in
+      let fn =
+        break_after ~spaces:0 (nest 2 @@ (ifflat d1 (group d1)) ^^ d2)
+        +++ rparen
       in
-      let acc = acc ^^ group fun_ in
-      combine_app_chunks acc rest
-    | `Normal d1 :: `Nobreak d2 :: `Rparen :: rest ->
-      (* we're layouting (function p -> exp ...)! *)
-      let d1 = break_before d1 in
-      let function_ =
-        break_after ~spaces:0 (
-           nest 2 @@ (ifflat d1 (group d1)) ^^ d2
-         ) +++ rparen
-      in
-      let acc = acc ^^ group function_ in
-      combine_app_chunks acc rest
-    | `Normal doc :: rest ->
+      combine_app_chunks (acc ^^ group fn) rest
+    | Fully_built doc :: rest ->
       combine_app_chunks (acc ^^ nest 2 @@ group (break_before doc)) rest
-    | _ -> assert false
 
   let smart_arg ps ~prefix:p lbl = function
     | { pexp_desc = Pexp_fun (params, body); pexp_attributes = []; _ } as exp ->
@@ -822,24 +817,24 @@ end = struct
       let first_chunk =
         group ((prefix ~indent:2 ~spaces:1 fun_ args) ^/^ arrow)
       in
-      let first_chunk =
+      let fst_chunk =
         p ^^ group @@ lparen ++ break_before ~spaces:0 first_chunk
       in
-      let second_chunk = group body in
-      [ `Normal first_chunk; `Normal second_chunk; `Rparen ]
+      let snd_chunk = group body in
+      Function { fst_chunk; snd_chunk; break = true }
     | { pexp_desc = Pexp_function (c :: cs); pexp_attributes = []; _ } as exp ->
       let ps = [ Printing_stack.Expression exp.pexp_desc ] in
       let function_, cases =
         Expression.function_chunks ~loc:exp.pexp_loc
           ~ext_attrs:exp.pexp_ext_attributes ps c cs
       in
-      let first_chunk =
+      let fst_chunk =
         p ^^ group @@ lparen ++ break_before ~spaces:0 function_
       in
-      let second_chunk = group cases in
-      [ `Normal first_chunk; `Nobreak second_chunk; `Rparen ]
+      let snd_chunk = group cases in
+      Function { fst_chunk; snd_chunk; break = false }
     | arg ->
-      [ `Normal (argument ps (lbl, arg)) ]
+      Fully_built (argument ps (lbl, arg))
 
   let smart_arg ps (lbl, exp) =
     match lbl with
@@ -882,7 +877,7 @@ end = struct
         if nb_labels > 4 && len_labels > 8 then
           fit_or_vertical ()
         else
-          let args = List.concat_map (smart_arg ps) (arg :: args) in
+          let args = List.map (smart_arg ps) (arg :: args) in
           combine_app_chunks applied args
     in
     enclose doc
