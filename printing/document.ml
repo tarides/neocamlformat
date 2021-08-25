@@ -2,7 +2,7 @@ include PPrint
 open Source_parsing
 open Location
 
-let can_shift_lines init_col s =
+let can_shift_lines comment init_col s =
   let rec all_blank ~from ~to_ =
     from = to_ ||
     (String.get s from = ' ' && all_blank ~from:(from + 1) ~to_)
@@ -14,19 +14,19 @@ let can_shift_lines init_col s =
       let from = j + 1 in
       let to_ = from + init_col in
       begin try
-        String.get s (j - 1) = '\\' && all_blank ~from ~to_
+        (comment || String.get s (j - 1) = '\\') && all_blank ~from ~to_
       with Invalid_argument _ (* out of bounds *) ->
         false
       end && aux to_
   in
   aux 0
 
-class verbatim_string ?adjust_indent s : PPrint.custom =
+class verbatim_string ?(comment=false) ?adjust_indent s : PPrint.custom =
   let req = if String.contains s '\n' then infinity else String.length s in
   let init_col =
     Option.bind adjust_indent (fun (loc:Location.t) ->
       let init_col = loc.loc_start.pos_cnum - loc.loc_start.pos_bol in
-      if can_shift_lines init_col s
+      if can_shift_lines comment init_col s
       then Some init_col
       else None
     )
@@ -80,8 +80,8 @@ class verbatim_string ?adjust_indent s : PPrint.custom =
       output#substring s 0 req
   end
 
-let pp_verbatim_string ?adjust_indent s =
-  custom (new verbatim_string ?adjust_indent s)
+let pp_verbatim_string ?comment ?adjust_indent s =
+  custom (new verbatim_string ?comment ?adjust_indent s)
 
 let merge_locs l1 l2 =
   { Location.loc_start = l1.loc_start; loc_end = l2.loc_end }
@@ -89,8 +89,12 @@ let merge_locs l1 l2 =
 let loc_between t1 t2 =
   { Location.loc_start = t1.loc.loc_end; loc_end = t2.loc.loc_start }
 
-let comment (s, _) =
-  !^"(*" ^^ pp_verbatim_string s ^^ !^"*)"
+let comment (s, (l : Location.t)) =
+  let loc_start =
+    { l.loc_start with pos_cnum = l.loc_start.pos_cnum + 2 }
+  in
+  let l = { l with loc_start } in
+  !^"(*" ^^ pp_verbatim_string ~comment:true ~adjust_indent:l s ^^ !^"*)"
 
 type comments =
   | No_comment
