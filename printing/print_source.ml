@@ -74,8 +74,12 @@ end = struct
     | Pconst_char c ->
       let c = Char.escaped c in
       squotes (string ~loc c)
-    | Pconst_string (s, None)         -> dquotes (pp_string_lit ~loc s)
-    | Pconst_string (s, Some delim)   -> pp_quoted_string ~loc ~delim s
+    | Pconst_string (_, None) ->
+      let s = Source_parsing.Source.source_between loc.loc_start loc.loc_end in
+      quoted_string ~adjust_indent:true ~loc s
+    | Pconst_string (_, Some _)   ->
+      let s = Source_parsing.Source.source_between loc.loc_start loc.loc_end in
+      quoted_string ~loc s
 end
 
 module Polymorphic_variant_tag : sig

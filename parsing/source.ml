@@ -125,19 +125,11 @@ let print_tok : Parser.token -> string = function
   | DOCSTRING _ -> "DOCSTRING"
   | EOL -> "EOL"
 
-let source_between (start : Lexing.position) (stop : Lexing.position) tok =
+let source_between (start : Lexing.position) (stop : Lexing.position) =
   let pos = start.pos_cnum in
   let len = stop.pos_cnum - start.pos_cnum in
-  begin try
-      assert (pos >= 0);
-      assert (len > 0);
-    with exn ->
-      Format.eprintf "source_between %d:%d -- %d:%d: %s@."
-        start.pos_lnum (start.pos_cnum - start.pos_bol)
-        stop.pos_lnum (stop.pos_cnum - stop.pos_bol)
-        (print_tok tok) ;
-      raise exn
-  end;
+  assert (pos >= 0);
+  assert (len > 0);
   String.sub !source pos len
 
 let lexbuf_set_pos lexbuf pos =
@@ -145,7 +137,15 @@ let lexbuf_set_pos lexbuf pos =
   lexbuf.lex_curr_p <- pos
 
 let loc_of_token_between ~start ~stop token =
-  let sub = source_between start stop token in
+  let sub =
+    try source_between start stop
+    with Assert_failure _ as exn ->
+      Format.eprintf "loc_of_token_between %d:%d -- %d:%d: %s@."
+        start.pos_lnum (start.pos_cnum - start.pos_bol)
+        stop.pos_lnum (stop.pos_cnum - stop.pos_bol)
+        (print_tok token) ;
+      raise exn
+  in
   let lexbuf = Lexing.from_string sub in
   Lexer.init ();
   lexbuf_set_pos lexbuf start;

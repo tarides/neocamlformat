@@ -2,12 +2,51 @@ include PPrint
 open Source_parsing
 open Location
 
-class verbatim_string s : PPrint.custom =
+let can_shift_lines init_col s =
+  let rec all_blank ~from ~to_ =
+    from = to_ ||
+    (String.get s from = ' ' && all_blank ~from:(from + 1) ~to_)
+  in
+  let rec aux i =
+    match String.index_from_opt s i '\n' with
+    | None -> true
+    | Some j ->
+      let from = j + 1 in
+      let to_ = from + init_col in
+      begin try
+        String.get s (j - 1) = '\\' && all_blank ~from ~to_
+      with Invalid_argument _ (* out of bounds *) ->
+        false
+      end && aux to_
+  in
+  aux 0
+
+class verbatim_string ?adjust_indent s : PPrint.custom =
   let req = if String.contains s '\n' then infinity else String.length s in
+  let init_col =
+    Option.bind adjust_indent (fun (loc:Location.t) ->
+      let init_col = loc.loc_start.pos_cnum - loc.loc_start.pos_bol in
+      if can_shift_lines init_col s
+      then Some init_col
+      else None
+    )
+  in
   object
     method requirement = req
 
-    method pretty output state _indent flattening =
+    method pretty output state _ flattening =
+      let shift =
+        match init_col with
+        | None -> `Done
+        | Some init_col ->
+          let shift = state.column - init_col in
+          if shift = 0 then
+            `Done
+          else if shift > 0 then
+            `Positive (shift, String.init shift (Fun.const ' '))
+          else
+            `Negative (abs shift)
+      in
       let rec aux i =
         match String.index_from_opt s i '\n' with
         | Some j ->
@@ -15,7 +54,19 @@ class verbatim_string s : PPrint.custom =
           if j - i > 0 then output#substring s i (j - i);
           output#char '\n';
           state.line <- state.line + 1;
-          state.column <- 0;
+          let j =
+            match shift with
+            | `Done ->
+              state.column <- 0;
+              j
+            | `Positive (len, str) ->
+              output#substring str 0 len;
+              state.column <- len;
+              j
+            | `Negative i ->
+              state.column <- 0;
+              j + i
+          in
           aux (j + 1)
         | None ->
           let len = String.length s - i in
@@ -29,8 +80,8 @@ class verbatim_string s : PPrint.custom =
       output#substring s 0 req
   end
 
-let pp_verbatim_string s =
-  custom (new verbatim_string s)
+let pp_verbatim_string ?adjust_indent s =
+  custom (new verbatim_string ?adjust_indent s)
 
 let merge_locs l1 l2 =
   { Location.loc_start = l1.loc_start; loc_end = l2.loc_end }
@@ -73,8 +124,9 @@ let str s = { s with txt = string s.txt }
 let arbitrary_string ~loc x =
   { txt = arbitrary_string x; loc }
 
-let quoted_string ~loc s =
-  let txt = pp_verbatim_string s in
+let quoted_string ?adjust_indent ~loc s =
+  let adjust_indent = Option.map (Fun.const loc) adjust_indent in
+  let txt = pp_verbatim_string ?adjust_indent s in
   { txt; loc }
 
 let string ~loc x =
