@@ -102,7 +102,7 @@ module rec Attribute : sig
   val attach_to_item : ?spaces:int -> document -> attributes -> document
   val attach_to_top_item : document -> attributes -> document
 
-  val extract_text : attributes -> attributes * attributes
+  val extract_text : item_start_pos:Lexing.position -> attributes -> attributes * attributes
   val prepend_text : attributes -> document -> document list
 end = struct
   type kind =
@@ -208,15 +208,36 @@ end = struct
   let attach_to_top_item doc =
     attach Attached_to_structure_item doc
 
-  let extract_text =
-    List.partition (fun { attr_name; _ } -> attr_name.txt = "ocaml.text")
+  let extract_text ~item_start_pos =
+    let rec aux acc = function
+      | { attr_name = { txt = "ocaml.text" | "ocaml.doc"; _ };
+          attr_loc; _ } as attr
+        :: attrs
+        when Source_parsing.Comments.compare_pos
+            attr_loc.loc_start item_start_pos <= 0 ->
+        aux (attr :: acc) attrs
+      | attrs -> List.rev acc, attrs
+    in
+    aux []
 
-  let prepend_text text doc =
+  let prepend_text attrs doc =
+    let text, docstring =
+      List.partition (fun { attr_name; _ } -> attr_name.txt = "ocaml.text")
+        attrs
+    in
+    let doc =
+      match docstring with
+      | [] -> doc
+      | [ { attr_loc = loc; attr_payload; _} ] ->
+        concat ~sep:hardline (pp_doc ~loc attr_payload) doc
+      | _ -> assert false
+    in
     match text with
     | [] -> [ doc ]
     | text :: texts ->
       let texts =
-        separate_map PPrint.hardline ~f:(Attribute.pp Free_floating)
+        separate_map PPrint.hardline ~f:(fun { attr_payload; attr_loc; _} ->
+            pp_doc ~loc:attr_loc attr_payload)
           text texts
       in
       [ texts; doc ]
@@ -1013,7 +1034,10 @@ end = struct
       let previous_vb = ref None in
       List.concat_map (fun vb ->
         let text, vb =
-          let text, attrs = Attribute.extract_text vb.pvb_attributes in
+          let text, attrs =
+            Attribute.extract_text vb.pvb_attributes
+              ~item_start_pos:vb.pvb_loc.loc_start
+          in
           text, { vb with pvb_attributes = attrs }
         in
         let binding = Value_binding.pp Attached_to_item vb in
@@ -2149,7 +2173,10 @@ end = struct
       let previous_vb = ref None in
       List.concat_map (fun vb ->
         let text, vb =
-          let text, attrs = Attribute.extract_text vb.pvb_attributes in
+          let text, attrs =
+            Attribute.extract_text ~item_start_pos:vb.pvb_loc.loc_start
+              vb.pvb_attributes
+          in
           text, { vb with pvb_attributes = attrs }
         in
         let binding = Value_binding.pp Attached_to_structure_item vb in
@@ -2194,7 +2221,10 @@ end = struct
       let i = ref 0 in
       List.concat_map (fun mb ->
         let text, mb =
-          let text, attrs = Attribute.extract_text mb.pmb_attributes in
+          let text, attrs =
+            Attribute.extract_text mb.pmb_attributes
+              ~item_start_pos:mb.pmb_loc.loc_start
+          in
           text, { mb with pmb_attributes = attrs }
         in
         let keyword = if !i = 0 then "module rec" else "and" in
@@ -2301,7 +2331,10 @@ end = struct
       let i = ref 0 in
       List.concat_map (fun md ->
         let text, md =
-          let text, attrs = Attribute.extract_text md.pmd_attributes in
+          let text, attrs =
+            Attribute.extract_text md.pmd_attributes
+              ~item_start_pos:md.pmd_loc.loc_start
+          in
           text, { md with pmd_attributes = attrs }
         in
         let keyword = if !i = 0 then "module rec" else "and" in
@@ -2619,7 +2652,10 @@ end = struct
       let i = ref 0 in
       List.concat_map (fun decl ->
         let text, decl =
-          let text, attrs = Attribute.extract_text decl.ptype_attributes in
+          let text, attrs =
+            Attribute.extract_text decl.ptype_attributes
+              ~item_start_pos:decl.ptype_loc.loc_start
+          in
           text, { decl with ptype_attributes = attrs }
         in
         let keyword =
@@ -2637,7 +2673,10 @@ end = struct
       let i = ref 0 in
       List.concat_map (fun decl ->
         let text, decl =
-          let text, attrs = Attribute.extract_text decl.ptype_attributes in
+          let text, attrs =
+            Attribute.extract_text decl.ptype_attributes
+              ~item_start_pos:decl.ptype_loc.loc_start
+          in
           text, { decl with ptype_attributes = attrs }
         in
         let keyword = String_prefix (if !i = 0 then "type" else "and") in
@@ -2765,7 +2804,10 @@ end = struct
       let previous_vb = ref None in
       List.concat_map (fun vb ->
         let text, vb =
-          let text, attrs = Attribute.extract_text vb.pvb_attributes in
+          let text, attrs =
+            Attribute.extract_text vb.pvb_attributes
+              ~item_start_pos:vb.pvb_loc.loc_start
+          in
           text, { vb with pvb_attributes = attrs }
         in
         let binding = Value_binding.pp Attached_to_item vb in
@@ -3060,7 +3102,10 @@ end = struct
       List.concat_map (fun cd ->
         let { pci_virt; pci_params; pci_name; pci_term_params; pci_type;
               pci_expr; pci_loc; pci_attributes } = cd in
-        let text, pci_attributes = Attribute.extract_text pci_attributes in
+        let text, pci_attributes =
+          Attribute.extract_text pci_attributes
+              ~item_start_pos:pci_loc.loc_start
+        in
         let lhs =
           Type_declaration.with_params ~always_enclosed:true ~enclosing:brackets
             pci_params (str pci_name)
@@ -3104,7 +3149,10 @@ end = struct
       List.concat_map (fun cd ->
         let { pci_virt; pci_params; pci_name; pci_term_params; pci_type;
               pci_expr; pci_loc; pci_attributes } = cd in
-        let text, pci_attributes = Attribute.extract_text pci_attributes in
+        let text, pci_attributes =
+          Attribute.extract_text pci_attributes
+            ~item_start_pos:pci_loc.loc_start
+        in
         let lhs =
           Type_declaration.with_params ~always_enclosed:true ~enclosing:brackets
             pci_params (str pci_name)
@@ -3149,7 +3197,10 @@ end = struct
       List.concat_map (fun cd ->
         let { pci_virt; pci_params; pci_name; pci_term_params; pci_type;
               pci_expr; pci_loc; pci_attributes } = cd in
-        let text, pci_attributes = Attribute.extract_text pci_attributes in
+        let text, pci_attributes =
+          Attribute.extract_text pci_attributes
+            ~item_start_pos:pci_loc.loc_start
+        in
         let lhs =
           Type_declaration.with_params ~always_enclosed:true ~enclosing:brackets
             pci_params (str pci_name)

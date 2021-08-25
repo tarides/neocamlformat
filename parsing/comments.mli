@@ -2,6 +2,8 @@ type t
 
 val init : unit -> t
 
+val compare_pos: Lexing.position -> Lexing.position -> int
+
 val between : Lexing.position -> Lexing.position -> unit ->
   (string * Location.t) list
 
