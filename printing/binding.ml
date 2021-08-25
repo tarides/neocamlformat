@@ -75,11 +75,9 @@ module Module = struct
       | None, Sig    -> params, token_between params body COLON
       | Sig sg, Struct ->
         let sep =
-          let txt =
-            let open PPrint in
-            group (group (break 1 ^^ colon) ^^ nest 2 (break 1 ^^ !^"sig"))
-          in
-          { txt; loc = loc_between params sg }
+          let colon = token_between params sg COLON in
+          let sig_ = token_between colon sg SIG in
+          prefix ~indent:2 ~spaces:1 (group (break_before colon)) sig_
         in
         let doc =
           group (params ^^ nest 2 sep)

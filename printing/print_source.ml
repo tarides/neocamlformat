@@ -2229,9 +2229,7 @@ end = struct
             let modif = token_between kw lhs tok in
             kw ^/^ modif
         in
-        let binding =
-          Binding.Module.pp ~context:Struct ~keyword (Module_binding.pp mb)
-        in
+        let binding = Binding.Module.pp ~context:Struct ~keyword binding in
         previous_mb := Some binding;
         Attribute.prepend_text text binding
       ) mbs
