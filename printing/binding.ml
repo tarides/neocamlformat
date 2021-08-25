@@ -61,13 +61,18 @@ module Module = struct
     attributes: document;
   }
 
+  let located_body = function
+    | Generic doc
+    | Items doc -> doc
+
   let pp ~keyword ~context { name; params; constr; body; attributes } =
     let pre = prefix ~indent:2 ~spaces:1 keyword name in
     let params = pp_params params in
     let with_constraint, binder =
+      let body = located_body body in
       match constr, context with
-      | None, Struct -> params, "="
-      | None, Sig -> params, ":"
+      | None, Struct -> params, token_between params body EQUAL
+      | None, Sig    -> params, token_between params body COLON
       | Sig sg, Struct ->
         let sep =
           let txt =
@@ -80,32 +85,31 @@ module Module = struct
           group (params ^^ nest 2 sep)
           ^^ nest 2 (PPrint.hardline ++ sg)
         in
-        doc, "end ="
+        let end_ = token_between doc body END in
+        let eq = token_between end_ body EQUAL in
+        doc, end_ ^/^ eq
       | Mty constraint_, Struct ->
         let doc = attach_annot params ~sep:COLON (Some constraint_) in
-        doc, "="
+        doc, token_between doc body EQUAL
       | _ , Sig -> assert false
     in
     let binder, rhs =
       match body with
       | Items items ->
         let doc =
-          enclose ~before:PPrint.empty ~after:PPrint.(hardline ^^ !^"end")
+          let end_ = token_between items attributes END in
+          concat ~sep:hardline
             (nest 2 (hardline ++ items))
+            end_
         in
-        binder ^ (match context with Struct -> " struct" | Sig -> " sig"), doc
+        let open_ =
+          token_between binder doc
+            (match context with Struct -> STRUCT | Sig -> SIG)
+        in
+        binder ^/^ open_, doc
       | Generic doc ->
         binder, nest 2 (break_before doc)
     in
-    let binder = (* Gloups. *)
-      let fake =
-        token_between with_constraint rhs
-          (match context with
-           | Struct -> EQUAL
-           | Sig -> COLON)
-      in
-      string ~loc:fake.loc binder
-    in
-    let doc = pre ^^ group (with_constraint ^/^ binder) ^^ rhs in
+    let doc = pre ^^ group (with_constraint ^/^ group binder) ^^ rhs in
     group (prefix ~indent:2 ~spaces:1 doc attributes)
 end

@@ -2120,9 +2120,18 @@ end = struct
       let loc = { pmd.pmd_loc with loc_end = pmd.pmd_name.loc.loc_start } in
       string ~loc "module"
     in
+    let text, pmd =
+      let text, attrs =
+        Attribute.extract_text ~item_start_pos:pmd.pmd_loc.loc_start
+          pmd.pmd_attributes
+      in
+      text, { pmd with pmd_attributes = attrs }
+    in
     let binding = pp_raw pmd in
     let context = decide_context pmd.pmd_type in
-    Binding.Module.pp ~keyword:kw ~context binding
+    let binding = Binding.Module.pp ~keyword:kw ~context binding in
+    let docs = Attribute.prepend_text text binding in
+    separate (twice hardline) (List.hd docs) (List.tl docs)
 end
 
 and Module_substitution : sig
@@ -2143,6 +2152,9 @@ and Module_type_declaration : sig
   val pp : module_type_declaration -> document
 end = struct
   let pp { pmtd_name; pmtd_type; pmtd_attributes; pmtd_loc } =
+    let text, pmtd_attributes =
+      Attribute.extract_text pmtd_attributes ~item_start_pos:pmtd_loc.loc_start
+    in
     let kw =
       let loc = { pmtd_loc with loc_end = pmtd_name.loc.loc_start } in
       string ~loc "module type"
@@ -2155,7 +2167,11 @@ end = struct
         let typ = Module_type.pp mty in
         Binding.pp_simple ~keyword:kw name typ
     in
-    Attribute.attach_to_top_item doc pmtd_attributes
+    let decl =
+      Attribute.attach_to_top_item doc pmtd_attributes
+      |> Attribute.prepend_text text
+    in
+    separate (twice hardline) (List.hd decl) (List.tl decl)
 end
 
 and Structure : sig
@@ -2209,16 +2225,9 @@ end = struct
     in
     separate (twice hardline) (List.hd vbs) (List.tl vbs)
 
-  let pp_module mb =
-    let module_ =
-      let loc = { mb.pmb_loc with loc_end = mb.pmb_name.loc.loc_start } in
-      string ~loc "module"
-    in
-    Binding.Module.pp ~keyword:module_ ~context:Struct (Module_binding.pp mb)
-
-  let pp_recmodule mbs =
+  let pp_modules ~loc rf mbs =
     let mbs =
-      let i = ref 0 in
+      let previous_mb = ref None in
       List.concat_map (fun mb ->
         let text, mb =
           let text, attrs =
@@ -2227,19 +2236,35 @@ end = struct
           in
           text, { mb with pmb_attributes = attrs }
         in
-        let keyword = if !i = 0 then "module rec" else "and" in
-        incr i;
+        let binding = Module_binding.pp mb in
         let keyword =
-          let loc = { mb.pmb_loc with loc_end = mb.pmb_name.loc.loc_start } in
-          string ~loc keyword
+          let lhs = binding.name in
+          let token, modifier =
+            match !previous_mb with
+            | None ->
+              token_before ~start:loc.Location.loc_start lhs MODULE,
+              rec_token ~recursive_by_default:false rf
+            | Some prev_mb ->
+              token_between prev_mb lhs AND, None
+          in
+          let kw = Keyword.decorate token ~extension:None [] ~later:lhs in
+          match modifier with
+          | None -> kw
+          | Some tok ->
+            let modif = token_between kw lhs tok in
+            kw ^/^ modif
         in
         let binding =
           Binding.Module.pp ~context:Struct ~keyword (Module_binding.pp mb)
         in
+        previous_mb := Some binding;
         Attribute.prepend_text text binding
       ) mbs
     in
     separate (twice hardline) (List.hd mbs) (List.tl mbs)
+
+  let pp_module ~loc mb = pp_modules ~loc Nonrecursive [ mb ]
+  let pp_recmodule ~loc mbs = pp_modules ~loc Recursive mbs
 
   let pp_include { pincl_mod; pincl_attributes; pincl_loc } =
     let incl = Module_expr.pp pincl_mod in
@@ -2255,16 +2280,16 @@ end = struct
     let ext = Extension.pp Structure_item ext in
     Attribute.attach_to_top_item ext attrs
 
-  let pp_item ?(first=false) ({ pstr_desc; pstr_loc; _ } as _item) =
+  let pp_item ?(first=false) ({ pstr_desc; pstr_loc = loc; _ } as _item) =
     match pstr_desc with
     | Pstr_eval (e, attrs) -> pp_eval ~first e attrs
-    | Pstr_value (rf, vbs) -> pp_value ~loc:pstr_loc rf vbs
+    | Pstr_value (rf, vbs) -> pp_value ~loc rf vbs
     | Pstr_primitive vd -> Value_description.pp vd
     | Pstr_type (rf, tds) -> Type_declaration.pp_decl rf tds
     | Pstr_typext te -> Type_extension.pp te
     | Pstr_exception exn -> Type_exception.pp exn
-    | Pstr_module mb -> pp_module mb
-    | Pstr_recmodule mbs -> pp_recmodule mbs
+    | Pstr_module mb -> pp_module ~loc mb
+    | Pstr_recmodule mbs -> pp_recmodule ~loc mbs
     | Pstr_modtype mtd -> Module_type_declaration.pp mtd
     | Pstr_open od -> Open_declaration.pp Attached_to_structure_item od
     | Pstr_class cds -> Class_declaration.pp cds
