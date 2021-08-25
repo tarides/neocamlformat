@@ -16,6 +16,16 @@ let rec_token ~recursive_by_default rf : Source_parsing.Parser.token option =
   | Nonrecursive, true -> Some NONREC
   | _, _ -> None
 
+let join_with_colon lbl doc =
+  let l = str lbl in
+  let just_before =
+    (* Shifting so we always get the colon! *)
+    let pos_cnum = l.loc.loc_end.pos_cnum - 1 in
+    { l.loc with loc_end = { l.loc.loc_end with pos_cnum } }
+  in
+  let colon = token_between { l with loc = just_before } doc COLON in
+  group (group (l ^^ colon) ^^ break_before ~spaces:0 doc)
+
 module Longident : sig
   include module type of struct include Longident end
 
@@ -406,23 +416,8 @@ end = struct
     let ct = hang 0 @@ pp ps ct in
     match arg_label with
     | Nolabel -> ct
-    | Labelled l ->
-      begin match token_before ~start:l.loc.loc_end ct COLON with
-      | colon -> str l ^^ colon ^^ break_before ~spaces:0 ct
-      | exception (Not_found | Assert_failure _ (* gloups *)) ->
-        let lbl = string ~loc:l.loc (l.txt ^ ":") in
-        lbl ^^ break_before ~spaces:0 ct
-      end
-    | Optional l ->
-      match token_before ~start:l.loc.loc_end ct COLON with
-      | colon ->
-        (* Form with 3 tokens. Ideally, '?' would also be fetched and
-           concatenated. *)
-        let opt_label = string ~loc:l.loc ("?" ^ l.txt) in
-        opt_label ^^ colon ^^ break_before ~spaces:0 ct
-      | exception (Not_found | Assert_failure _ (* gloups. *))  ->
-        let opt_label = string ~loc:l.loc ("?" ^ l.txt ^ ":") in
-        opt_label ^^ break_before ~spaces:0 ct
+    | Labelled l -> join_with_colon l ct
+    | Optional l -> join_with_colon { l with txt = "?" ^ l.txt } ct
 
   and pp_arrow ps params res =
     let ps, enclose = Printing_stack.parenthesize ps in
@@ -1697,13 +1692,7 @@ end = struct
         ]
       in
       let pat = Pattern.pp fresh_stack pat in
-      let loc = lbl.loc in
-      begin match token_before ~start:loc.loc_end pat COLON with
-      | colon -> prefix_token ++ str lbl ^^ colon ^^ pat
-      | exception (Not_found | Assert_failure _ (* gloups. *)) ->
-        let label = string ~loc (lbl.txt ^ ":") in
-        prefix_token ++ label ^^ pat
-      end
+      prefix_token ++ join_with_colon lbl pat
     | Some pat, Some ct ->
       let fresh_stack =
         Printing_stack.[
@@ -1716,11 +1705,7 @@ end = struct
         let colon = token_between pat ct COLON in
         parens (pat ^^ colon ^^ ct)
       in
-      match token_before ~start:lbl.loc.loc_end pat COLON with
-      | colon -> prefix_token ++ str lbl ^^ colon ^^ rhs
-      | exception (Not_found | Assert_failure _ (* gloups. *)) ->
-        let label = string ~loc:lbl.loc (lbl.txt ^ ":") in
-        prefix_token ++ label ^^ rhs
+      prefix_token ++ join_with_colon lbl rhs
 
   let build_optional_with_default lbl def (pat_opt, ct_opt) =
     let lbl = str lbl in
