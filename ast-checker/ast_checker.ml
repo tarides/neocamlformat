@@ -16,7 +16,7 @@ let mapper =
   let attribute (m : Ast_mapper.mapper) (attr : attribute) =
     let attr =
       match attr.attr_name.txt with
-      | "ocaml.doc" | "ocaml.txt" ->
+      | "ocaml.doc" | "ocaml.text" ->
         let attr_payload =
           match attr.attr_payload with
           | PStr [ {
@@ -45,7 +45,7 @@ let mapper =
         attrs
       else
         List.filter (function
-          | { attr_name = { txt = ("ocaml.doc" | "ocaml.txt"); _ }; _ } ->
+          | { attr_name = { txt = ("ocaml.doc" | "ocaml.text"); _ }; _ } ->
             false
           | _ -> true
         ) attrs

@@ -195,7 +195,7 @@ end = struct
   let has_non_doc =
     List.exists (fun attr ->
       match attr.attr_name.txt with
-      | "ocaml.doc" | "ocaml.txt" -> false
+      | "ocaml.doc" | "ocaml.text" -> false
       | _ -> true
     )
 
