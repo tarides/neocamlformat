@@ -116,7 +116,7 @@ let comments_between_pos p1 p2 =
     let fst = snd (List.hd comments) in
     let lst = snd (List.hd (List.rev comments)) in
     let dist_fst = p1.pos_cnum - fst.loc_start.pos_cnum in
-    let dist_lst = p2.pos_cnum - lst.loc_start.pos_cnum in
+    let dist_lst = p2.pos_cnum - lst.loc_end.pos_cnum in
     if dist_fst < dist_lst then
       Attach_fst doc
     else
