@@ -125,12 +125,9 @@ end = struct
     | PStr [
         { pstr_desc =
             Pstr_eval ({ pexp_desc =
-                           Pexp_constant Pconst_string (s, None); _ }, []); _ }
+                           Pexp_constant Pconst_string (s, None); pexp_loc; _}, []); _ }
       ] ->
-      let doc =
-        let open PPrint in
-        !^"(**" ^^ pp_verbatim_string s ^^ !^"*)"
-      in
+      let doc = docstring s pexp_loc in
       Location.mkloc doc loc
     | _ -> assert false
 

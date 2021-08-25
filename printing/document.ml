@@ -96,6 +96,13 @@ let comment (s, (l : Location.t)) =
   let l = { l with loc_start } in
   !^"(*" ^^ pp_verbatim_string ~comment:true ~adjust_indent:l s ^^ !^"*)"
 
+let docstring s (l : Location.t) =
+  let loc_start =
+    { l.loc_start with pos_cnum = l.loc_start.pos_cnum + 3 }
+  in
+  let l = { l with loc_start } in
+  !^"(**" ^^ pp_verbatim_string ~comment:true ~adjust_indent:l s ^^ !^"*)"
+
 type comments =
   | No_comment
   | Attach_fst of document
