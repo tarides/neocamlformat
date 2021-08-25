@@ -790,27 +790,23 @@ end = struct
     | [] -> acc
     | `Normal d1 :: `Normal d2 :: `Rparen :: rest ->
       (* we're layouting (fun p -> exp)! *)
-      let flat_fun =
-        break_after ~spaces:0 (nest 2 @@ break_before d1 ^/^ d2) +++ rparen
-      in
-      let broken_fun =
+      let d1 = break_before d1 in
+      let fun_ =
         break_after ~spaces:0 (
-           nest 2 @@ group (break_before d1) ^/^ d2
+           nest 2 @@ (ifflat d1 (group d1)) ^/^ d2
          ) +++ rparen
       in
-      let acc = acc ^^ group (ifflat flat_fun broken_fun) in
+      let acc = acc ^^ group fun_ in
       combine_app_chunks acc rest
     | `Normal d1 :: `Nobreak d2 :: `Rparen :: rest ->
       (* we're layouting (function p -> exp ...)! *)
-      let flat_fun =
-        break_after ~spaces:0 (nest 2 @@ break_before d1 ^^ d2) +++ rparen
-      in
-      let broken_fun =
+      let d1 = break_before d1 in
+      let function_ =
         break_after ~spaces:0 (
-           nest 2 @@ group (break_before d1) ^^ d2
+           nest 2 @@ (ifflat d1 (group d1)) ^^ d2
          ) +++ rparen
       in
-      let acc = acc ^^ group (ifflat flat_fun broken_fun) in
+      let acc = acc ^^ group function_ in
       combine_app_chunks acc rest
     | `Normal doc :: rest ->
       combine_app_chunks (acc ^^ nest 2 @@ group (break_before doc)) rest
