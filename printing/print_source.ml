@@ -1920,10 +1920,9 @@ end = struct
     | [] -> string ~loc "sig end"
     | si :: sg ->
       let sg = Signature.pp_nonempty si sg in
-      group (
-        enclose ~before:!^"sig" ~after:PPrint.(break 1 ^^ !^"end")
-          (nest 2 (break_before sg))
-      )
+      let sig_ = token_before ~start:loc.loc_start sg SIG in
+      let end_ = token_after ~stop:loc.loc_end sg END in
+      (prefix ~indent:2 ~spaces:1 sig_ sg) ^/^ end_
 
   and pp_short_functor param_mty res_mty =
     let param_mty = Module_type.pp param_mty in
