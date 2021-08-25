@@ -1591,9 +1591,8 @@ end = struct
     let ps, enclose = Printing_stack.parenthesize ps in
     let exp = pp ps exp in
     let assert_ =
-      let loc = { loc with loc_end = exp.loc.loc_start } in
-      Keyword.decorate (string ~loc "assert")
-        ~extension attrs ~later:exp
+      let kw = token_before ~start:loc.loc_start exp ASSERT in
+      Keyword.decorate kw ~extension attrs ~later:exp
     in
     let doc = prefix ~indent:2 ~spaces:1 assert_ exp in
     enclose doc
@@ -1602,9 +1601,8 @@ end = struct
     let ps, enclose = Printing_stack.parenthesize ps in
     let exp = pp ps exp in
     let lazy_ =
-      let loc = { loc with loc_end = exp.loc.loc_start } in
-      Keyword.decorate (string ~loc "lazy")
-        ~extension attrs ~later:exp
+      let kw = token_before ~start:loc.loc_start exp LAZY in
+      Keyword.decorate kw ~extension attrs ~later:exp
     in
     let doc = prefix ~indent:2 ~spaces:1 lazy_ exp in
     enclose doc
@@ -1647,10 +1645,7 @@ end = struct
     let ps, enclose = Printing_stack.parenthesize ps in
     let exp = pp (List.tl ps) exp in
     let in_ = token_between od exp IN in
-    let let_ =
-      let loc = { loc with loc_end = od.loc.loc_start } in
-      string ~loc "let"
-    in
+    let let_ = token_before ~start:loc.loc_start od LET in
     let doc = group (let_ ^/^ od ^/^ in_) ^/^ exp in
     enclose doc
 

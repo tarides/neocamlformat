@@ -4,9 +4,14 @@ type t = unit
 
 let comments = ref []
 
+let is_docstring s =
+  String.get s 0 = '*' &&
+  (* necessarily of length 2, otherwise would be an empty comment *)
+  String.get s 1 <> '*'
+
 let init () =
   comments :=
-    List.filter (fun (s, _) -> s <> "" && s.[0] <> '*')
+    List.filter (fun (s, _) -> s <> "" && not (is_docstring s))
       (Lexer.comments ())
 
 let column pos = pos.Lexing.pos_cnum - pos.pos_bol
