@@ -1,19 +1,3 @@
-(* All this is inefficient… but there should be many comments :) *)
-
-type t = unit
-
-let comments = ref []
-
-let is_docstring s =
-  String.get s 0 = '*' &&
-  (* necessarily of length 2, otherwise would be an empty comment *)
-  String.get s 1 <> '*'
-
-let init () =
-  comments :=
-    List.filter (fun (s, _) -> s <> "" && not (is_docstring s))
-      (Lexer.comments ())
-
 let column pos = pos.Lexing.pos_cnum - pos.pos_bol
 
 let compare_pos p1 p2 =
@@ -21,39 +5,121 @@ let compare_pos p1 p2 =
   | 0 -> compare (column p1) (column p2)
   | n -> n
 
+let is_docstring s =
+  String.get s 0 = '*' &&
+  (* necessarily of length 2, otherwise would be an empty comment *)
+  String.get s 1 <> '*'
+
+type t =
+  | Null
+  | Cell of {
+      loc: Location.t;
+      txt: string;
+      mutable prev: t;
+      mutable next: t;
+    }
+
+let singleton txt loc = Cell { loc; txt; prev = Null; next = Null }
+
+let rec iter ~f = function
+  | Null -> ()
+  | Cell { loc; txt; next; _ } ->
+    f loc txt;
+    iter ~f next
+
+let set_next ~next = function
+  | Null -> ()
+  | Cell cell -> cell.next <- next
+
+let set_prev ~prev = function
+  | Null -> ()
+  | Cell cell -> cell.prev <- prev
+
+let keep_first fst snd = if fst = Null then snd else fst
+
+let add_before ~prev ~next txt loc =
+  let cell = Cell { loc; txt; prev; next } in
+  set_next prev ~next:cell;
+  set_prev ~prev:cell next;
+  keep_first prev cell
+
+let rec insert_comment prev txt loc = function
+  | Null -> add_before ~prev ~next:Null txt loc
+  | Cell t as cell ->
+    let start = compare_pos loc.loc_start t.loc.loc_start in
+    if start < 0 then
+      add_before ~prev txt loc ~next:cell
+    else
+      let _ = insert_comment cell txt loc t.next in
+      keep_first prev cell
+
+let keep s = s <> "" && not (is_docstring s)
+
+let rec populate = function
+  | [] -> Null
+  | (s, l) :: rest ->
+    if not (keep s) then
+      populate rest
+    else
+      List.fold_left (fun lst (txt, loc) ->
+        if keep txt then
+          insert_comment Null txt loc lst
+        else
+          lst
+      ) (singleton s l) rest
+
+let comments = ref Null
+
+let init () =
+  comments := populate (Lexer.comments ())
+
 let fetch accept pos =
-  let yes, no =
-    List.fold_right (fun (_, l as elt) (yes, no) ->
-      let relative_pos = compare_pos pos l.Location.loc_start in
-      if accept relative_pos then
-        (elt :: yes, no)
+  let rec aux = function
+    | Null -> [], Null
+    | Cell { txt; loc; prev; next } as cell ->
+      let relative_pos = compare_pos pos loc.loc_start in
+      if not (accept relative_pos) then
+        let (comments, _) = aux next in
+        comments, cell
       else
-        (yes, elt :: no)
-    ) !comments ([], [])
+        let (comments, next) = aux next in
+        set_next prev ~next;
+        set_prev ~prev next;
+        (txt, loc) :: comments, next
   in
-  comments := no;
-  yes
+  let (cmts, remaining) = aux !comments in
+  comments := remaining;
+  cmts
 
 let between pos1 pos2 () =
-  let yes, no =
-    List.fold_right (fun (_, l as elt) (yes, no) ->
-        let start = compare_pos pos1 l.Location.loc_start in
-        if start > 0 then
-          (yes, elt :: no)
-        else
-          let stop = compare_pos l.loc_end pos2 in
-          if stop > 0 then
-            (yes, elt :: no)
-          else
-            (elt :: yes, no)
-    ) !comments ([], [])
+  let rec aux ~stitch = function
+    | Null -> [], Null
+    | Cell { txt; loc; prev; next } as cell ->
+      if compare_pos pos1 loc.loc_start > 0 then
+        (* Comment before pos1 *)
+        let (comments, _) = aux ~stitch:true next in
+        comments, cell
+      else if compare_pos loc.loc_start pos2 > 0 then
+        (* Comment after pos2 *)
+        [], cell
+      else
+        (* Comment in range *)
+        let (comments, next) = aux ~stitch:false next in
+        let comments = (txt, loc) :: comments in
+        if stitch then (
+          set_next prev ~next;
+          set_prev ~prev next;
+          comments, keep_first prev next
+        ) else (
+          comments, next
+        )
   in
-  comments := no;
-  yes
+  let (in_range, remaining) = aux ~stitch:true !comments in
+  comments := remaining;
+  in_range
 
 let before = fetch (fun relative_pos -> relative_pos >= 0)
 let after = fetch (fun relative_pos -> relative_pos <= 0)
 
 let report_remaining () =
-  List.iter (fun (_, l) -> Format.eprintf "- %a\n%!" Location.print_loc l)
-    !comments
+  iter !comments ~f:(fun l _ -> Format.eprintf "- %a\n%!" Location.print_loc l)

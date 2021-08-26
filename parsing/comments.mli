@@ -1,6 +1,6 @@
 type t
 
-val init : unit -> t
+val init : unit -> unit
 
 val compare_pos: Lexing.position -> Lexing.position -> int
 
