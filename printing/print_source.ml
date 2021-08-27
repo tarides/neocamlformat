@@ -716,7 +716,7 @@ end = struct
   and pp_desc ?(indent=0) ~loc ps = function
     | Ppat_or (p1, p2) -> pp_or ~indent ps p1 p2
     | otherwise ->
-      nest indent (
+      nest indent @@ group (
         match otherwise with
         | Ppat_or _ -> assert false
         | Ppat_any -> underscore ~loc
@@ -1066,7 +1066,9 @@ end = struct
     let ps, enclose = Printing_stack.parenthesize ps in
     let body = pp (List.tl ps (*?*)) body in
     let in_ = token_between vbs body IN in
-    enclose (group (vbs ^/^ in_) ^^ hardline ++ body)
+    enclose (
+      concat ~sep:hardline (group (vbs ^/^ in_)) body
+    )
 
   and case ps { pc_lhs; pc_guard; pc_rhs } =
     let lhs = Pattern.pp ~indent:2 [] pc_lhs in
@@ -1094,8 +1096,12 @@ end = struct
 
   and cases ps c cs =
     let cases =
-      (* FIXME *)
-      separate_map PPrint.(break 1 ^^ bar ^^ space) ~f:(case ps) c cs
+      let fmt c = case ps c in
+      List.fold_left (fun acc elt ->
+        let elt = fmt elt in
+        let bar = token_between acc elt BAR in
+        acc ^/^ group (bar ^^ space ++ elt)
+      ) (fmt c) cs
     in
     let prefix =
       let open PPrint in
@@ -1411,12 +1417,14 @@ end = struct
           let with_attrs = Attribute.attach_to_item with_ext ib.if_attrs in
           with_attrs
         in
-        group (
-          keyword ^^
-          nest 2 (break_before cond) ^/^
-          then_kw
-        ) ^^
-        nest 2 (break_before then_branch)
+        let if_and_cond =
+          group (
+            keyword ^^
+            nest 2 (break_before cond) ^/^
+            then_kw
+          )
+        in
+        concat ~indent:2 ~sep:(break 1) if_and_cond then_branch
       ) if_branches
     in
     let if_ =

@@ -89,12 +89,15 @@ let merge_locs l1 l2 =
 let loc_between t1 t2 =
   { Location.loc_start = t1.loc.loc_end; loc_end = t2.loc.loc_start }
 
-let comment (s, (l : Location.t)) =
+let comment (s, (loc : Location.t)) =
   let loc_start =
-    { l.loc_start with pos_cnum = l.loc_start.pos_cnum + 2 }
+    { loc.loc_start with pos_cnum = loc.loc_start.pos_cnum + 2 }
   in
-  let l = { l with loc_start } in
-  !^"(*" ^^ pp_verbatim_string ~comment:true ~adjust_indent:l s ^^ !^"*)"
+  let l = { loc with loc_start } in
+  let txt =
+    !^"(*" ^^ pp_verbatim_string ~comment:true ~adjust_indent:l s ^^ !^"*)"
+  in
+  { txt; loc }
 
 let docstring s (l : Location.t) =
   let loc_start =
@@ -109,18 +112,16 @@ type comments =
   | Attach_snd of document
 
 let comments_between_pos p1 p2 =
-  match Source_parsing.Comments.between p1 p2 () with
-  | [] -> No_comment
-  | comments ->
-    let doc = separate_map (break 1) comment comments in
-    let fst = snd (List.hd comments) in
-    let lst = snd (List.hd (List.rev comments)) in
-    let dist_fst = p1.pos_cnum - fst.loc_start.pos_cnum in
-    let dist_lst = p2.pos_cnum - lst.loc_end.pos_cnum in
-    if dist_fst < dist_lst then
-      Attach_fst doc
+  let comments = Source_parsing.Comments.between p1 p2 () in
+  List.partition_map (fun ((_, l) as cmt) ->
+    let cmt = comment cmt in
+    let dist_p1 = l.loc_start.pos_cnum - p1.pos_cnum in
+    let dist_p2 = p2.pos_cnum - l.loc_end.pos_cnum in
+    if dist_p1 < dist_p2 then
+      Left cmt
     else
-      Attach_snd doc
+      Right cmt
+  ) comments
 
 let comments_between t1 t2 =
   comments_between_pos t1.loc.loc_end t2.loc.loc_start
@@ -202,6 +203,7 @@ let enclose ~before ~after t =
 let fmt_comments before = function
   | [] -> PPrint.empty
   | comments ->
+    let comment x = (comment x).txt in
     let cmts = separate_map hardline comment comments in
     if before then
       cmts ^^ hardline
@@ -223,22 +225,46 @@ let attach_surrounding_comments doc =
 let merge_possibly_swapped ?(sep=PPrint.empty) d1 d2 =
   let t1, t2 = if Location.ends_before d1.loc d2.loc then d1, d2 else d2, d1 in
   let txt =
-    match comments_between t1 t2 with
-    | No_comment -> d1.txt ^^ sep ^^ d2.txt
-    | Attach_fst cmts -> d1.txt ^/^ cmts ^^ sep ^^ d2.txt
-    | Attach_snd cmts -> d1.txt ^^ sep ^^ cmts ^/^ d2.txt
+    let attach_fst, attach_snd = comments_between t1 t2 in
+    let fst_chunk =
+      List.fold_left (fun t elt -> t ^^ group (break 1 ^^ elt.txt))
+        d1.txt attach_fst
+    in
+    let snd_chunk =
+      List.fold_right (fun elt t -> elt.txt ^^ group (break 1 ^^ t))
+        attach_snd d2.txt
+    in
+    fst_chunk ^^ sep ^^ snd_chunk
   in
   { txt; loc = merge_locs t1.loc t2.loc }
 
 (* FIXME: sep is shit, remove. *)
 let concat ?(sep=PPrint.empty) ?(indent=0) t1 t2 =
-  let txt =
-    match comments_between t1 t2 with
-    | No_comment -> t1.txt ^^ sep ^^ t2.txt
-    | Attach_fst cmts -> t1.txt ^^ nest indent (break 1 ^^ cmts) ^^ sep ^^ t2.txt
-    | Attach_snd cmts -> t1.txt ^^ sep ^^ nest indent cmts ^/^ t2.txt
+  let attach_fst, attach_snd = comments_between t1 t2 in
+  let fst_chunk =
+    List.fold_left (fun t elt ->
+      let break =
+        if t.loc.loc_end.pos_lnum = elt.loc.loc_start.pos_lnum
+        then break 1
+        else hardline
+      in
+      let txt = t.txt ^^ group (nest indent @@ break ^^ elt.txt) in
+      { txt; loc = merge_locs t.loc elt.loc }
+    ) t1 attach_fst
   in
-  { txt; loc = merge_locs t1.loc t2.loc }
+  let snd_chunk =
+    List.fold_right (fun elt t ->
+      let break =
+        if elt.loc.loc_end.pos_lnum = t.loc.loc_start.pos_lnum
+        then break 1
+        else hardline
+      in
+      let txt = elt.txt ^^ group (break ^^ t.txt) in
+      { txt; loc = merge_locs elt.loc t.loc }
+    ) attach_snd t2
+  in
+  let txt = fst_chunk.txt ^^ nest indent (sep ^^ snd_chunk.txt) in
+  { txt; loc = merge_locs fst_chunk.loc snd_chunk.loc }
 
 let collate_toplevel_items lst =
   let rec insert_blanks = function
@@ -301,7 +327,7 @@ let optional ~loc f = function
   | Some d -> f d
 
 let prefix ~indent ~spaces x y =
-  group (concat ~indent x (nest indent (break_before ~spaces y)))
+  group (concat ~indent ~sep:(break spaces) x y)
 
 let infix ~indent ~spaces op x y =
   prefix ~indent ~spaces (concat x ~sep:PPrint.(blank spaces) op) y
@@ -445,12 +471,16 @@ module Enclosed_separated = struct
 
   let pp ~loc ~formatting ~left ~right = function
     | [] ->
+      (* FIXME: this looks weird. *)
+      let open PPrint in
       let cmts =
         match comments_between_pos loc.loc_start loc.loc_end with
-        | No_comment -> PPrint.empty
-        | Attach_fst doc | Attach_snd doc -> PPrint.(doc ^^ break 1)
+        | [], [] -> empty
+        | l1, l2 ->
+          separate (break 1) (List.map (fun { txt; _ } -> txt) l1)
+          ^/^ separate (break 1) (List.map (fun { txt; _ } -> txt) l2)
       in
-      { txt = PPrint.(left ^/^ cmts ^^ right); loc }
+      { txt = left ^/^ cmts ^^ right; loc }
     | x :: xs ->
       match (formatting : Options.Wrappable.t) with
       | Wrap -> Wrapped.pp ~left ~right x xs
