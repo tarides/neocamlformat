@@ -449,7 +449,10 @@ end = struct
 
   and pp_params ps first = function
     | []   -> pp ps first
-    | rest -> parens (separate_map comma ~f:(pp []) first rest)
+    | rest ->
+      let fmt elt = group (pp [] elt) in
+      let params = separate_map PPrint.(comma ^^ break 1) ~f:fmt first rest in
+      parens (hang 0 params)
 
   and pp_object ~loc fields closed =
     let fields = List.map Object_field.pp fields in
