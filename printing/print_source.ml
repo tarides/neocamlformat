@@ -24,7 +24,7 @@ let join_with_colon lbl doc =
     { l.loc with loc_end = { l.loc.loc_end with pos_cnum } }
   in
   let colon = token_between { l with loc = just_before } doc COLON in
-  group (group (l ^^ colon) ^^ break_before ~spaces:0 doc)
+  prefix ~indent:2 ~spaces:0 (group (l ^^ colon)) doc
 
 module Longident : sig
   include module type of struct include Longident end
@@ -422,12 +422,16 @@ end = struct
   and pp_arrow ps params res =
     let ps, enclose = Printing_stack.parenthesize ps in
     let params =
-      left_assoc_map ~sep:MINUSGREATER ~f:(pp_param ps) (List.hd params)
-        (List.tl params)
+      let fmt elt = hang 0 (pp_param ps elt) in
+      List.fold_left (fun acc elt ->
+        let elt = fmt elt in
+        let sep = token_between acc elt MINUSGREATER in
+        acc ^/^ group (sep ^^ space ++ hang 0 elt)
+      ) (fmt @@ List.hd params) (List.tl params)
     in
     let res = pp (List.tl ps) res in
     let arrow = token_between params res MINUSGREATER in
-    let doc = params ^/^ group (arrow ^/^ res) in
+    let doc = params ^/^ group (arrow ^^ space ++ hang 0 res) in
     enclose doc
 
   and pp_tuple ps = function
