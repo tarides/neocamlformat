@@ -2431,7 +2431,8 @@ end = struct
     let colon = token_between name with_prim COLON in
     let doc =
       prefix ~indent:2 ~spaces:1 (group (kw ^/^ name))
-        (concat colon with_prim ~sep:PPrint.(ifflat space (twice space)))
+        (group 
+           (concat colon with_prim ~sep:PPrint.(ifflat space (twice space))))
     in
     Attribute.attach_to_top_item doc vd.pval_attributes
 end
