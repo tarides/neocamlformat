@@ -1,17 +1,18 @@
 open Cmdliner
 
-let accepted_values print ppf values =
+let print_all ?sep print =
   let open Format in
-  fprintf ppf "accepted values: %a"
-    (pp_print_list ~pp_sep:(fun ppf () -> pp_print_string ppf " | ") print)
-    values
+  let p sep =
+    pp_print_list ~pp_sep:(fun ppf () -> pp_print_string ppf sep) print
+  in
+  match sep with
+  | Some sep -> p sep
+  | None ->
+    fun ppf ->
+      Format.fprintf ppf "{%a}" (p "|")
 
-let one_of print ppf values =
-  let open Format in
-  let wrapped fmt = Format.fprintf fmt "`%a'" print in
-  fprintf ppf "The value $(docv) must be one of %a"
-    (pp_print_list ~pp_sep:(fun ppf () -> pp_print_string ppf ", ") wrapped)
-    values
+let accepted_values print ppf values =
+  Format.fprintf ppf "accepted values: %a" (print_all ~sep:", " print) values
 
 module Wrappable = struct
   type t = Fit_or_vertical | Wrap
@@ -100,56 +101,48 @@ end
 let (:=) ref term =
   Term.(const (fun x -> ref := x) $ term)
 
-let formatting_info = Arg.info ~docs:"FORMATTING OPTIONS" ~docv:"VAL"
+let docs = "FORMATTING OPTIONS"
+
+let mk_info print all =
+  let docv = Format.asprintf "%a" (print_all print) all in
+  Arg.info ~docs ~docv
 
 module Record = struct
-  let expression = ref Wrappable.Fit_or_vertical
+  open Wrappable
+
+  let expression = ref Fit_or_vertical
   let expression_cmd =
     let open Arg in
-    let doc =
-      Format.asprintf
-        "formatting of record expressions. %a"
-        (one_of Wrappable.print) Wrappable.all
-    in
-    let info = formatting_info ~doc ["record-expr"] in
-    expression := value & opt Wrappable.t Fit_or_vertical info
+    let doc = "formatting of record expressions" in
+    let info = mk_info print all ~doc ["record-expr"] in
+    expression := value & opt t Fit_or_vertical info
 
-  let pattern = ref Wrappable.Wrap
+  let pattern = ref Wrap
   let pattern_cmd =
     let open Arg in
-    let doc =
-      Format.asprintf
-        "formatting of record patterns. %a"
-        (one_of Wrappable.print) Wrappable.all
-    in
-    let info = formatting_info ~doc ["record-patt"] in
-    pattern := value & opt Wrappable.t Wrap info
+    let doc = "formatting of record patterns" in
+    let info = mk_info print all ~doc ["record-patt"] in
+    pattern := value & opt t Wrap info
 end
 
 module Match = struct
-  let parens_style = ref Parenthesing.Begin_end
+  module P = Parenthesing
+
+  let parens_style = ref P.Begin_end
   let parens_style_cmd =
     let open Arg in
-    let doc =
-      Format.asprintf
-        "style of parenthesing to use around match expressions. %a"
-        (one_of Parenthesing.print) Parenthesing.all
-    in
+    let doc = "style of parenthesing to use around match expressions" in
     let info =
-      formatting_info ~doc
+      mk_info P.print P.all ~doc
         ["match-parens-style" ;"match-parenthezing-style"]
     in
-    parens_style := value & opt Parenthesing.t Begin_end info
+    parens_style := value & opt P.t Begin_end info
 
   let parenthesing_situations = ref Situations.When_needed
   let parens_situations_cmd =
     let open Arg in
-    let doc =
-      Format.asprintf
-        "when to add parentheses around match expressions. %a"
-        (one_of Situations.print) Situations.all
-    in
-    let info = formatting_info ~doc ["match-parenthezing"] in
+    let doc = "when to add parentheses around match expressions" in
+    let info = mk_info Situations.print Situations.all ~doc ["match-parenthezing"] in
     parenthesing_situations := value & opt Situations.t When_needed info
 end
 
@@ -158,7 +151,7 @@ module Cases = struct
   let body_indent_cmd =
     let open Arg in
     let info =
-      formatting_info ~doc:"indentation of match/function cases body"
+      info ~docs ~doc:"indentation of match/function cases body"
         [ "cases-body-indent" ]
     in
     body_indent := value & opt int 2 info
@@ -166,24 +159,19 @@ module Cases = struct
   let body_on_separate_line = ref Situations.When_needed
   let body_on_separate_line_cmd =
     let open Arg in
-    let doc =
-      Format.asprintf
-        "when to put the body on a separate line. %a"
-        (one_of Situations.print) Situations.all
-    in
-    let info = formatting_info ~doc [ "cases-body-on-separate-line" ] in
-    body_on_separate_line := value & opt Situations.t When_needed info
+    let open Situations in
+    let doc = "when to put the body on a separate line" in
+    let info = mk_info print all ~doc [ "cases-body-on-separate-line" ] in
+    body_on_separate_line := value & opt t When_needed info
 end
 
 module Applications = struct
-  let layout = ref Smartly_wrappable.Wrap
+  open Smartly_wrappable
+
+  let layout = ref Wrap
   let layout_cmd =
     let open Arg in
-    let doc =
-      Format.asprintf
-        "formatting of function applications. %a"
-        (one_of Smartly_wrappable.print) Smartly_wrappable.all
-    in
-    let info = formatting_info ~doc ["fun-app"] in
-    layout := value & opt Smartly_wrappable.t Wrap info
+    let doc = "formatting of function applications" in
+    let info = mk_info print all ~doc ["fun-app"] in
+    layout := value & opt t Wrap info
 end
