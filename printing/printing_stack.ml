@@ -281,6 +281,7 @@ let needs_parens elt parents =
           true
         | With_constraint
         | Row_field
+        | Record_field
         | Core_type (Ptyp_arrow _ | Ptyp_tuple _)
         | Cons_constr { on_left = false }
         | Expression Pexp_record _

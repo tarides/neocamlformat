@@ -5,6 +5,11 @@ open Source_tree
 open Document
 open struct type document = Document.t end
 
+let rec list_last = function
+  | [] -> None
+  | [ x ] -> Some x
+  | _ :: xs -> list_last xs
+
 let module_name { txt; loc} =
   match txt with
   | None -> underscore ~loc
@@ -294,16 +299,22 @@ and Payload : sig
 end = struct
   let pstr tag = function
     | [] -> tag
-    | si :: st ->
+    | si :: st as items ->
       let st = Structure.pp_nonempty si st in
-      tag ^^ nest 2 (break_before st)
+      let res = tag ^^ nest 2 (break_before st) in
+      if Structure.ends_in_obj items
+      then break_after res
+      else res
 
   let psig tag = function
     | [] -> tag
-    | si :: sg ->
+    | si :: sg as items ->
       let sg = Signature.pp_nonempty si sg in
       let colon = token_between tag sg COLON in
-      tag ^^ nest 2 (colon ^/^ sg)
+      let res = tag ^^ nest 2 (colon ^/^ sg) in
+      if Signature.ends_in_obj items
+      then break_after res
+      else res
 
   let ptyp tag ct =
     let break_after =
@@ -364,6 +375,7 @@ end = struct
     | Ptyp_extension _ -> false
 
   let rec ends_in_obj core_type =
+    core_type.ptyp_attributes = [] &&
     match core_type.ptyp_desc with
     | Ptyp_arrow (_, rhs)
     | Ptype_poly (_, rhs)
@@ -2161,7 +2173,29 @@ end
 
 and Structure : sig
   val pp_nonempty : structure_item -> structure -> document
+  val ends_in_obj : structure -> bool
 end = struct
+  let ends_in_obj lst =
+    match list_last lst with
+    | None -> false
+    | Some { pstr_desc; _ }  ->
+      match pstr_desc with
+      | Pstr_type (_, decls) -> Type_declaration.ends_in_obj decls
+      | Pstr_typext te -> Type_extension.ends_in_obj te
+      | Pstr_exception exn -> Type_exception.ends_in_obj exn
+      | Pstr_eval _
+      | Pstr_value _
+      | Pstr_primitive _
+      | Pstr_module _
+      | Pstr_recmodule _
+      | Pstr_modtype _
+      | Pstr_open _
+      | Pstr_include _
+      | Pstr_attribute _
+      | Pstr_extension _
+      | Pstr_class _
+      | Pstr_class_type _ -> false
+
   let pp_eval ~first exp attrs =
     let exp = Expression.pp [] exp in
     let doc =  Attribute.attach_to_top_item exp attrs in
@@ -2319,7 +2353,30 @@ end
 
 and Signature : sig
   val pp_nonempty : signature_item -> signature -> document
+
+  val ends_in_obj : signature -> bool
 end = struct
+  let ends_in_obj lst =
+    match list_last lst with
+    | None -> false
+    | Some { psig_desc; _ }  ->
+      match psig_desc with
+      | Psig_value vd -> Core_type.ends_in_obj vd.pval_type
+      | Psig_type (_, decls)
+      | Psig_typesubst decls -> Type_declaration.ends_in_obj decls
+      | Psig_typext te -> Type_extension.ends_in_obj te
+      | Psig_exception exn -> Type_exception.ends_in_obj exn
+      | Psig_module _
+      | Psig_recmodule _
+      | Psig_modsubst _
+      | Psig_modtype _
+      | Psig_open _
+      | Psig_include _
+      | Psig_attribute _
+      | Psig_extension _
+      | Psig_class _
+      | Psig_class_type _ -> false
+
   let pp_extension ext attrs =
     let ext = Extension.pp Structure_item ext in
     Attribute.attach_to_top_item ext attrs
@@ -2447,6 +2504,8 @@ end
 
 and Type_extension : sig
   val pp : type_extension -> document
+
+  val ends_in_obj : type_extension -> bool
 end = struct
   let constructors = function
     | [] -> assert false
@@ -2478,10 +2537,28 @@ end = struct
       string ~loc "type"
     in
     Binding.pp_simple ~keyword ~binder:PLUSEQ lhs rhs
+
+  let ends_in_obj = function
+    | { ptyext_attributes = []; ptyext_constructors; _ } ->
+      begin match list_last ptyext_constructors with
+      | Some { pext_attributes = []; pext_kind = Pext_decl (args, cto); _ } ->
+        begin match cto with
+        | Some ct -> Core_type.ends_in_obj ct
+        | None ->
+          match args with
+          | Pcstr_tuple (_ :: _ as lst) ->
+            let ct = Option.get (list_last lst) in
+            Core_type.ends_in_obj ct
+          | _ -> false
+        end
+      | _ -> false
+      end
+    | _ -> false
 end
 
 and Type_exception : sig
   val pp : type_exception -> document
+  val ends_in_obj : type_exception -> bool
 end = struct
   let pp { ptyexn_constructor; ptyexn_attributes; ptyexn_loc } =
     let cstr = Constructor_decl.pp_extension ptyexn_constructor in
@@ -2491,6 +2568,23 @@ end = struct
     in
     let doc = group (prefix ~spaces:1 ~indent:2 kw cstr) in
     Attribute.attach_to_top_item doc ptyexn_attributes
+
+  let ends_in_obj = function
+    | { ptyexn_attributes = []; ptyexn_constructor; _ } ->
+      begin match ptyexn_constructor with
+      | { pext_attributes = []; pext_kind = Pext_decl (args, cto); _ } ->
+        begin match cto with
+        | Some ct -> Core_type.ends_in_obj ct
+        | None ->
+          match args with
+          | Pcstr_tuple (_ :: _ as lst) ->
+            let ct = Option.get (list_last lst) in
+            Core_type.ends_in_obj ct
+          | _ -> false
+        end
+      | _ -> false
+      end
+    | _ -> false
 end
 
 and Type_declaration : sig
@@ -2517,7 +2611,27 @@ and Type_declaration : sig
     -> keyword:keyword
     -> type_declaration
     -> document
+
+  val ends_in_obj : type_declaration list -> bool
 end = struct
+  let ends_in_obj lst =
+    match list_last lst with
+    | Some { ptype_attributes = []; ptype_cstrs = (_ :: _ as cstrs); _ } ->
+      let _, ct, _ = Option.get @@ list_last cstrs in
+      Core_type.ends_in_obj ct
+    | Some { ptype_attributes = []; ptype_manifest = Some ct;
+             ptype_kind = Ptype_abstract; _ } ->
+      Core_type.ends_in_obj ct
+    | Some { ptype_attributes = []; ptype_kind = Ptype_variant { txt; _ }; _} ->
+      begin match list_last txt with
+      | Some { pcd_attributes = []; pcd_res = Some ct; _ } ->
+        Core_type.ends_in_obj ct
+      | Some { pcd_attributes = []; pcd_args = Pcstr_tuple cts; _ } ->
+        Core_type.ends_in_obj (Option.get @@ list_last cts)
+      | _ -> false
+      end
+    | _ -> false
+
   let pp_param (ct, var) =
     let ct = Core_type.pp [] ct in
     match var with
@@ -2536,7 +2650,7 @@ end = struct
 
   let label_declaration { pld_name; pld_mutable; pld_type; pld_attributes; _ } =
     let name = str pld_name in
-    let typ  = Core_type.pp [] pld_type in
+    let typ  = Core_type.pp [ Record_field ] pld_type in
     let colon = token_between name typ COLON in
     let lhs = group (name ^/^ colon) in
     let with_mutable_ =
