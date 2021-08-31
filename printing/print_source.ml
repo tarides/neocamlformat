@@ -51,7 +51,7 @@ end = struct
 
   and aux = function
     | Lident s -> pp_ident s
-    | Ldot (lid, s) -> concat (pp lid) ~sep:PPrint.(dot ^^ break 0) (str s)
+    | Ldot (lid, s) -> concat (pp lid) ~sep:PPrint.(dot ^^ break 0) (pp_ident s)
     | Lapply (l1, l2) -> concat (pp l1) ~sep:(break 0) (parens (pp l2))
 
   let pp lid = hang 2 (pp lid)
