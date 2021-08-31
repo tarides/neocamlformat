@@ -580,6 +580,7 @@ let needs_parens elt parents =
                     | Pexp_list_lit _
                     | Pexp_sequence _
                     | Pexp_send _
+                    | Pexp_tuple _
                     )
       | Then_branch
       | Record_field
