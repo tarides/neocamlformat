@@ -3201,19 +3201,29 @@ end = struct
     let doc = pp_field_desc ~loc:pctf_loc pctf_desc in
     Attribute.attach_to_item doc pctf_attributes
 
-  let pp ~loc { pcsig_self = _; pcsig_fields } =
-    (* FIXME *)
+  let pp ~loc { pcsig_self; pcsig_fields } =
     match pcsig_fields with
-    | [] -> string ~loc "object end"
+    | [] ->
+      begin match pcsig_self.ptyp_desc with
+      | Ptyp_any -> string ~loc "object end" (* comments are gonna move *)
+      | _ ->
+        let self = parens (Core_type.pp [] pcsig_self) in
+        let obj_ = token_before ~start:loc.loc_start self OBJECT in
+        let end_ = token_after ~stop:loc.loc_end self END in
+        prefix ~indent:2 ~spaces:1 (group (obj_ ^/^ self)) end_
+      end
     | f :: fs ->
       let fields = separate_map PPrint.(twice hardline) ~f:pp_field f fs in
-      (* FIXME *)
-      group (
-        enclose ~before:!^"object" ~after:PPrint.(break 1 ^^ !^"end")
-          (nest 2 (break_before fields))
-      )
-
-
+      let obj_ =
+        let obj = token_before ~start:loc.loc_start fields OBJECT in
+        match pcsig_self.ptyp_desc with
+        | Ptyp_any -> obj
+        | _ ->
+          let self = parens (Core_type.pp [] pcsig_self) in
+          group (obj ^/^ self)
+      in
+      let end_ = token_after ~stop:loc.loc_end fields END in
+      group (prefix ~indent:2 ~spaces:1 obj_ fields ^/^ end_)
 end
 
 and Class_declaration : sig
