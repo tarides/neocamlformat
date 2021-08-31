@@ -1005,7 +1005,7 @@ end = struct
     | Pexp_constraint (e, ct) -> pp_constraint e ct
     | Pexp_coerce (e, ct_start, ct) -> pp_coerce e ct_start ct
     | Pexp_send (e, meth) -> pp_send ps e meth
-    | Pexp_new lid -> pp_new ~loc ps lid
+    | Pexp_new lid -> pp_new ~loc ~ext_attrs ps lid
     | Pexp_setinstvar (lbl, exp) -> pp_setinstvar ps lbl exp
     | Pexp_override fields -> pp_override ~loc fields
     | Pexp_letmodule (name, mb, body) ->
@@ -1548,12 +1548,12 @@ end = struct
     let doc = flow (break 0) exp [ sharp; met ] in
     enclose doc
 
-  and pp_new ps ~loc lid =
+  and pp_new ps ~loc ~ext_attrs:(extension, attrs) lid =
     let lid = Longident.pp lid in
     let new_ = token_before ~start:loc.loc_start lid NEW in
+    let new_ = Keyword.decorate new_ ~extension attrs ~later:lid in
     let _, enclose = Printing_stack.parenthesize ps in
     enclose (group (new_ ^/^ lid))
-
 
   and pp_setinstvar ps lbl exp =
     let ps, enclose = Printing_stack.parenthesize ps in
