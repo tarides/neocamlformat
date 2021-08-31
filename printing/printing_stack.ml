@@ -679,7 +679,7 @@ let rec normalize = function
 
   | x :: xs -> x :: normalize xs
 
-let parenthesize ?(situations=Options.Situations.When_needed)
+let parenthesize ?(situations=Options.Always_or_needed.When_needed)
     ?(style=Options.Parenthesing.Parens) t =
   let enclosed doc =
     let open Document in

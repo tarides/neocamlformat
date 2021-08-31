@@ -78,7 +78,7 @@ module Parenthesing = struct
   let t = Arg.conv (parse, print)
 end
 
-module Situations = struct
+module Always_or_needed = struct
   type t = When_needed | Always
   let all = [ Always; When_needed ]
 
@@ -91,6 +91,28 @@ module Situations = struct
   let parse = function
     | "always" -> Ok Always
     | "when-needed" -> Ok When_needed
+    | s ->
+      let msg = Format.asprintf "%a, got %S" (accepted_values print) all s in
+      Error (`Msg msg)
+
+  let t = Arg.conv (parse, print)
+end
+
+module Compact_or_multiline = struct
+  type t = Compact | Multi | Compact_under_app
+  let all = [ Compact; Multi; Compact_under_app ]
+
+  let print ppf t =
+    Format.pp_print_string ppf
+      (match t with
+       | Compact -> "compact"
+       | Multi -> "multiline"
+       | Compact_under_app -> "compact-under-app")
+
+  let parse = function
+    | "compact" -> Ok Compact
+    | "multiline" -> Ok Multi
+    | "compact-under-app" -> Ok Compact_under_app
     | s ->
       let msg = Format.asprintf "%a, got %S" (accepted_values print) all s in
       Error (`Msg msg)
@@ -138,12 +160,21 @@ module Match = struct
     in
     parens_style := value & opt P.t Begin_end info
 
-  let parenthesing_situations = ref Situations.When_needed
+  let parenthesing_situations = ref Always_or_needed.When_needed
   let parens_situations_cmd =
     let open Arg in
     let doc = "when to add parentheses around match expressions" in
-    let info = mk_info Situations.print Situations.all ~doc ["match-parenthezing"] in
-    parenthesing_situations := value & opt Situations.t When_needed info
+    let info = mk_info Always_or_needed.print Always_or_needed.all ~doc ["match-parenthezing"] in
+    parenthesing_situations := value & opt Always_or_needed.t When_needed info
+
+  let compact = ref Compact_or_multiline.Compact_under_app
+  let compact_cmd =
+    let open Compact_or_multiline in
+    let open Arg in
+    let doc = "whether or not to print match expressions on a single line if \
+               it fits. This also applies to functions and try-withs." in
+    let info = mk_info print all ~doc ["match-layout"] in
+    compact := value & opt t Compact_under_app info
 end
 
 module Cases = struct
@@ -156,10 +187,10 @@ module Cases = struct
     in
     body_indent := value & opt int 2 info
 
-  let body_on_separate_line = ref Situations.When_needed
+  let body_on_separate_line = ref Always_or_needed.When_needed
   let body_on_separate_line_cmd =
     let open Arg in
-    let open Situations in
+    let open Always_or_needed in
     let doc = "when to put the body on a separate line" in
     let info = mk_info print all ~doc [ "cases-body-on-separate-line" ] in
     body_on_separate_line := value & opt t When_needed info

@@ -10,6 +10,12 @@ let rec list_last = function
   | [ x ] -> Some x
   | _ :: xs -> list_last xs
 
+let under_app =
+  List.exists (function
+    | Printing_stack.Expression Pexp_apply _ -> true
+    | _ -> false
+  )
+
 let module_name { txt; loc} =
   match txt with
   | None -> underscore ~loc
@@ -785,8 +791,13 @@ end = struct
       | Pexp_function (c :: cs) when exp.pexp_attributes = [] ->
         let lbl = string ~loc:lbl.loc (lbl.txt ^ ":") in
         let ps = [ Printing_stack.Expression exp.pexp_desc ] in
+        let compact =
+          match !Options.Match.compact with
+          | Multi -> false
+          | _ -> true
+        in
         let function_, cases =
-          Expression.function_chunks ~loc:exp.pexp_loc
+          Expression.function_chunks ~compact ~loc:exp.pexp_loc
             ~ext_attrs:exp.pexp_ext_attributes ps c cs
         in
         let open_ =
@@ -842,8 +853,13 @@ end = struct
       Function { fst_chunk; snd_chunk; break = true }
     | { pexp_desc = Pexp_function (c :: cs); pexp_attributes = []; _ } as exp ->
       let ps = [ Printing_stack.Expression exp.pexp_desc ] in
+      let compact =
+        match !Options.Match.compact with
+        | Multi -> false
+        | _ -> true
+      in
       let function_, cases =
-        Expression.function_chunks ~loc:exp.pexp_loc
+        Expression.function_chunks ~compact ~loc:exp.pexp_loc
           ~ext_attrs:exp.pexp_ext_attributes ps c cs
       in
       let fst_chunk =
@@ -953,7 +969,8 @@ and Expression : sig
   val pp : Printing_stack.t -> expression -> document
 
   val function_chunks
-    : loc:Location.t
+    : compact:bool
+    -> loc:Location.t
     -> ext_attrs:string loc option * attributes
     -> Printing_stack.t
     -> case
@@ -1110,7 +1127,7 @@ end = struct
     | Always -> lhs ^^ nest !Options.Cases.body_indent (hardline ++ rhs)
     | When_needed -> prefix ~indent:!Options.Cases.body_indent ~spaces:1 lhs rhs
 
-  and cases ps c cs =
+  and cases ~compact:compact_layout ps c cs =
     let cases =
       let fmt c = case ps c in
       List.fold_left (fun acc elt ->
@@ -1121,12 +1138,13 @@ end = struct
     in
     let prefix =
       let open PPrint in
-      ifflat empty (hardline ^^ bar) ^^ space
+      let multi = hardline ^^ bar in
+      (if compact_layout then ifflat empty multi else multi) ^^ space
     in
     prefix ++ cases
 
-  and function_chunks ~loc ~ext_attrs:(extension, attrs) ps c cs =
-    let cases = cases ps c cs in
+  and function_chunks ~compact ~loc ~ext_attrs:(extension, attrs) ps c cs =
+    let cases = cases ~compact ps c cs in
     let keyword =
       let kw = token_before ~start:loc.Location.loc_start cases FUNCTION in
       Keyword.decorate kw ~extension attrs ~later:cases
@@ -1136,8 +1154,14 @@ end = struct
   and pp_function ~loc ~ext_attrs ps = function
     | [] -> assert false (* always at least one case *)
     | c :: cs ->
+      let compact =
+        match !Options.Match.compact with
+        | Multi -> false
+        | Compact -> true
+        | Compact_under_app -> under_app ps
+      in
       let ps, enclose = Printing_stack.parenthesize ps in
-      let keyword, cases = function_chunks ~loc ~ext_attrs ps c cs in
+      let keyword, cases = function_chunks ~compact ~loc ~ext_attrs ps c cs in
       enclose (keyword ^^ cases)
 
   and fun_syntactic_elts ~loc ~ext_attrs:(extension, attrs) ~args body =
@@ -1169,12 +1193,18 @@ end = struct
     | [] -> assert false (* always at least one case *)
     | c :: cs ->
       let arg = pp [] arg in
+      let compact =
+        match !Options.Match.compact with
+        | Multi -> false
+        | Compact -> true
+        | Compact_under_app -> under_app ps
+      in
       let ps, enclose =
         Printing_stack.parenthesize ps
           ~situations:!Options.Match.parenthesing_situations
           ~style:!Options.Match.parens_style
       in
-      let cases = cases ps c cs in
+      let cases = cases ~compact ps c cs in
       let match_ =
         let token = token_before ~start:loc.Location.loc_start arg MATCH in
         Keyword.decorate token ~extension attrs ~later:arg
@@ -1193,8 +1223,14 @@ end = struct
     | [] -> assert false
     | c :: cs ->
       let arg = pp [] arg in
+      let compact =
+        match !Options.Match.compact with
+        | Multi -> false
+        | Compact -> true
+        | Compact_under_app -> under_app ps
+      in
       let ps, enclose = Printing_stack.parenthesize ps in
-      let cases = cases ps c cs in
+      let cases = cases ~compact ps c cs in
       let try_ =
         let token = token_before ~start:loc.Location.loc_start arg TRY in
         Keyword.decorate token ~extension attrs ~later:arg
