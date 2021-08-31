@@ -1495,11 +1495,21 @@ end = struct
     enclose doc
 
   and pp_sequence ps e1 e2 =
+    let compact =
+      match !Options.Sequences.compact with
+      | Multi -> false
+      | Compact -> true
+      | Compact_under_app -> under_app ps
+    in
     let ps, enclose = Printing_stack.parenthesize ps in
     let e1 = pp ps e1 in
     let e2 = pp (List.tl ps) e2 in
     let semi = token_between e1 e2 SEMI in
-    let doc = e1 ^^ semi ^/^ e2 in
+    let doc =
+      if compact
+      then e1 ^^ semi ^/^ e2
+      else concat ~sep:hardline (e1 ^^ semi) e2
+    in
     enclose doc
 
   and pp_while ~(loc:Location.t) ~ext_attrs:(extension, attrs) ps cond body =

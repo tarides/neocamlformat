@@ -206,3 +206,15 @@ module Applications = struct
     let info = mk_info print all ~doc ["fun-app"] in
     layout := value & opt t Wrap info
 end
+
+module Sequences = struct
+  let compact = ref Compact_or_multiline.Compact_under_app
+  let compact_cmd =
+    let open Compact_or_multiline in
+    let open Arg in
+    let doc =
+      "whether or not to print sequences on a single line if they fit"
+    in
+    let info = mk_info print all ~doc ["sequences-layout"] in
+    compact := value & opt t Compact_under_app info
+end
