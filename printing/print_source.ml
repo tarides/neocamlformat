@@ -3117,11 +3117,11 @@ end = struct
     let obj_with_self =
       match pcstr_self.ppat_desc with
       | Ppat_any -> (* no self *)
-        let kw = string ~loc:pcstr_self.ppat_loc "object" in
         let later =
           (* We don't know what comes next yet! *)
-          { txt = (); loc = { loc with loc_start = loc.loc_end }}
+          { txt = (); loc = pcstr_self.ppat_loc }
         in
+        let kw = token_before ~start:loc.loc_start later OBJECT in
         Keyword.decorate kw ~extension attrs ~later
       | _ ->
         let self = Pattern.pp [] pcstr_self in
