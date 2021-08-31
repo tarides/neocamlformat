@@ -50,6 +50,10 @@ end = struct
     group (aux lid)
 
   and aux = function
+    | Lident { txt = "()"; loc } ->
+      let loc_open  = { loc with loc_end = loc.loc_start } in
+      let loc_close = { loc with loc_start = loc.loc_end } in
+      string ~loc:loc_open "(" ^^ string ~loc:loc_close ")"
     | Lident s -> pp_ident s
     | Ldot (lid, s) -> concat (pp lid) ~sep:PPrint.(dot ^^ break 0) (pp_ident s)
     | Lapply (l1, l2) -> concat (pp l1) ~sep:(break 0) (parens (pp l2))
@@ -1497,10 +1501,9 @@ end = struct
     in
     let body = pp [] body in
     let do_ = token_between stop body DO in
-    let loc_start = { loc with loc_end = it.loc.loc_start } in
-    let loc_end = { loc with loc_start = body.loc.loc_end } in
-    let for_ = string ~loc:loc_start "for" in
+    let for_ = token_before ~start:loc.loc_start it FOR in
     let for_ = Keyword.decorate for_ ~extension attrs ~later:it in
+    let done_ = token_after ~stop:loc.loc_end body DONE in
     let doc =
       group (
         group (
@@ -1513,7 +1516,7 @@ end = struct
           do_
         ) ^^
         nest 2 (break_before body) ^/^
-        string ~loc:loc_end "done"
+        done_
       )
     in
     let _, enclose = Printing_stack.parenthesize ps in
