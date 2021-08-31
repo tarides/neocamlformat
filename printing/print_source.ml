@@ -2476,7 +2476,7 @@ and Value_description : sig
   val pp : value_description -> document
 end = struct
   let pp vd =
-    let name = str vd.pval_name in
+    let name = Longident.pp_ident vd.pval_name in
     let ctyp = Core_type.pp [] vd.pval_type in
     let kw_string, with_prim =
       match vd.pval_prim with
