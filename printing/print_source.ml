@@ -770,7 +770,7 @@ end = struct
       | Pexp_ident Lident id when lbl.txt = id.txt -> sym ++ str lbl
       | Pexp_fun (params, body) when exp.pexp_attributes = [] ->
         let lbl = string ~loc:lbl.loc (lbl.txt ^ ":") in
-        let ps = Printing_stack.Expression exp.pexp_desc :: ps in
+        let ps = [ Printing_stack.Expression exp.pexp_desc ] in
         let fun_, args, arrow, body =
           Expression.fun_chunks ~loc:exp.pexp_loc
             ~ext_attrs:exp.pexp_ext_attributes ps params body
@@ -784,7 +784,7 @@ end = struct
         break_after ~spaces:0 unclosed +++ rparen
       | Pexp_function (c :: cs) when exp.pexp_attributes = [] ->
         let lbl = string ~loc:lbl.loc (lbl.txt ^ ":") in
-        let ps = Printing_stack.Expression exp.pexp_desc :: ps in
+        let ps = [ Printing_stack.Expression exp.pexp_desc ] in
         let function_, cases =
           Expression.function_chunks ~loc:exp.pexp_loc
             ~ext_attrs:exp.pexp_ext_attributes ps c cs
