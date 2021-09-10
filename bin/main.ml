@@ -13,7 +13,15 @@ let read_file fn =
   try loop ()
   with End_of_file -> Buffer.contents buffer
 
-let fmt_file ~quiet ~width fn =
+type fmt_file_error =
+  | Invalid_input of exn
+  | Ast_changed
+  | Invalid_generated_file of exn
+  | Internal_error of string * exn
+
+exception Fmt_file_error of fmt_file_error
+
+let fmt_file ~width fn =
   let source = read_file fn in
   let intf = Filename.check_suffix fn "mli" in
   let fmted =
@@ -22,47 +30,38 @@ let fmt_file ~quiet ~width fn =
     Location.input_name := fn;
     Source.source := source;
     let b = Lexing.from_string source in
+    let pp parse print =
+      match parse b with
+      | exception ((Syntaxerr.Error _ | Lexer.Error _ | Location.Error _) as exn) ->
+         raise (Fmt_file_error (Invalid_input exn))
+      | sg ->
+         let _ = Comments.init () in
+         try print sg with
+         | e -> raise (Fmt_file_error (Internal_error ("printing", e)))
+    in
     let doc =
-      if intf then
-        match Parse.interface b with
-        | exception (Syntaxerr.Error _ as exn) ->
-          if not quiet then Location.report_exception Format.err_formatter exn;
-          exit 1
-        | sg ->
-          let _ = Comments.init () in
-          Print_source.interface sg
-      else
-        match Parse.implementation b with
-        | exception (Syntaxerr.Error _ as exn) ->
-          if not quiet then Location.report_exception Format.err_formatter exn;
-          exit 1
-        | str ->
-          let _ = Comments.init () in
-          Print_source.implementation str
+      if intf
+      then pp Parse.interface Print_source.interface
+      else pp Parse.implementation Print_source.implementation
     in
     Comments.report_remaining ();
     let buf = Buffer.create (String.length source) in
     PPrint.ToBuffer.pretty 10. width buf doc;
     Buffer.to_bytes buf |> Bytes.to_string
   in
-  begin try
-    assert (Ast_checker.check_same_ast ~impl:(not intf) source fmted);
-  with e ->
-    let oc = open_out "/tmp/out.txt" in
-    output_string oc fmted;
-    close_out oc;
-    begin match e with
-    | Syntaxerr.Error _ ->
-      Format.eprintf "neocamlformat: formated %S doesn't parse:@.%a@."
-        fn Location.report_exception e
-    | Assert_failure _ ->
-      Format.eprintf "neocamlformat: AST of %S changed by formater@." fn
-    | _ ->
-      Format.eprintf "neocamlformat: (%S) internal error:@;%s@." fn
-        (Printexc.to_string e)
-    end;
-    exit 2
-  end;
+  (try
+     if not (Ast_checker.check_same_ast ~impl:(not intf) source fmted)
+     then raise (Fmt_file_error Ast_changed)
+   with
+   | e ->
+      let oc = open_out "/tmp/out.txt" in
+      output_string oc fmted;
+      close_out oc;
+      match e with
+      | (Syntaxerr.Error _ | Lexer.Error _ | Location.Error _) as e ->
+         raise (Fmt_file_error (Invalid_generated_file e))
+      | Fmt_file_error _ as e -> raise e
+      | e -> raise (Fmt_file_error (Internal_error ("check_same_ast", e))));
   fmted
 
 open Cmdliner
@@ -86,24 +85,44 @@ let cmd =
   and+ inplace = Arg.(value & flag & info ["i"; "inplace"])
   in
   Ast_checker.ignore_docstrings.contents <- ignore_docstrings;
+  let ok = ref true in
   List.iter (fun fn ->
-    let fmted = fmt_file ~quiet ~width fn in
-    if not inplace then (
-      print_string fmted;
-      print_newline ()
-    ) else (
-      let tmpfile = Filename.temp_file "neocamlformat" "ml" in
-      let oc = open_out tmpfile in
-      output_string oc fmted;
-      output_string oc "\n";
-      flush oc;
-      ignore (Sys.command ("mv " ^ tmpfile ^ " " ^ fn))
-    )
-  ) files;
-  Ok (flush stdout)
+      match fmt_file ~width fn with
+      | exception (Fmt_file_error e) ->
+         begin match e with
+         | Invalid_input e ->
+            if not quiet then Source_parsing.Location.report_exception Format.err_formatter e
+         | Internal_error (txt, e) ->
+            Format.eprintf "neocamlformat: (%S) internal error:%s:@;%s@." fn txt
+              (Printexc.to_string e)
+         | Ast_changed ->
+            Format.eprintf "neocamlformat: AST of %S changed by formater@." fn
+         | Invalid_generated_file e ->
+            Format.eprintf "neocamlformat: formated %S doesn't parse:@.%a@."
+              fn Location.report_exception e;
+         end;
+         ok.contents <- false
+      | exception e ->
+         Format.eprintf "neocamlformat: (%S) uncaught internal error:@;%s@." fn
+           (Printexc.to_string e)
+      | fmted ->
+         if not inplace then (
+           print_string fmted;
+           print_newline ()
+         ) else (
+           let tmpfile = Filename.temp_file "neocamlformat" "ml" in
+           let oc = open_out tmpfile in
+           output_string oc fmted;
+           output_string oc "\n";
+           flush oc;
+           ignore (Sys.command ("mv " ^ tmpfile ^ " " ^ fn))
+         )
+    ) files;
+  flush stdout;
+  if not !ok then exit 1
 
 let info =
-  Term.info "neocamlformat"
+  Term.info ~exits:Term.default_exits "neocamlformat"
 
 let () =
   Term.exit (Term.eval (cmd, info))
