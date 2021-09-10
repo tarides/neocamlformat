@@ -6,6 +6,8 @@ let compare_pos p1 p2 =
   | n -> n
 
 let is_docstring s =
+  (* FIXME: This invariant doesn't hold *)
+  assert (String.length s >= 2);
   String.get s 0 = '*' &&
   (* necessarily of length 2, otherwise would be an empty comment *)
   String.get s 1 <> '*'
