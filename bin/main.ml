@@ -13,7 +13,7 @@ let read_file fn =
   try loop ()
   with End_of_file -> Buffer.contents buffer
 
-let fmt_file ~width fn =
+let fmt_file ~quiet ~width fn =
   let source = read_file fn in
   let intf = Filename.check_suffix fn "mli" in
   let fmted =
@@ -26,7 +26,7 @@ let fmt_file ~width fn =
       if intf then
         match Parse.interface b with
         | exception (Syntaxerr.Error _ as exn) ->
-          Location.report_exception Format.err_formatter exn;
+          if not quiet then Location.report_exception Format.err_formatter exn;
           exit 1
         | sg ->
           let _ = Comments.init () in
@@ -34,7 +34,7 @@ let fmt_file ~width fn =
       else
         match Parse.implementation b with
         | exception (Syntaxerr.Error _ as exn) ->
-          Location.report_exception Format.err_formatter exn;
+          if not quiet then Location.report_exception Format.err_formatter exn;
           exit 1
         | str ->
           let _ = Comments.init () in
@@ -82,11 +82,12 @@ let cmd =
   and+ width = Arg.(value & opt int 80 & info ["w"; "width"])
   and+ files = Arg.(value & pos_all file [] & info ~doc:"files to format" [])
   and+ ignore_docstrings = Arg.(value & flag & info ["ignore-docstrings"])
+  and+ quiet = Arg.(value & flag & info ["quiet"])
   and+ inplace = Arg.(value & flag & info ["i"; "inplace"])
   in
   Ast_checker.ignore_docstrings.contents <- ignore_docstrings;
   List.iter (fun fn ->
-    let fmted = fmt_file ~width fn in
+    let fmted = fmt_file ~quiet ~width fn in
     if not inplace then (
       print_string fmted;
       print_newline ()
