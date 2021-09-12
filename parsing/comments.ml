@@ -21,8 +21,6 @@ type t =
       mutable next: t;
     }
 
-let singleton txt loc = Cell { loc; txt; prev = Null; next = Null }
-
 let rec iter ~f = function
   | Null -> ()
   | Cell { loc; txt; next; _ } ->
@@ -57,18 +55,13 @@ let rec insert_comment prev txt loc = function
 
 let keep s = s <> "" && not (is_docstring s)
 
-let rec populate = function
-  | [] -> Null
-  | (s, l) :: rest ->
-    if not (keep s) then
-      populate rest
-    else
+let populate rest =
       List.fold_left (fun lst (txt, loc) ->
         if keep txt then
           insert_comment Null txt loc lst
         else
           lst
-      ) (singleton s l) rest
+      ) Null rest
 
 let comments = ref Null
 
