@@ -35,7 +35,8 @@ let fmt_file ~width fn =
       | exception ((Syntaxerr.Error _ | Lexer.Error _ | Location.Error _) as exn) ->
          raise (Fmt_file_error (Invalid_input exn))
       | sg ->
-         let _ = Comments.init () in
+         let comments = Lexer.comments () in
+         let () = Comments.init comments in
          try print sg with
          | e -> raise (Fmt_file_error (Internal_error ("printing", e)))
     in

@@ -72,8 +72,8 @@ let rec populate = function
 
 let comments = ref Null
 
-let init () =
-  comments := populate (Lexer.comments ())
+let init l =
+  comments := populate l
 
 let fetch accept pos =
   let rec aux = function
