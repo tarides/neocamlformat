@@ -36,7 +36,10 @@ let fmt_file ~width fn =
          raise (Fmt_file_error (Invalid_input exn))
       | sg ->
          let comments = Lexer.comments () in
-         let () = Comments.init comments in
+         let () =
+           try Comments.init comments with e ->
+             raise (Fmt_file_error (Internal_error ("comments-init", e)))
+         in
          try print sg with
          | e -> raise (Fmt_file_error (Internal_error ("printing", e)))
     in
