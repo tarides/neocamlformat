@@ -6,11 +6,16 @@ let compare_pos p1 p2 =
   | n -> n
 
 let is_docstring s =
-  (* FIXME: This invariant doesn't hold *)
-  assert (String.length s >= 2);
-  String.get s 0 = '*' &&
-  (* necessarily of length 2, otherwise would be an empty comment *)
-  String.get s 1 <> '*'
+  match s with
+  | "" -> false
+  | "*" ->
+     (* FIXME ? this can be either (**) or (***), one can look at
+        locations to compuate the width *)
+     false
+  | _ ->
+     String.get s 0 = '*'
+     && String.length s >= 2
+     && String.get s 1 <> '*'
 
 type t =
   | Null
@@ -53,7 +58,7 @@ let rec insert_comment prev txt loc = function
       let _ = insert_comment cell txt loc t.next in
       keep_first prev cell
 
-let keep s = s <> "" && not (is_docstring s)
+let keep s = not (is_docstring s)
 
 let populate rest =
       List.fold_left (fun lst (txt, loc) ->
