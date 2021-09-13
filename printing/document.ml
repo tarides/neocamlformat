@@ -93,11 +93,15 @@ let comment (s, (loc : Location.t)) =
   let loc_start =
     { loc.loc_start with pos_cnum = loc.loc_start.pos_cnum + 2 }
   in
-  let l = { loc with loc_start } in
-  let txt =
-    !^"(*" ^^ pp_verbatim_string ~comment:true ~adjust_indent:l s ^^ !^"*)"
-  in
-  { txt; loc }
+  match s with
+  | "*" when loc.loc_end.pos_cnum - loc.loc_start.pos_cnum = 4 ->
+     { txt = !^ "(**)"; loc}
+  | _ ->
+     let l = { loc with loc_start } in
+     let txt =
+       !^"(*" ^^ pp_verbatim_string ~comment:true ~adjust_indent:l s ^^ !^"*)"
+     in
+     { txt; loc }
 
 let docstring s (l : Location.t) =
   let loc_start =
