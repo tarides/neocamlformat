@@ -1097,7 +1097,7 @@ end = struct
     in
     let vbs = separate hardline (List.hd vbs) (List.tl vbs) in
     let ps, enclose = Printing_stack.parenthesize ps in
-    let body = pp (List.tl ps (*?*)) body in
+    let body = pp ps body in
     let in_ = token_between vbs body IN in
     enclose (
       concat ~sep:hardline (group (vbs ^/^ in_)) body
@@ -1127,15 +1127,19 @@ end = struct
     | Always -> lhs ^^ nest !Options.Cases.body_indent (hardline ++ rhs)
     | When_needed -> prefix ~indent:!Options.Cases.body_indent ~spaces:1 lhs rhs
 
-  and cases ~compact:compact_layout ps c cs =
-    let cases =
-      let fmt c = case ps c in
-      List.fold_left (fun acc elt ->
-        let elt = fmt elt in
-        let bar = token_between acc elt BAR in
-        acc ^/^ group (bar ^^ space ++ elt)
-      ) (fmt c) cs
+  and cases ~compact:compact_layout orig_ps c cs =
+    let fmt ps acc elt =
+      let elt = case ps elt in
+      let bar = token_between acc elt BAR in
+      acc ^/^ group (bar ^^ space ++ elt)
     in
+    let ps = [ List.hd orig_ps ] in
+    let rec iterator acc = function
+      | [] -> acc
+      | [ x ] -> fmt (List.tl orig_ps) acc x
+      | x :: xs -> iterator (fmt ps acc x) xs
+    in
+    let cases = iterator (case ps c) cs in
     let prefix =
       let open PPrint in
       let multi = hardline ^^ bar in
@@ -1447,40 +1451,51 @@ end = struct
       val_
 
   and pp_if_then_else ~loc ps if_branches else_opt =
-    let ps, enclose = Printing_stack.parenthesize ps in
-    let if_branches =
-      let ps = Printing_stack.Then_branch :: List.tl ps in
-      List.mapi (fun i ib ->
-        let cond = pp [] ib.if_cond in
-        let then_branch = pp ps ib.if_body in
-        let then_kw = token_between cond then_branch THEN in
-        let keyword =
-          let if_kw =
-            let if_ = token_before ~start:ib.if_loc.loc_start cond IF in
-            if i = 0 then if_ else !^"else " ++ if_
-          in
-          let with_ext =
-            match ib.if_ext with
-            | None -> if_kw
-            | Some { txt = ext_name ; loc } ->
-              let tag = string ~loc ("%" ^ ext_name) in
-              if_kw ^^ brackets tag
-          in
-          let with_attrs = Attribute.attach_to_item with_ext ib.if_attrs in
-          with_attrs
+    let fmt_if_branch ~first_branch ps ib =
+      let cond = pp [] ib.if_cond in
+      let then_branch = pp ps ib.if_body in
+      let then_kw = token_between cond then_branch THEN in
+      let keyword =
+        let if_kw =
+          let if_ = token_before ~start:ib.if_loc.loc_start cond IF in
+          if first_branch then if_ else !^"else " ++ if_
         in
-        let if_and_cond =
-          group (
-            keyword ^^
-            nest 2 (break_before cond) ^/^
-            then_kw
-          )
+        let with_ext =
+          match ib.if_ext with
+          | None -> if_kw
+          | Some { txt = ext_name ; loc } ->
+            let tag = string ~loc ("%" ^ ext_name) in
+            if_kw ^^ brackets tag
         in
-        concat ~indent:2 ~sep:(break 1) if_and_cond then_branch
-      ) if_branches
+        let with_attrs = Attribute.attach_to_item with_ext ib.if_attrs in
+        with_attrs
+      in
+      let if_and_cond =
+        group (
+          keyword ^^
+          nest 2 (break_before cond) ^/^
+          then_kw
+        )
+      in
+      concat ~indent:2 ~sep:(break 1) if_and_cond then_branch
     in
+    let rec iterator ?(first_branch=true) ps = function
+      | [] -> assert false
+      | [ x ] ->
+        let ps =
+          match else_opt with
+          | None -> Printing_stack.Last_if_branch :: List.tl ps
+          | _ -> ps
+        in
+        fmt_if_branch ~first_branch ps x
+      | x :: xs ->
+        fmt_if_branch ~first_branch ps x
+          ^/^ iterator ~first_branch:false ps xs
+    in
+    let ps, enclose = Printing_stack.parenthesize ps in
     let if_ =
-      separate (PPrint.break 1) (List.hd if_branches) (List.tl if_branches)
+      let ps = Printing_stack.Then_branch :: List.tl ps in
+      iterator ps if_branches
     in
     let else_ =
       let loc = { loc with Location.loc_start = if_.loc.loc_end } in

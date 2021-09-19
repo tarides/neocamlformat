@@ -18,6 +18,7 @@ type elt =
   | Cons_constr of { on_left: bool }
   | Pipe of { on_left: bool }
   | Then_branch
+  | Last_if_branch
   | Prefix_op
   | Infix_op of { on_left: bool; level: int (* gloups *); }
   | Row_field
@@ -29,8 +30,11 @@ let string_of_elt = function
   | With_constraint -> "with constraint"
   | Core_type _ -> "core_type"
   | Pattern _ -> "patt"
+  | Expression Pexp_let _ -> "expr (let)"
+  | Expression Pexp_sequence _ -> "expr (seq)"
   | Expression _ -> "expr"
   | Then_branch -> "if-then"
+  | Last_if_branch -> "if-then;"
   | Class_expr _ -> "cl-expr"
   | Module_type _ -> "mty"
   | Function_parameter -> "param"
@@ -524,11 +528,11 @@ let needs_parens elt parents =
           true
         | _ -> false) parents
 
-  | Expression Pexp_ifthenelse _ ->
+  | Last_if_branch ->
     List.exists (function
       | Attribute
       | Prefix_op
-      | Infix_op _
+      | Infix_op { on_left = true; _ }
       | Class_expr Pcl_apply _
       | Expression ( Pexp_apply _
                    | Pexp_assert _
@@ -544,6 +548,28 @@ let needs_parens elt parents =
       | Then_branch
       | Record_field
       | Unpack -> true
+      | _ -> false) parents
+
+  | Expression Pexp_ifthenelse (_, else_opt) ->
+    List.exists (function
+      | Attribute
+      | Prefix_op
+      | Infix_op { on_left = true; _ }
+      | Class_expr Pcl_apply _
+      | Expression ( Pexp_apply _
+                   | Pexp_assert _
+                   | Pexp_lazy _
+                   | Pexp_construct _
+                   | Pexp_variant _
+                   | Pexp_record _
+                   | Pexp_array _
+                   | Pexp_tuple _
+                   | Pexp_sequence _
+                   | Pexp_send _
+                   )
+      | Record_field
+      | Unpack -> true
+      | Then_branch -> Option.is_none else_opt
       | _ -> false) parents
 
   | Expression Pexp_object _
@@ -564,7 +590,7 @@ let needs_parens elt parents =
       | _ -> false) parents
 
   | Expression Pexp_sequence _ ->
-    List.exists (function
+    List.find_map (function
       | Attribute
       | Prefix_op
       | Infix_op _
@@ -582,10 +608,13 @@ let needs_parens elt parents =
                     | Pexp_send _
                     | Pexp_tuple _
                     )
+      | Last_if_branch
       | Then_branch
       | Record_field
-      | Unpack -> true
-      | _ -> false) parents
+      | Unpack -> Some true
+      | Expression Pexp_let _ -> Some false
+      | _ -> None) parents
+    |> Option.value ~default:false
 
   | Class_expr Pcl_fun _
   | Class_expr Pcl_let _
@@ -625,6 +654,11 @@ let needs_parens elt parents =
       | Value_binding
       | Expression Pexp_fun _
       | Expression Pexp_function _
+      | Expression Pexp_let _
+      | Expression Pexp_letexception _
+      | Expression Pexp_letmodule _
+      | Expression Pexp_letop _
+      | Expression Pexp_letopen _
       | Infix_op { on_left = false; _ }->
         false
       | _ -> true) parents
@@ -659,7 +693,10 @@ let needs_parens elt parents =
 
   | _ -> false
 
-(* FIXME *)
+(* This is wrong, the only normalization we are allowed to do is to remove
+   consecutive duplicates.
+   Everything else should be kept. *)
+    (*
 let rec normalize = function
   | ([] | [ _ ]) as lst -> lst
 
@@ -678,6 +715,8 @@ let rec normalize = function
     -> normalize (keep :: tl)
 
   | x :: xs -> x :: normalize xs
+       *)
+let normalize x = x
 
 let parenthesize ?(situations=Options.Always_or_needed.When_needed)
     ?(style=Options.Parenthesing.Parens) t =
