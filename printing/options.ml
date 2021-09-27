@@ -86,11 +86,38 @@ module Always_or_needed = struct
     Format.pp_print_string ppf
       (match t with
        | Always -> "always"
-       | When_needed -> "when_needed")
+       | When_needed -> "when-needed")
 
   let parse = function
     | "always" -> Ok Always
     | "when-needed" -> Ok When_needed
+    | s ->
+      let msg = Format.asprintf "%a, got %S" (accepted_values print) all s in
+      Error (`Msg msg)
+
+  let t = Arg.conv (parse, print)
+end
+
+module Always_or_needed_or_nontrivial = struct
+  type t = When_needed | Always | When_nontrivial
+  let all = [ Always; When_needed; When_nontrivial ]
+
+  let simplify : t -> Always_or_needed.t = function
+    | When_needed -> When_needed
+    | Always -> Always
+    | When_nontrivial -> invalid_arg "simplify"
+
+  let print ppf t =
+    Format.pp_print_string ppf
+      (match t with
+       | Always -> "always"
+       | When_needed -> "when-needed"
+       | When_nontrivial -> "when-nontrivial")
+
+  let parse = function
+    | "always" -> Ok Always
+    | "when-needed" -> Ok When_needed
+    | "when-nontrivial" -> Ok When_nontrivial
     | s ->
       let msg = Format.asprintf "%a, got %S" (accepted_values print) all s in
       Error (`Msg msg)
@@ -175,6 +202,29 @@ module Match = struct
                it fits. This also applies to functions and try-withs." in
     let info = mk_info print all ~doc ["match-layout"] in
     compact := value & opt t Compact_under_app info
+end
+
+module If_branch = struct
+  module P = Parenthesing
+
+  let parens_style = ref P.Parens
+  let parens_style_cmd =
+    let open Arg in
+    let doc = "style of parenthesing to use for if branches" in
+    let info =
+      mk_info P.print P.all ~doc
+        ["if-branch-parens-style" ;"if-branch-parenthezing-style"]
+    in
+    parens_style := value & opt P.t Parens info
+
+  module ANN = Always_or_needed_or_nontrivial
+
+  let parenthesing_situations = ref ANN.When_nontrivial
+  let parens_situations_cmd =
+    let open Arg in
+    let doc = "when to add parentheses around if branches" in
+    let info = mk_info ANN.print ANN.all ~doc ["if-branch-parenthezing"] in
+    parenthesing_situations := value & opt ANN.t When_nontrivial info
 end
 
 module Cases = struct
