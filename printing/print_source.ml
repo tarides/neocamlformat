@@ -1017,8 +1017,10 @@ end = struct
     | Pexp_field (exp, fld) -> pp_field ps exp fld
     | Pexp_setfield (exp, fld, val_) -> pp_setfield ps exp fld val_
     | Pexp_array elts -> pp_array ~loc ps elts
+    | Pexp_ifthen branches ->
+      pp_if_then_else ~loc ps branches None
     | Pexp_ifthenelse (branches, else_) ->
-      pp_if_then_else ~loc ps branches else_
+      pp_if_then_else ~loc ps branches (Some else_)
     | Pexp_sequence (e1, e2) -> pp_sequence ps e1 e2
     | Pexp_while (cond, body) -> pp_while ~loc ~ext_attrs ps cond body
     | Pexp_for (it, start, stop, dir, body) ->

@@ -2063,17 +2063,19 @@ expr:
           { if_loc; if_cond = $3; if_body = $5; if_ext = ext; if_attrs = attrs }
         in
         match else_.pexp_desc with
+        | Pexp_ifthen branches ->
+            Pexp_ifthen (if_branch :: branches)
         | Pexp_ifthenelse(if_branches, else_) ->
             Pexp_ifthenelse(if_branch :: if_branches, else_)
         | _ ->
-            Pexp_ifthenelse([if_branch], Some else_) }
+            Pexp_ifthenelse([if_branch], else_) }
   | IF ext_attributes seq_expr THEN expr
       { let (ext, attrs) = $2 in
         let if_loc = make_loc $sloc in
         let if_branch =
           { if_loc; if_cond = $3; if_body = $5; if_ext = ext; if_attrs = attrs }
         in
-        Pexp_ifthenelse([if_branch], None) }
+        Pexp_ifthen [if_branch] }
 ;
 
 simple_expr:

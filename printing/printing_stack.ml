@@ -550,7 +550,7 @@ let needs_parens elt parents =
       | Unpack -> true
       | _ -> false) parents
 
-  | Expression Pexp_ifthenelse (_, else_opt) ->
+  | Expression Pexp_ifthen _ ->
     List.exists (function
       | Attribute
       | Prefix_op
@@ -569,7 +569,28 @@ let needs_parens elt parents =
                    )
       | Record_field
       | Unpack -> true
-      | Then_branch -> Option.is_none else_opt
+      | Then_branch -> true
+      | _ -> false) parents
+
+  | Expression Pexp_ifthenelse _ ->
+    List.exists (function
+      | Attribute
+      | Prefix_op
+      | Infix_op { on_left = true; _ }
+      | Class_expr Pcl_apply _
+      | Expression ( Pexp_apply _
+                   | Pexp_assert _
+                   | Pexp_lazy _
+                   | Pexp_construct _
+                   | Pexp_variant _
+                   | Pexp_record _
+                   | Pexp_array _
+                   | Pexp_tuple _
+                   | Pexp_sequence _
+                   | Pexp_send _
+                   )
+      | Record_field
+      | Unpack -> true
       | _ -> false) parents
 
   | Expression Pexp_object _
@@ -602,6 +623,7 @@ let needs_parens elt parents =
                     | Pexp_variant _
                     | Pexp_record _
                     | Pexp_array _
+                    | Pexp_ifthen _
                     | Pexp_ifthenelse _
                     | Pexp_list_lit _
                     | Pexp_sequence _
