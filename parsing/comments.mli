@@ -1,6 +1,6 @@
 type t
 
-val init : unit -> unit
+val init : (string * Location.t) list  -> unit
 
 val compare_pos: Lexing.position -> Lexing.position -> int
 

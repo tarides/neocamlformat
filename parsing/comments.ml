@@ -6,9 +6,16 @@ let compare_pos p1 p2 =
   | n -> n
 
 let is_docstring s =
-  String.get s 0 = '*' &&
-  (* necessarily of length 2, otherwise would be an empty comment *)
-  String.get s 1 <> '*'
+  match s with
+  | "" -> false
+  | "*" ->
+     (* FIXME ? this can be either (**) or (***), one can look at
+        locations to compuate the width *)
+     false
+  | _ ->
+     String.get s 0 = '*'
+     && String.length s >= 2
+     && String.get s 1 <> '*'
 
 type t =
   | Null
@@ -18,8 +25,6 @@ type t =
       mutable prev: t;
       mutable next: t;
     }
-
-let singleton txt loc = Cell { loc; txt; prev = Null; next = Null }
 
 let rec iter ~f = function
   | Null -> ()
@@ -53,25 +58,20 @@ let rec insert_comment prev txt loc = function
       let _ = insert_comment cell txt loc t.next in
       keep_first prev cell
 
-let keep s = s <> "" && not (is_docstring s)
+let keep s = not (is_docstring s)
 
-let rec populate = function
-  | [] -> Null
-  | (s, l) :: rest ->
-    if not (keep s) then
-      populate rest
-    else
+let populate rest =
       List.fold_left (fun lst (txt, loc) ->
         if keep txt then
           insert_comment Null txt loc lst
         else
           lst
-      ) (singleton s l) rest
+      ) Null rest
 
 let comments = ref Null
 
-let init () =
-  comments := populate (Lexer.comments ())
+let init l =
+  comments := populate l
 
 let fetch accept pos =
   let rec aux = function
