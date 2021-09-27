@@ -1017,10 +1017,8 @@ end = struct
     | Pexp_field (exp, fld) -> pp_field ps exp fld
     | Pexp_setfield (exp, fld, val_) -> pp_setfield ps exp fld val_
     | Pexp_array elts -> pp_array ~loc ps elts
-    | Pexp_ifthen branches ->
-      pp_if_then_else ~loc ps branches None
-    | Pexp_ifthenelse (branches, else_) ->
-      pp_if_then_else ~loc ps branches (Some else_)
+    | Pexp_ifthen branches -> pp_if_then ps branches
+    | Pexp_ifthenelse (branches, else_) -> pp_if_then_else ps branches else_
     | Pexp_sequence (e1, e2) -> pp_sequence ps e1 e2
     | Pexp_while (cond, body) -> pp_while ~loc ~ext_attrs ps cond body
     | Pexp_for (it, start, stop, dir, body) ->
@@ -1452,43 +1450,52 @@ end = struct
     pp_gen_set ?prefix ~dot:(!^"." ++ op) enclose access_ps ps accessed indices
       val_
 
-  and pp_if_then_else ~loc ps if_branches else_opt =
-    let fmt_if_branch ~first_branch ps ib =
-      let cond = pp [] ib.if_cond in
-      let then_branch = pp ps ib.if_body in
-      let then_kw = token_between cond then_branch THEN in
-      let keyword =
-        let if_kw =
-          let if_ = token_before ~start:ib.if_loc.loc_start cond IF in
-          if first_branch then if_ else !^"else " ++ if_
-        in
-        let with_ext =
-          match ib.if_ext with
-          | None -> if_kw
-          | Some { txt = ext_name ; loc } ->
-            let tag = string ~loc ("%" ^ ext_name) in
-            if_kw ^^ brackets tag
-        in
-        let with_attrs = Attribute.attach_to_item with_ext ib.if_attrs in
-        with_attrs
+  and fmt_if_branch ~first_branch ps ib =
+    let cond = pp [] ib.if_cond in
+    let then_branch = pp ps ib.if_body in
+    let then_kw = token_between cond then_branch THEN in
+    let keyword =
+      let if_kw =
+        let if_ = token_before ~start:ib.if_loc.loc_start cond IF in
+        if first_branch then if_ else !^"else " ++ if_
       in
-      let if_and_cond =
-        group (
-          keyword ^^
-          nest 2 (break_before cond) ^/^
-          then_kw
-        )
+      let with_ext =
+        match ib.if_ext with
+        | None -> if_kw
+        | Some { txt = ext_name ; loc } ->
+          let tag = string ~loc ("%" ^ ext_name) in
+          if_kw ^^ brackets tag
       in
-      concat ~indent:2 ~sep:(break 1) if_and_cond then_branch
+      let with_attrs = Attribute.attach_to_item with_ext ib.if_attrs in
+      with_attrs
     in
+    let if_and_cond =
+      group (
+        keyword ^^
+        nest 2 (break_before cond) ^/^
+        then_kw
+      )
+    in
+    concat ~indent:2 ~sep:(break 1) if_and_cond then_branch
+
+  and pp_if_then ps if_branches =
     let rec iterator ?(first_branch=true) ps = function
       | [] -> assert false
       | [ x ] ->
-        let ps =
-          match else_opt with
-          | None -> Printing_stack.Last_if_branch :: List.tl ps
-          | _ -> ps
-        in
+        let ps = Printing_stack.Last_if_branch :: List.tl ps in
+        fmt_if_branch ~first_branch ps x
+      | x :: xs ->
+        fmt_if_branch ~first_branch ps x
+          ^/^ iterator ~first_branch:false ps xs
+    in
+    let ps, enclose = Printing_stack.parenthesize ps in
+    let ps = Printing_stack.Then_branch :: List.tl ps in
+    enclose (iterator ps if_branches)
+
+  and pp_if_then_else ps if_branches else_branch =
+    let rec iterator ?(first_branch=true) ps = function
+      | [] -> assert false
+      | [ x ] ->
         fmt_if_branch ~first_branch ps x
       | x :: xs ->
         fmt_if_branch ~first_branch ps x
@@ -1500,13 +1507,10 @@ end = struct
       iterator ps if_branches
     in
     let else_ =
-      let loc = { loc with Location.loc_start = if_.loc.loc_end } in
-      optional ~loc (fun e ->
-        let else_branch = pp ps e in
-        let else_ = token_between if_ else_branch ELSE in
-        break_before else_ ^^
-        nest 2 (break_before else_branch)
-      ) else_opt
+      let else_branch = pp ps else_branch in
+      let else_ = token_between if_ else_branch ELSE in
+      break_before else_ ^^
+      nest 2 (break_before else_branch)
     in
     let doc = group (if_ ^^ else_) in
     enclose doc
