@@ -781,3 +781,9 @@ let () =
 
 let raise_errorf ?(loc = none) ?(sub = []) =
   Format.kdprintf (fun txt -> raise (Error (mkerror loc sub txt)))
+
+let start_point { loc_start; loc_end = _ } =
+  { loc_start; loc_end = loc_start }
+
+let end_point { loc_start = _; loc_end } =
+  { loc_start = loc_end; loc_end }

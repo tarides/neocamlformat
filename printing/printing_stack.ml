@@ -740,23 +740,23 @@ let rec normalize = function
        *)
 let normalize x = x
 
+let enclose style t doc =
+  let open Document in
+  match style with
+  | Options.Parenthesing.Parens ->
+    let indented = nest 1 doc in
+    parens indented
+  | Begin_end ->
+    let indented =
+      match List.hd t with
+      | Expression (Pexp_match _ | Pexp_try _) -> doc
+      | _ -> nest 2 doc
+    in
+    enclose ~before:PPrint.(!^"begin ") ~after:PPrint.(hardline ^^ !^"end")
+      indented
+
 let parenthesize ?(situations=Options.Always_or_needed.When_needed)
     ?(style=Options.Parenthesing.Parens) t =
-  let enclosed doc =
-    let open Document in
-    match style with
-    | Parens ->
-      let indented = nest 1 doc in
-      parens indented
-    | Begin_end ->
-      let indented =
-        match List.hd t with
-        | Expression (Pexp_match _ | Pexp_try _) -> doc
-        | _ -> nest 2 doc
-      in
-      enclose ~before:PPrint.(!^"begin ") ~after:PPrint.(hardline ^^ !^"end")
-        indented
-  in
   match situations with
   | Always ->
     let t =
@@ -764,13 +764,13 @@ let parenthesize ?(situations=Options.Always_or_needed.When_needed)
       | [] -> []
       | top :: _ -> [ top ]
     in
-    t, enclosed
+    t, enclose style t
   | When_needed ->
     match t with
     | [] -> assert false
     | elt :: parents ->
       let parents = normalize parents in
       if needs_parens elt parents then
-        [ elt ], enclosed
+        [ elt ], enclose style t
       else
         elt :: parents, Fun.id

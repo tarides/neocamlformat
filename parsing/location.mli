@@ -202,3 +202,6 @@ val raise_errorf: ?loc:t -> ?sub:msg list ->
 
 val report_exception: formatter -> exn -> unit
 (** Reraise the exception if it is unknown. *)
+
+val start_point : t -> t
+val end_point : t -> t

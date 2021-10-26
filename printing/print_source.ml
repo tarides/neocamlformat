@@ -1450,14 +1450,38 @@ end = struct
     pp_gen_set ?prefix ~dot:(!^"." ++ op) enclose access_ps ps accessed indices
       val_
 
-  and fmt_if_branch ~first_branch ps ib =
+  and fmt_if_branch ps exp =
+    let style = !Options.If_branch.parens_style in
+    match !Options.If_branch.parenthesing_situations with
+    | Always ->
+      let opening =
+        string ~loc:(Location.start_point exp.pexp_loc)
+          (match style with
+           | Parens -> "("
+           | Begin_end -> "begin")
+      in
+      let closing =
+        string ~loc:(Location.end_point exp.pexp_loc)
+          (match style with
+           | Parens -> ")"
+           | Begin_end -> "end")
+      in
+      [ opening; pp [] exp; closing ]
+    | When_needed ->
+      [pp ps exp]
+    | When_nontrivial ->
+      assert false
+
+  and fmt_if_chunk ~first_branch ps ib =
     let cond = pp [] ib.if_cond in
-    let then_branch = pp ps ib.if_body in
-    let then_kw = token_between cond then_branch THEN in
     let keyword =
       let if_kw =
         let if_ = token_before ~start:ib.if_loc.loc_start cond IF in
-        if first_branch then if_ else !^"else " ++ if_
+        if first_branch then
+          if_
+        else
+          let else_ = token_before ~start:ib.if_loc.loc_start if_ ELSE in
+          else_ ^/^ if_
       in
       let with_ext =
         match ib.if_ext with
@@ -1469,23 +1493,40 @@ end = struct
       let with_attrs = Attribute.attach_to_item with_ext ib.if_attrs in
       with_attrs
     in
-    let if_and_cond =
-      group (
-        keyword ^^
-        nest 2 (break_before cond) ^/^
-        then_kw
-      )
-    in
-    concat ~indent:2 ~sep:(break 1) if_and_cond then_branch
+    match fmt_if_branch ps ib.if_body with
+    | [then_branch] ->
+      let then_kw = token_between cond then_branch THEN in
+      let if_and_cond =
+        group (
+          keyword ^^
+          nest 2 (break_before cond) ^/^
+          then_kw
+        )
+      in
+      concat ~indent:2 ~sep:(break 1) if_and_cond then_branch
+    | [opening; then_branch; closing] ->
+      let then_kw = token_between cond then_branch THEN in
+      let if_and_cond =
+        group (
+          keyword ^^
+          nest 2 (break_before cond) ^/^
+          group (then_kw ^/^ opening)
+        )
+      in
+      concat ~sep:(break 0)
+        (concat ~indent:2 ~sep:(break 0) if_and_cond then_branch)
+        closing
+    | _ ->
+      assert false
 
   and pp_if_then ps if_branches =
     let rec iterator ?(first_branch=true) ps = function
       | [] -> assert false
       | [ x ] ->
         let ps = Printing_stack.Last_if_branch :: List.tl ps in
-        fmt_if_branch ~first_branch ps x
+        fmt_if_chunk ~first_branch ps x
       | x :: xs ->
-        fmt_if_branch ~first_branch ps x
+        fmt_if_chunk ~first_branch ps x
           ^/^ iterator ~first_branch:false ps xs
     in
     let ps, enclose = Printing_stack.parenthesize ps in
@@ -1496,9 +1537,9 @@ end = struct
     let rec iterator ?(first_branch=true) ps = function
       | [] -> assert false
       | [ x ] ->
-        fmt_if_branch ~first_branch ps x
+        fmt_if_chunk ~first_branch ps x
       | x :: xs ->
-        fmt_if_branch ~first_branch ps x
+        fmt_if_chunk ~first_branch ps x
           ^/^ iterator ~first_branch:false ps xs
     in
     let ps, enclose = Printing_stack.parenthesize ps in
