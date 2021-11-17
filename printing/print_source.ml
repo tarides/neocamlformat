@@ -1874,26 +1874,19 @@ and Module_type : sig
   val pp : module_type -> document
 end = struct
   let rec pp { pmty_desc; pmty_attributes; pmty_loc; _ } =
-    let ps, enclose =
-      if Attribute.has_non_doc pmty_attributes then
-        Printing_stack.parenthesize [ Attribute ]
-      else
-        [], Fun.id
-    in
-    let ps = Printing_stack.Module_type pmty_desc :: ps in
-    let doc = group (pp_desc ~loc:pmty_loc ps pmty_desc) in
-    let doc = Attribute.attach_to_item doc pmty_attributes in
-    enclose doc
+    let doc = group (pp_desc ~loc:pmty_loc pmty_desc) in
+    Attribute.attach_to_item doc pmty_attributes
 
-  and pp_desc ~loc ps = function
+  and pp_desc ~loc = function
     | Pmty_alias lid (* [module type _ = A] *)
     | Pmty_ident lid (* [module _ : A] *)
       -> Longident.pp lid
     | Pmty_signature sg -> pp_signature ~loc sg
     | Pmty_functor (params, mty) -> pp_functor ~loc params mty
     | Pmty_with (mty, cstrs) -> pp_with mty cstrs
-    | Pmty_typeof me -> pp_typeof ps me
+    | Pmty_typeof me -> pp_typeof me
     | Pmty_extension ext -> Extension.pp Item ext
+    | Pmty_parens mty -> parens (pp mty)
 
   and pp_signature ~loc = function
     | [] -> string ~loc "sig end"
@@ -1981,12 +1974,10 @@ end = struct
     in
     with_constraints
 
-  and pp_typeof ps exp =
-    let _, enclose = Printing_stack.parenthesize ps in
+  and pp_typeof exp =
     let me = Module_expr.pp exp in
     let pre = PPrint.flow (break 1) [ !^"module"; !^"type"; !^"of" ] in
     pre ++ break_before me
-    |> enclose
 
 end
 
@@ -2857,29 +2848,20 @@ end = struct
 end
 
 and Class_expr : sig
-  val pp : Printing_stack.t -> class_expr -> document
+  val pp : class_expr -> document
 end = struct
   (* TODO: much of this is just copy pasted from Expression; factorize. *)
 
-  let rec pp ps { pcl_desc; pcl_loc; pcl_attributes } =
-    let ps, enclose =
-      if Attribute.has_non_doc pcl_attributes then
-        Printing_stack.parenthesize (Attribute :: ps)
-      else
-        ps, Fun.id
-    in
-    let ps = Printing_stack.Class_expr pcl_desc :: ps in
-    let desc = group (pp_desc ~loc:pcl_loc ps pcl_desc) in
-    let doc = Attribute.attach_to_item desc pcl_attributes in
-    enclose doc
+  let rec pp { pcl_desc; pcl_loc; pcl_attributes } =
+    let desc = group (pp_desc ~loc:pcl_loc pcl_desc) in
+    Attribute.attach_to_item desc pcl_attributes
 
-  and pp_fun ps ~loc params ce =
+  and pp_fun ~loc params ce =
     let params =
       separate_map (PPrint.break 1) ~f:Fun_param.pp
         (List.hd params) (List.tl params)
     in
-    let ps, enclose = Printing_stack.parenthesize ps in
-    let body = pp ps ce in
+    let body = pp ce in
     (* FIXME: copied from expressions. factorize. *)
     let fun_ =
       let loc = { loc with Location.loc_end = params.loc.loc_start } in
@@ -2889,17 +2871,14 @@ end = struct
     prefix ~indent:2 ~spaces:1
       (group ((prefix ~indent:2 ~spaces:1 fun_ params) ^/^ arrow))
       body
-    |> enclose
 
-  and pp_apply ps ce = function
+  and pp_apply ce = function
     | [] -> assert false (* can't apply without args! *)
     | arg :: args ->
-      let ps, enclose = Printing_stack.parenthesize ps in
-      let ce = pp ps ce in
+      let ce = pp ce in
       Application.pp_simple ce arg args
-      |> enclose
 
-  and pp_let ~loc ps rf vbs ce =
+  and pp_let ~loc rf vbs ce =
     let vbs =
       let previous_vb = ref None in
       List.concat_map (fun vb ->
@@ -2939,39 +2918,36 @@ end = struct
       ) vbs
     in
     let vbs = separate hardline (List.hd vbs) (List.tl vbs) in
-    let ps, enclose = Printing_stack.parenthesize ps in
-    let ce = pp ps ce in
+    let ce = pp ce in
     let in_ = token_between vbs ce IN in
     group (vbs ^/^ in_) ^^ hardline ++ ce
-    |> enclose
 
-  and pp_constraint ps ce ct =
-    let ce = pp ps ce in
+  and pp_constraint ce ct =
+    let ce = pp ce in
     let ct = Class_type.pp ct in
     let colon = token_between ce ct COLON in
     group (parens (ce ^/^ colon ^/^ ct))
 
-  and pp_open ps ~loc od ce =
+  and pp_open ~loc od ce =
     let od = Open_description.pp od in
-    let ps, enclose = Printing_stack.parenthesize ps in
-    let ce = pp ps ce in
+    let ce = pp ce in
     let in_ = token_between od ce IN in
     let let_ =
       let loc = { loc with Location.loc_end = od.loc.loc_start } in
       string ~loc "let"
     in
     group (let_ ^/^ od ^/^ in_) ^/^ ce
-    |> enclose
 
-  and pp_desc ps ~loc = function
+  and pp_desc ~loc = function
     | Pcl_constr (name, args) -> Class_type.pp_constr name args
     | Pcl_structure str -> Class_structure.pp ~loc str
-    | Pcl_fun (params, ce) -> pp_fun ps ~loc params ce
-    | Pcl_apply (ce, args) -> pp_apply ps ce args
-    | Pcl_let (rf, vbs, ce) -> pp_let ~loc ps rf vbs ce
-    | Pcl_constraint (ce, ct) -> pp_constraint ps ce ct
+    | Pcl_fun (params, ce) -> pp_fun ~loc params ce
+    | Pcl_apply (ce, args) -> pp_apply ce args
+    | Pcl_let (rf, vbs, ce) -> pp_let ~loc rf vbs ce
+    | Pcl_constraint (ce, ct) -> pp_constraint ce ct
     | Pcl_extension ext -> Extension.pp Item ext
-    | Pcl_open (od, ce) -> pp_open ps ~loc od ce
+    | Pcl_open (od, ce) -> pp_open ~loc od ce
+    | Pcl_parens ce -> parens (pp ce)
 end
 
 and Class_structure : sig
@@ -2985,7 +2961,7 @@ and Class_structure : sig
 end = struct
   let pp_inherit ~loc override ce alias =
     let pre =
-      let ce = Class_expr.pp [] ce in
+      let ce = Class_expr.pp ce in
       let inh_kw = token_before ~start:loc.Location.loc_start ce INHERIT in
       group (
         match override with
@@ -3227,7 +3203,7 @@ end = struct
               { loc; txt = List.map Fun_param.pp pci_term_params });
             constr = Option.map Class_type.pp pci_type;
             coerce = None;
-            rhs = Some (Class_expr.pp [] pci_expr) }
+            rhs = Some (Class_expr.pp pci_expr) }
         in
         let keyword =
           match !previous_cd with

@@ -1332,7 +1332,7 @@ module_type_no_with:
   | MODULE TYPE OF attributes module_expr %prec below_LBRACKETAT
       { mkmty ~loc:$sloc ~attrs:$4 (Pmty_typeof $5) }
   | LPAREN module_type RPAREN
-      { $2 }
+      { mkmty ~loc:$sloc (Pmty_parens $2) }
   | LPAREN module_type error
       { unclosed "(" $loc($1) ")" $loc($3) }
   | module_type attribute
@@ -1591,7 +1591,7 @@ class_expr:
 ;
 class_simple_expr:
   | LPAREN class_expr RPAREN
-      { $2 }
+      { mkclass ~loc:$sloc (Pcl_parens $2) }
   | LPAREN class_expr error
       { unclosed "(" $loc($1) ")" $loc($3) }
   | mkclass(

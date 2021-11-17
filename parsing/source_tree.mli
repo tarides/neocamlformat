@@ -717,6 +717,7 @@ and class_expr_desc =
   (* [%id] *)
   | Pcl_open of open_description * class_expr
   (* let open M in CE *)
+  | Pcl_parens of class_expr
 
 
 and class_structure =
@@ -793,6 +794,7 @@ and module_type_desc =
         (* [%id] *)
   | Pmty_alias of Longident.t
         (* (module M) *)
+  | Pmty_parens of module_type
 
 and functor_parameter =
   | Unit
