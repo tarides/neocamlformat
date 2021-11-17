@@ -219,12 +219,12 @@ module If_branch = struct
 
   module ANN = Always_or_needed_or_nontrivial
 
-  let parenthesing_situations = ref ANN.When_nontrivial
+  let parenthesing_situations = ref ANN.When_needed
   let parens_situations_cmd =
     let open Arg in
     let doc = "when to add parentheses around if branches" in
     let info = mk_info ANN.print ANN.all ~doc ["if-branch-parenthezing"] in
-    parenthesing_situations := value & opt ANN.t When_nontrivial info
+    parenthesing_situations := value & opt ANN.t When_needed info
 end
 
 module Cases = struct

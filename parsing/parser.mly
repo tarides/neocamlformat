@@ -2059,11 +2059,18 @@ expr:
         let if_branch =
           { if_loc; if_cond = $3; if_body = $5; if_ext = ext; if_attrs = attrs }
         in
+        let reloc_ib = function
+          | [] -> assert false
+          | ib :: ibs ->
+              let loc_start = fst ($loc($6)) in
+              let ib = { ib with if_loc = { ib.if_loc with loc_start } } in
+              ib :: ibs
+        in
         match else_.pexp_desc with
         | Pexp_ifthen branches ->
-            Pexp_ifthen (if_branch :: branches)
+            Pexp_ifthen (if_branch :: reloc_ib branches)
         | Pexp_ifthenelse(if_branches, else_) ->
-            Pexp_ifthenelse(if_branch :: if_branches, else_)
+            Pexp_ifthenelse(if_branch :: reloc_ib if_branches, else_)
         | _ ->
             Pexp_ifthenelse([if_branch], else_) }
   | IF ext_attributes seq_expr THEN expr
