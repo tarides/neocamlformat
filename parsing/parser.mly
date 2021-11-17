@@ -95,9 +95,6 @@ let push_loc x acc =
 let reloc_pat ~loc x =
   { x with ppat_loc = make_loc loc;
            ppat_loc_stack = push_loc x.ppat_loc x.ppat_loc_stack };;
-let reloc_exp ~loc x =
-  { x with pexp_loc = make_loc loc;
-           pexp_loc_stack = push_loc x.pexp_loc x.pexp_loc_stack };;
 let reloc_typ ~loc x =
   { x with ptyp_loc = make_loc loc;
            ptyp_loc_stack = push_loc x.ptyp_loc x.ptyp_loc_stack };;
@@ -2080,7 +2077,7 @@ expr:
 
 simple_expr:
   | LPAREN seq_expr RPAREN
-      { reloc_exp ~loc:$sloc $2 }
+      { Exp.parens $2 }
   | LPAREN seq_expr error
       { unclosed "(" $loc($1) ")" $loc($3) }
   | LPAREN seq_expr type_constraint RPAREN
@@ -2138,7 +2135,7 @@ simple_expr:
 ;
 %inline simple_expr_attrs:
   | BEGIN ext = ext attrs = attributes e = seq_expr END
-      { e.pexp_desc, (ext, attrs @ e.pexp_attributes) }
+      { Pexp_parens { begin_end=true; exp = e}, (ext, attrs) }
   | BEGIN ext_attributes END
       { Pexp_construct (Lident (mkloc "()" (make_loc $sloc)), None), $2 }
   | BEGIN ext_attributes seq_expr error

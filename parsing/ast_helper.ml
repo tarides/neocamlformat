@@ -176,6 +176,9 @@ module Exp = struct
      pexp_attributes = attrs}
   let attr d a = {d with pexp_attributes = d.pexp_attributes @ [a]}
 
+  let parens ?(begin_end=false) ?loc ?attrs exp =
+    mk ?loc ?attrs (Pexp_parens { begin_end; exp })
+
   let ident ?loc ?attrs a = mk ?loc ?attrs (Pexp_ident a)
   let constant ?loc ?attrs a = mk ?loc ?attrs (Pexp_constant a)
   let let_ ?loc ?attrs a b c = mk ?loc ?attrs (Pexp_let (a, b, c))

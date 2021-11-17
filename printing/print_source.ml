@@ -1000,6 +1000,7 @@ end = struct
     enclose doc
 
   and pp_desc ~loc ~ext_attrs ps = function
+    | Pexp_parens { exp; _ } -> pp_parens exp
     | Pexp_ident id -> pp_ident id
     | Pexp_constant c -> Constant.pp ~loc c
     | Pexp_let (rf, vbs, body) -> pp_let ~loc ~ext_attrs ps rf vbs body
@@ -1053,6 +1054,9 @@ end = struct
       pp_dotop_set ps accessed op left right indices value
 
   and pp_ident = Longident.pp
+
+  and pp_parens e =
+    parens (pp [] e)
 
   and pp_let ~ext_attrs:(extension, attrs) ~loc ps rf vbs body =
     assert (attrs = []);

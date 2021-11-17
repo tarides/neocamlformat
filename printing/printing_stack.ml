@@ -774,3 +774,22 @@ let parenthesize ?(situations=Options.Always_or_needed.When_needed)
         [ elt ], enclose style t
       else
         elt :: parents, Fun.id
+
+let parenthesize_exp ?(situations=Options.Always_or_needed.When_needed) t =
+  match situations with
+  | Always ->
+    let t =
+      match t with
+      | [] -> []
+      | top :: _ -> [ top ]
+    in
+    t, true
+  | When_needed ->
+    match t with
+    | [] -> assert false
+    | elt :: parents ->
+      let parents = normalize parents in
+      if needs_parens elt parents then
+        [ elt ], true
+      else
+        elt :: parents, false

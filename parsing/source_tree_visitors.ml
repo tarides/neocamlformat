@@ -31,6 +31,30 @@ type obj_closed_flag =
   | OClosed
   | OOpen of Location.t
 
+class virtual ['self] helpers = object(self : 'self)
+  method virtual default_result : 's
+
+  method visit_loc : 'e. ('e -> 'a -> 'a * 's) -> 'e -> 'a loc -> 'a loc * 's =
+    fun f e x ->
+      let txt, s = f e x.Location.txt in
+      { x with txt }, s
+
+  method visit_t : 'e. 'e -> Longident.t -> Longident.t * 's = fun _ x ->
+    x, self#default_result
+
+  method visit_label : 'e. 'e -> label -> label * 's = fun _ x ->
+    x, self#default_result
+
+  method visit_arg_label : 'e. 'e -> arg_label -> arg_label * 's = fun _ x ->
+    x, self#default_result
+
+  method visit_closed_flag : 'e. 'e -> closed_flag -> closed_flag * 's =
+    fun _ x -> x, self#default_result
+  method visit_obj_closed_flag :
+    'e. 'e -> obj_closed_flag -> obj_closed_flag * 's =
+    fun _ x -> x, self#default_result
+end
+
 type constant =
     Pconst_integer of string * char option
   (* 3 3l 3L 3n
@@ -58,7 +82,7 @@ type location_stack = Location.t list
 type attribute = {
     attr_name : string loc;
     attr_payload : payload;
-    attr_loc : Location.t;
+    attr_loc : Location.t [@visitors.opaque];
   }
        (* [@id ARG]
           [@@id ARG]
@@ -89,8 +113,8 @@ and payload =
 and core_type =
     {
      ptyp_desc: core_type_desc;
-     ptyp_loc: Location.t;
-     ptyp_loc_stack: location_stack;
+     ptyp_loc: Location.t [@visitors.opaque];
+     ptyp_loc_stack: location_stack [@visitors.opaque];
      ptyp_attributes: attributes; (* ... [@id1] [@id2] *)
     }
 
@@ -166,7 +190,7 @@ and package_type = Longident.t * (Longident.t * core_type) list
 
 and row_field = {
   prf_desc : row_field_desc;
-  prf_loc : Location.t;
+  prf_loc : Location.t [@visitors.opaque];
   prf_attributes : attributes;
 }
 
@@ -187,7 +211,7 @@ and row_field_desc =
 
 and object_field = {
   pof_desc : object_field_desc;
-  pof_loc : Location.t;
+  pof_loc : Location.t [@visitors.opaque];
   pof_attributes : attributes;
 }
 
@@ -200,8 +224,8 @@ and object_field_desc =
 and pattern =
     {
      ppat_desc: pattern_desc;
-     ppat_loc: Location.t;
-     ppat_loc_stack: location_stack;
+     ppat_loc: Location.t [@visitors.opaque];
+     ppat_loc_stack: location_stack [@visitors.opaque];
      ppat_attributes: attributes; (* ... [@id1] [@id2] *)
     }
 
@@ -212,9 +236,10 @@ and pattern_desc =
         (* x *)
   | Ppat_alias of pattern * string loc
         (* P as 'a *)
-  | Ppat_constant of constant
+  | Ppat_constant of (constant [@visitors.opaque])
         (* 1, 'a', "true", 1.0, 1l, 1L, 1n *)
-  | Ppat_interval of constant loc * constant loc
+  | Ppat_interval of
+      (constant [@visitors.opaque]) loc * (constant [@visitors.opaque]) loc
         (* 'a'..'z'
 
            Other forms of interval are recognized by the parser
@@ -273,8 +298,8 @@ and pattern_desc =
 and expression =
     {
      pexp_desc: expression_desc;
-     pexp_loc: Location.t;
-     pexp_loc_stack: location_stack;
+     pexp_loc: Location.t [@visitors.opaque];
+     pexp_loc_stack: location_stack [@visitors.opaque];
      pexp_attributes: attributes; (* ... [@id1] [@id2] *)
      pexp_ext_attributes: string loc option * attributes;
     }
@@ -291,7 +316,7 @@ and expression_desc =
         (* x
            M.x
          *)
-  | Pexp_constant of constant
+  | Pexp_constant of (constant [@visitors.opaque])
         (* 1, 'a', "true", 1.0, 1l, 1L, 1n *)
   | Pexp_let of rec_flag * value_binding list * expression
         (* let P1 = E1 and ... and Pn = EN in E       (flag = Nonrecursive)
@@ -436,7 +461,7 @@ and expression_desc =
 
 and if_branch =
   { 
-    if_loc: Location.t;
+    if_loc: Location.t [@visitors.opaque];
     if_cond: expression;
     if_body: expression;
     if_attrs: attributes;
@@ -464,7 +489,7 @@ and binding_op =
     pbop_params: fun_param list;
     pbop_type: core_type option * core_type option;
     pbop_exp : expression;
-    pbop_loc : Location.t;
+    pbop_loc : Location.t [@visitors.opaque];
   }
 
 (* Value descriptions *)
@@ -475,7 +500,7 @@ and value_description =
      pval_type: core_type;
      pval_prim: string loc list;
      pval_attributes: attributes;  (* ... [@@id1] [@@id2] *)
-     pval_loc: Location.t;
+     pval_loc: Location.t [@visitors.opaque];
     }
 
 (*
@@ -490,13 +515,13 @@ and type_declaration =
      ptype_name: string loc;
      ptype_params: (core_type * variance) list;
            (* ('a1,...'an) t; None represents  _*)
-     ptype_cstrs: (core_type * core_type * Location.t) list;
+     ptype_cstrs: (core_type * core_type * (Location.t [@visitors.opaque])) list;
            (* ... constraint T1=T1'  ... constraint Tn=Tn' *)
      ptype_kind: type_kind;
-     ptype_private: Location.t option;   (* = private ... *)
+     ptype_private: (Location.t [@visitors.opaque]) option;   (* = private ... *)
      ptype_manifest: core_type option;  (* = T *)
      ptype_attributes: attributes;   (* ... [@@id1] [@@id2] *)
-     ptype_loc: Location.t;
+     ptype_loc: Location.t [@visitors.opaque];
     }
 
 (*
@@ -514,14 +539,14 @@ and type_kind =
   | Ptype_variant of constructor_declaration list loc
   | Ptype_record of label_declaration list
         (* Invariant: non-empty list *)
-  | Ptype_open of Location.t
+  | Ptype_open of (Location.t [@visitors.opaque])
 
 and label_declaration =
     {
      pld_name: string loc;
      pld_mutable: mutable_flag;
      pld_type: core_type;
-     pld_loc: Location.t;
+     pld_loc: Location.t [@visitors.opaque];
      pld_attributes: attributes; (* l : T [@id1] [@id2] *)
     }
 
@@ -536,7 +561,7 @@ and constructor_declaration =
      pcd_name: string loc;
      pcd_args: constructor_arguments;
      pcd_res: core_type option;
-     pcd_loc: Location.t;
+     pcd_loc: Location.t [@visitors.opaque];
      pcd_attributes: attributes; (* C of ... [@id1] [@id2] *)
     }
 
@@ -558,8 +583,8 @@ and type_extension =
      ptyext_path: Longident.t;
      ptyext_params: (core_type * variance) list;
      ptyext_constructors: extension_constructor list;
-     ptyext_private: Location.t option;
-     ptyext_loc: Location.t;
+     ptyext_private: (Location.t [@visitors.opaque]) option;
+     ptyext_loc: Location.t [@visitors.opaque];
      ptyext_attributes: attributes;   (* ... [@@id1] [@@id2] *)
     }
 (*
@@ -570,7 +595,7 @@ and extension_constructor =
     {
      pext_name: string loc;
      pext_kind : extension_constructor_kind;
-     pext_loc : Location.t;
+     pext_loc : Location.t [@visitors.opaque];
      pext_attributes: attributes; (* C of ... [@id1] [@id2] *)
    }
 
@@ -578,7 +603,7 @@ and extension_constructor =
 and type_exception =
   {
     ptyexn_constructor: extension_constructor;
-    ptyexn_loc: Location.t;
+    ptyexn_loc: Location.t [@visitors.opaque];
     ptyexn_attributes: attributes; (* ... [@@id1] [@@id2] *)
   }
 
@@ -601,7 +626,7 @@ and extension_constructor_kind =
 and class_type =
     {
      pcty_desc: class_type_desc;
-     pcty_loc: Location.t;
+     pcty_loc: Location.t [@visitors.opaque];
      pcty_attributes: attributes; (* ... [@id1] [@id2] *)
     }
 
@@ -634,7 +659,7 @@ and class_signature =
 and class_type_field =
     {
      pctf_desc: class_type_field_desc;
-     pctf_loc: Location.t;
+     pctf_loc: Location.t [@visitors.opaque];
      pctf_attributes: attributes; (* ... [@@id1] [@@id2] *)
     }
 
@@ -663,7 +688,7 @@ and 'a class_infos =
      pci_term_params: fun_param list;
      pci_type: class_type option;
      pci_expr: 'a;
-     pci_loc: Location.t;
+     pci_loc: Location.t [@visitors.opaque];
      pci_attributes: attributes;  (* ... [@@id1] [@@id2] *)
     }
 (* class c = ...
@@ -682,7 +707,7 @@ and class_type_declaration = class_type class_infos
 and class_expr =
     {
      pcl_desc: class_expr_desc;
-     pcl_loc: Location.t;
+     pcl_loc: Location.t [@visitors.opaque];
      pcl_attributes: attributes; (* ... [@id1] [@id2] *)
     }
 
@@ -729,7 +754,7 @@ and class_structure =
 and class_field =
     {
      pcf_desc: class_field_desc;
-     pcf_loc: Location.t;
+     pcf_loc: Location.t [@visitors.opaque];
      pcf_attributes: attributes; (* ... [@@id1] [@@id2] *)
     }
 
@@ -772,7 +797,7 @@ and class_declaration = class_expr class_infos
 and module_type =
     {
      pmty_desc: module_type_desc;
-     pmty_loc: Location.t;
+     pmty_loc: Location.t [@visitors.opaque];
      pmty_attributes: attributes; (* ... [@id1] [@id2] *)
     }
 
@@ -804,7 +829,7 @@ and signature = signature_item list
 and signature_item =
     {
      psig_desc: signature_item_desc;
-     psig_loc: Location.t;
+     psig_loc: Location.t [@visitors.opaque];
     }
 
 and signature_item_desc =
@@ -850,7 +875,7 @@ and module_declaration =
      pmd_params: functor_parameter loc list;
      pmd_type: module_type;
      pmd_attributes: attributes; (* ... [@@id1] [@@id2] *)
-     pmd_loc: Location.t;
+     pmd_loc: Location.t [@visitors.opaque];
     }
 (* S : MT *)
 
@@ -859,7 +884,7 @@ and module_substitution =
      pms_name: string loc;
      pms_manifest: Longident.t;
      pms_attributes: attributes; (* ... [@@id1] [@@id2] *)
-     pms_loc: Location.t;
+     pms_loc: Location.t [@visitors.opaque];
     }
 
 and module_type_declaration =
@@ -867,7 +892,7 @@ and module_type_declaration =
      pmtd_name: string loc;
      pmtd_type: module_type option;
      pmtd_attributes: attributes; (* ... [@@id1] [@@id2] *)
-     pmtd_loc: Location.t;
+     pmtd_loc: Location.t [@visitors.opaque];
     }
 (* S = MT
    S       (abstract module type declaration, pmtd_type = None)
@@ -877,7 +902,7 @@ and 'a open_infos =
     {
      popen_expr: 'a;
      popen_override: override_flag;
-     popen_loc: Location.t;
+     popen_loc: Location.t [@visitors.opaque];
      popen_attributes: attributes;
     }
 (* open! X - popen_override = Override (silences the 'used identifier
@@ -897,7 +922,7 @@ and open_declaration = module_expr open_infos
 and 'a include_infos =
     {
      pincl_mod: 'a;
-     pincl_loc: Location.t;
+     pincl_loc: Location.t [@visitors.opaque];
      pincl_attributes: attributes;
     }
 
@@ -927,7 +952,7 @@ and with_constraint =
 and module_expr =
     {
      pmod_desc: module_expr_desc;
-     pmod_loc: Location.t;
+     pmod_loc: Location.t [@visitors.opaque];
      pmod_attributes: attributes; (* ... [@id1] [@id2] *)
     }
 
@@ -952,7 +977,7 @@ and structure = structure_item list
 and structure_item =
     {
      pstr_desc: structure_item_desc;
-     pstr_loc: Location.t;
+     pstr_loc: Location.t [@visitors.opaque];
     }
 
 and structure_item_desc =
@@ -999,7 +1024,7 @@ and value_binding =
     pvb_expr: expression;
     pvb_attributes: attributes;
     pvb_ext_attributes: string loc option * attributes;
-    pvb_loc: Location.t;
+    pvb_loc: Location.t [@visitors.opaque];
   }
 
 and module_binding =
@@ -1009,9 +1034,14 @@ and module_binding =
      pmb_type: module_type option;
      pmb_expr: module_expr;
      pmb_attributes: attributes;
-     pmb_loc: Location.t;
+     pmb_loc: Location.t [@visitors.opaque];
     }
 (* X = ME *)
+
+[@@deriving visitors { variety = "mapreduce"
+                     ; polymorphic = true
+                     ; data = false
+                     ; ancestors = ["helpers"] }]
 
 (** {1 Toplevel} *)
 

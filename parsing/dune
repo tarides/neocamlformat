@@ -1,6 +1,7 @@
 (library
  (name source_parsing)
  (libraries menhirLib)
+ (preprocess (pps visitors.ppx))
  (modules_without_implementation asttypes source_tree))
 
 (ocamllex lexer)
