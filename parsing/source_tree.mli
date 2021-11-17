@@ -99,6 +99,7 @@ and core_type_desc =
         (*  _ *)
   | Ptyp_var of string
         (* 'a *)
+  | Ptyp_parens of core_type
   | Ptyp_arrow of (arg_label * core_type) list * core_type
         (* T1 -> T2       Simple
            ~l:T1 -> T2    Labelled
@@ -210,6 +211,7 @@ and pattern_desc =
         (* _ *)
   | Ppat_var of string loc
         (* x *)
+  | Ppat_parens of pattern
   | Ppat_alias of pattern * string loc
         (* P as 'a *)
   | Ppat_constant of constant

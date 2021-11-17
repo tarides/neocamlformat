@@ -2514,7 +2514,7 @@ simple_pattern:
 
 simple_pattern_not_ident:
   | LPAREN pattern RPAREN
-      { reloc_pat ~loc:$sloc $2 }
+      { mkpat ~loc:$sloc (Ppat_parens $2) }
   | simple_delimited_pattern
       { $1 }
   | LPAREN MODULE ext_attributes mkrhs(module_name) RPAREN
@@ -3118,7 +3118,7 @@ tuple_type:
  *)
 atomic_type:
   | LPAREN core_type RPAREN
-      { $2 }
+      { mktyp ~loc:$sloc (Ptyp_parens $2) }
   | LPAREN MODULE ext_attributes package_type RPAREN
       { wrap_typ_attrs ~loc:$sloc (reloc_typ ~loc:$sloc $4) $3 }
   | mktyp( /* begin mktyp group */

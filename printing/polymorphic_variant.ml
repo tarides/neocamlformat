@@ -4,8 +4,8 @@ open Asttypes
 open Source_tree
 open Location
 
-let pp_core_type : (Printing_stack.t -> core_type -> Document.t) ref =
-  ref (fun _ _ -> assert false)
+let pp_core_type : (core_type -> Document.t) ref =
+  ref (fun _ -> assert false)
 
 let attach_attributes : (Document.t -> attributes -> Document.t) ref =
   ref (fun _ _ -> assert false)
@@ -19,10 +19,10 @@ module Row_field : sig
 end = struct
   let pp_params p ps =
     let sep = PPrint.(break 1 ^^ ampersand ^^ break 1) in
-    separate_map sep ~f:(!pp_core_type [ Row_field ]) p ps
+    separate_map sep ~f:(!pp_core_type) p ps (* FIXME? *)
 
   let pp_desc = function
-    | Rinherit ct -> !pp_core_type [] ct
+    | Rinherit ct -> !pp_core_type ct
     | Rtag (tag, _, []) ->
       Tag.pp tag
     | Rtag (tag, has_empty_constr, p :: ps) ->

@@ -8,8 +8,8 @@ open Document
 
 let pp_record : (label_declaration list -> t) ref =
   ref (fun _ -> assert false)
-let pp_core_type : (Printing_stack.t -> core_type -> t) ref =
-  ref (fun _ _ -> assert false)
+let pp_core_type : (core_type -> t) ref =
+  ref (fun _ -> assert false)
 let attach_attributes : (t -> attributes -> t) ref =
   ref (fun _ _ -> assert false)
 let pp_longident : (Longident.t -> t) ref =
@@ -25,12 +25,7 @@ let constructor_arguments = function
   | Pcstr_tuple [] -> assert false (* [has_args] was called *)
   | Pcstr_record lbl_decls -> !pp_record lbl_decls
   | Pcstr_tuple (a1 :: args) ->
-    let printing_stack =
-      (* morally equivalent to: *)
-      [ Printing_stack.Core_type (Ptyp_tuple args) ]
-    in
-    left_assoc_map ~sep:STAR
-      ~f:(!pp_core_type printing_stack) a1 args
+    left_assoc_map ~sep:STAR ~f:!pp_core_type a1 args
 
 let constructor_name name =
   match Ident_class.classify name with
@@ -42,7 +37,7 @@ let gadt_constructor name args res_ty attributes =
   let decl =
     if has_args args then
       let args = constructor_arguments args in
-      let res  = !pp_core_type [] (Option.get res_ty) in
+      let res  = !pp_core_type (Option.get res_ty) in
       let colon = token_between name args COLON in
       let arrow = token_between args res MINUSGREATER in
       group (
@@ -53,7 +48,7 @@ let gadt_constructor name args res_ty attributes =
         )
       )
     else
-      let res  = !pp_core_type [] (Option.get res_ty) in
+      let res  = !pp_core_type (Option.get res_ty) in
       Two_separated_parts.sep_with_second name res ~sep:COLON
   in
   !attach_attributes decl attributes

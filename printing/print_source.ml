@@ -332,18 +332,18 @@ end = struct
       then break_after ~spaces:1
       else (fun x -> x)
     in
-    let ct = break_after (Core_type.pp [] ct) in
+    let ct = break_after (Core_type.pp ct) in
     let colon = token_between tag ct COLON in
     tag ^^ nest 2 (colon ^/^ ct)
 
   let ppat tag p =
-    let p = Pattern.pp [] p in
+    let p = Pattern.pp p in
     let qmark = token_between tag p QUESTION in
     tag ^^ nest 2 (qmark ^/^ p)
 
   let ppat_guard tag p e =
-    let p = Pattern.pp [] p in
-    let e = Expression.pp [] e in
+    let p = Pattern.pp p in
+    let e = Expression.pp e in
     let qmark = token_between tag p QUESTION in
     let when_ = token_between p e WHEN in
     tag ^^ nest 2 (
@@ -363,8 +363,8 @@ and Core_type : sig
   val ends_in_obj : core_type -> bool
   val starts_with_obj : core_type -> bool
 
-  val pp : Printing_stack.t -> core_type -> document
-  val pp_param : Printing_stack.t -> (arg_label * core_type) -> document
+  val pp : core_type -> document
+  val pp_param : (arg_label * core_type) -> document
 end = struct
   let rec starts_with_obj core_type =
     match core_type.ptyp_desc with
@@ -374,6 +374,7 @@ end = struct
     | Ptyp_object (_, _) -> true
     | Ptyp_any
     | Ptyp_var _
+    | Ptyp_parens _
     | Ptyp_tuple _
     | Ptyp_arrow _
     | Ptyp_constr (_, _)
@@ -394,6 +395,7 @@ end = struct
     | Ptyp_object (_, _) -> true
     | Ptyp_any
     | Ptyp_var _
+    | Ptyp_parens _
     | Ptyp_constr (_, _)
     | Ptyp_class (_, _)
     | Ptyp_alias (_, _)
@@ -406,27 +408,21 @@ end = struct
     | None -> string ~loc ("'" ^ v)
     | Some _ -> string ~loc ("' " ^ v)
 
-  let rec pp ps { ptyp_loc; ptyp_desc; ptyp_attributes; ptyp_loc_stack = _ } =
-    let ps, enclose =
-      if Attribute.has_non_doc ptyp_attributes then
-        Printing_stack.parenthesize (Attribute :: ps)
-      else
-        ps, Fun.id
-    in
-    let ps = Printing_stack.Core_type ptyp_desc :: ps in
-    let doc = group (pp_desc ~loc:ptyp_loc ps ptyp_desc) in
+  let rec pp { ptyp_loc; ptyp_desc; ptyp_attributes; ptyp_loc_stack = _ } =
+    let doc = group (pp_desc ~loc:ptyp_loc ptyp_desc) in
     let doc = Attribute.attach_to_item doc ptyp_attributes in
-    enclose doc
+    doc
 
-  and pp_desc ~loc ps = function
+  and pp_desc ~loc = function
     | Ptyp_any -> underscore ~loc
     | Ptyp_var v -> pp_var ~loc v
-    | Ptyp_arrow (params, ct2) -> pp_arrow ps params ct2
-    | Ptyp_tuple lst -> pp_tuple ps lst
-    | Ptyp_constr (name, args) -> pp_constr ps name args
+    | Ptyp_parens ct -> parens (pp ct)
+    | Ptyp_arrow (params, ct2) -> pp_arrow params ct2
+    | Ptyp_tuple lst -> pp_tuple lst
+    | Ptyp_constr (name, args) -> pp_constr name args
     | Ptyp_object (fields, closed) -> pp_object ~loc fields closed
-    | Ptyp_class (name, args) -> pp_class ps name args
-    | Ptyp_alias (ct, alias) -> pp_alias ps ct alias
+    | Ptyp_class (name, args) -> pp_class name args
+    | Ptyp_alias (ct, alias) -> pp_alias ct alias
     | Ptyp_variant (fields, closed, present) ->
       Polymorphic_variant.pp_row ~loc fields closed present
     | Ptyp_poly (vars, ct) -> pp_poly vars ct
@@ -434,45 +430,41 @@ end = struct
     | Ptyp_package pkg -> pp_package ~loc pkg
     | Ptyp_extension ext -> Extension.pp Item ext
 
-  and pp_param ps (arg_label, ct) =
-    let ct = hang 0 @@ pp ps ct in
+  and pp_param (arg_label, ct) =
+    let ct = hang 0 @@ pp ct in
     match arg_label with
     | Nolabel -> ct
     | Labelled l -> join_with_colon l ct
     | Optional l -> join_with_colon { l with txt = "?" ^ l.txt } ct
 
-  and pp_arrow ps params res =
-    let ps, enclose = Printing_stack.parenthesize ps in
+  and pp_arrow params res =
     let params =
-      let fmt elt = hang 0 (pp_param ps elt) in
+      let fmt elt = hang 0 (pp_param elt) in
       List.fold_left (fun acc elt ->
         let elt = fmt elt in
         let sep = token_between acc elt MINUSGREATER in
         acc ^/^ group (sep ^^ space ++ hang 0 elt)
       ) (fmt @@ List.hd params) (List.tl params)
     in
-    let res = pp (List.tl ps) res in
+    let res = pp res in
     let arrow = token_between params res MINUSGREATER in
     let doc = params ^/^ group (arrow ^^ space ++ hang 0 res) in
-    enclose doc
+    doc
 
-  and pp_tuple ps = function
+  and pp_tuple = function
     | [] -> assert false
-    | x :: xs ->
-      let ps, enclose = Printing_stack.parenthesize ps in
-      let doc = left_assoc_map ~sep:STAR ~f:(pp ps) x xs in
-      enclose doc
+    | x :: xs -> left_assoc_map ~sep:STAR ~f:pp x xs
 
-  and pp_constr ps name args =
+  and pp_constr name args =
     let name = Longident.pp name in
     match args with
     | [] -> name
-    | x :: xs -> pp_params ps x xs ^/^ name
+    | x :: xs -> pp_params x xs ^/^ name
 
-  and pp_params ps first = function
-    | []   -> pp ps first
+  and pp_params first = function
+    | []   -> pp first
     | rest ->
-      let fmt elt = group (pp [] elt) in
+      let fmt elt = group (pp elt) in
       let params = separate_map PPrint.(comma ^^ break 1) ~f:fmt first rest in
       parens (hang 0 params)
 
@@ -486,24 +478,23 @@ end = struct
     Record_like.pp ~loc ~formatting:Fit_or_vertical ~left:langle ~right:rangle
       fields
 
-  and pp_class ps name args =
+  and pp_class name args =
     let name = sharp ++ Longident.pp name in
     match args with
     | [] -> name
-    | x :: xs -> pp_params ps x xs ^/^ name
+    | x :: xs -> pp_params x xs ^/^ name
 
-  and pp_alias ps ct alias =
-    let ps, enclose = Printing_stack.parenthesize ps in
-    let ct = pp ps ct in
+  and pp_alias ct alias =
+    let ct = pp ct in
     let alias = pp_var ~loc:alias.loc alias.txt in
     let as_ = token_between ct alias AS in
     (* TODO: hang & ident one linebreak *)
     let doc = ct ^/^ as_ ^/^ alias in
-    enclose doc
+    doc
 
   and pp_poly vars ct =
     (* FIXME: doesn't look right. *)
-    let ct = pp [] ct in
+    let ct = pp ct in
     match vars with
     | [] -> ct
     | v :: vs ->
@@ -515,7 +506,7 @@ end = struct
 
   and pp_newtype_poly ~loc vars ct =
     (* FIXME: doesn't look right. *)
-    let ct = pp [] ct in
+    let ct = pp ct in
     match vars with
     | [] -> ct
     | v :: vs ->
@@ -539,13 +530,13 @@ and Object_field : sig
 end = struct
   let pp_otag name ct =
     let name = str name in
-    let ct = Core_type.pp [] ct in
+    let ct = Core_type.pp ct in
     let colon = token_between name ct COLON in
     group (name ^^ colon) ^/^ ct
 
   let pp_desc = function
     | Otag (name, ct) -> pp_otag name ct
-    | Oinherit ct -> Core_type.pp [] ct
+    | Oinherit ct -> Core_type.pp ct
 
   let pp { pof_desc; pof_attributes; _ } =
     let desc = pp_desc pof_desc in
@@ -557,7 +548,7 @@ and Package_type : sig
 end = struct
   let pp_constr (lid, ct) =
     let lid = Longident.pp lid in
-    let ct = Core_type.pp [] ct in
+    let ct = Core_type.pp ct in
     let colon = token_between lid ct EQUAL in
     lid ^/^ colon ^/^ ct
 
@@ -576,27 +567,19 @@ end = struct
 end
 
 and Pattern : sig
-  val pp : ?indent:int -> Printing_stack.t -> pattern -> document
+  val pp : ?indent:int -> pattern -> document
 end = struct
-  let rec pp ?indent ps { ppat_desc; ppat_attributes; ppat_loc; _ } =
-    let ps, enclose =
-      if Attribute.has_non_doc ppat_attributes then
-        Printing_stack.parenthesize (Attribute :: ps)
-      else
-        ps, Fun.id
-    in
-    let ps = Printing_stack.Pattern ppat_desc :: ps in
-    let desc = pp_desc ?indent ~loc:ppat_loc ps ppat_desc in
+  let rec pp ?indent { ppat_desc; ppat_attributes; ppat_loc; _ } =
+    let desc = pp_desc ?indent ~loc:ppat_loc ppat_desc in
     let doc = Attribute.attach_to_item desc ppat_attributes in
-    enclose doc
+    doc
 
-  and pp_alias ps pat alias =
-    let ps, enclose = Printing_stack.parenthesize ps in
-    let pat = pp ps pat in
+  and pp_alias pat alias =
+    let pat = pp pat in
     let alias = str alias in
     let as_ = token_between pat alias AS in
     let doc = pat ^^ group (nest 2 (break_before ~spaces:1 as_ ^/^ alias)) in
-    enclose doc
+    doc
 
   and pp_interval c1 c2 =
     let c1 = Constant.pp ~loc:c1.loc c1.txt in
@@ -606,52 +589,46 @@ end = struct
 
   (* FIXME? nest on the outside, not in each of them. *)
 
-  and pp_tuple ps lst =
-    let ps, enclose = Printing_stack.parenthesize ps in
+  and pp_tuple lst =
     let doc =
       group (
-        separate_map PPrint.(comma ^^ break 1) ~f:(pp ps)
+        separate_map PPrint.(comma ^^ break 1) ~f:pp
           (List.hd lst) (List.tl lst)
       )
     in
-    enclose doc
+    doc
 
   and pp_list_literal ~loc elts =
-    let elts = List.map (pp []) elts in
+    let elts = List.map pp elts in
     List_like.pp ~loc
       ~formatting:Wrap (* TODO: add an option *)
       ~left:lbracket ~right:rbracket
       elts
 
-  and pp_cons ps hd tl =
-    let ps = Printing_stack.top_is_op ~on_left:true "::" ps in
-    let ps, enclose = Printing_stack.parenthesize ps in
-    let hd = pp ps hd in
-    let ps = Printing_stack.top_is_op ~on_left:false "::" ps in
-    let tl = pp ps tl in
+  and pp_cons hd tl =
+    let hd = pp hd in
+    let tl = pp tl in
     let cons = token_between hd tl COLONCOLON in
     let doc = infix ~indent:2 ~spaces:1 cons hd tl in
-    enclose doc
+    doc
 
-  and pp_construct ps name arg_opt =
+  and pp_construct name arg_opt =
     let name = Longident.pp name in
     match arg_opt with
     | None -> name
     | Some p ->
-      let ps, enclose = Printing_stack.parenthesize ps in
-      let doc = prefix ~indent:2 ~spaces:1 name (pp ps p) in
-      enclose doc
+      let doc = prefix ~indent:2 ~spaces:1 name (pp p) in
+      doc
 
-  and pp_variant ps tag arg_opt =
+  and pp_variant tag arg_opt =
     let tag = Polymorphic_variant_tag.pp tag in
     match arg_opt with
     | None -> tag
     | Some p ->
-      let ps, enclose = Printing_stack.parenthesize ps in
-      let arg = pp ps p in
-      enclose (tag ^/^ arg)
+      let arg = pp p in
+      (tag ^/^ arg)
 
-  and pp_record_field ps (lid, ctyo, pato) =
+  and pp_record_field (lid, ctyo, pato) =
     let params =
       let pos = (Longident.endpos lid).loc_end in
       { txt = []; loc = { loc_start = pos; loc_end = pos }}
@@ -659,16 +636,15 @@ end = struct
     let binding : Binding.t =
       { lhs = Longident.pp lid;
         params;
-        constr = Option.map (Core_type.pp []) ctyo;
+        constr = Option.map Core_type.pp ctyo;
         coerce = None;
-        rhs = Option.map (pp ps) pato;
+        rhs = Option.map pp pato;
       }
     in
     Binding.pp binding
 
-  and pp_record ~loc ps pats closed =
-    let _, enclose = Printing_stack.parenthesize ps in
-    let fields = List.map (pp_record_field [ Record_field ]) pats in
+  and pp_record ~loc pats closed =
+    let fields = List.map pp_record_field pats in
     let extra_fields =
       match closed with
       | OClosed -> []
@@ -678,38 +654,32 @@ end = struct
       ~formatting:!Options.Record.pattern
       ~left:lbrace ~right:rbrace
       (fields @ extra_fields)
-    |> enclose
 
-  and pp_array ~loc ps pats =
-    let pats = List.map (pp ps) pats in
+  and pp_array ~loc pats =
+    let pats = List.map pp pats in
     (* TODO: add an option *)
     List_like.pp ~loc ~formatting:Wrap
       ~left:PPrint.(lbracket ^^ bar) ~right:PPrint.(bar ^^ rbracket) pats
 
-  and pp_or ~indent ps p1 p2 =
-    let ps, enclose = Printing_stack.parenthesize ps in
-    let p1 =
-      let ps = Printing_stack.top_is_op ~on_left:true "|" ps in
-      pp ~indent ps p1
-    in
-    let p2 = pp ~indent ps p2 in
+  and pp_or ~indent p1 p2 =
+    let p1 = pp ~indent p1 in
+    let p2 = pp ~indent p2 in
     let pipe = token_between p1 p2 BAR in
     let or_ = p1 ^/^ group (pipe ^/^ p2) in
-    enclose or_
+    or_
 
   and pp_constraint p ct =
-    let p = pp [] p in
-    let ct = Core_type.pp [] ct in
+    let p = pp p in
+    let ct = Core_type.pp ct in
     let colon = token_between p ct COLON in
     parens (p ^/^ colon ^/^ ct)
 
   and pp_type typ =
     sharp ++ Longident.pp typ
 
-  and pp_lazy ~loc ps p =
-    let ps, enclose = Printing_stack.parenthesize ps in
+  and pp_lazy ~loc p =
     let lazy_ = string ~loc "lazy" in
-    enclose (lazy_ ^/^ pp ps p)
+    (lazy_ ^/^ pp p)
 
   and pp_unpack mod_name ct =
     let mod_name = module_name mod_name in
@@ -724,62 +694,62 @@ end = struct
     enclose ~before:PPrint.(!^"(module ") ~after:PPrint.(!^")")
       with_constraint
 
-  and pp_exception ~loc ps p =
-    string ~loc "exception" ^/^ pp ps p
+  and pp_exception ~loc p =
+    string ~loc "exception" ^/^ pp p
 
-  and pp_open ps lid p =
+  and pp_open lid p =
     let lid = Longident.pp lid in
-    let pat = pp ps p in
+    let pat = pp p in
     let dot = token_between lid pat DOT in
     lid ^^ dot ^^ break_before ~spaces:0 pat
 
   and pp_var v = Longident.pp_ident v
 
-  and pp_desc ?(indent=0) ~loc ps = function
-    | Ppat_or (p1, p2) -> pp_or ~indent ps p1 p2
+  and pp_desc ?(indent=0) ~loc = function
+    | Ppat_or (p1, p2) -> pp_or ~indent p1 p2
     | otherwise ->
       nest indent @@ group (
         match otherwise with
         | Ppat_or _ -> assert false
         | Ppat_any -> underscore ~loc
         | Ppat_var v -> pp_var v
-        | Ppat_alias (pat, alias) -> pp_alias ps pat alias
+        | Ppat_parens p -> parens (pp p)
+        | Ppat_alias (pat, alias) -> pp_alias pat alias
         | Ppat_constant c -> Constant.pp ~loc c
         | Ppat_interval (c1, c2) -> pp_interval c1 c2
-        | Ppat_tuple pats -> pp_tuple ps pats
-        | Ppat_construct (name, arg) -> pp_construct ps name arg
+        | Ppat_tuple pats -> pp_tuple pats
+        | Ppat_construct (name, arg) -> pp_construct name arg
         | Ppat_list_lit pats -> pp_list_literal ~loc pats
-        | Ppat_cons (hd, tl) -> pp_cons ps hd tl
-        | Ppat_variant (tag, arg) -> pp_variant ps tag arg
-        | Ppat_record (pats, closed) -> pp_record ~loc ps pats closed
-        | Ppat_array pats -> pp_array ~loc ps pats
+        | Ppat_cons (hd, tl) -> pp_cons hd tl
+        | Ppat_variant (tag, arg) -> pp_variant tag arg
+        | Ppat_record (pats, closed) -> pp_record ~loc pats closed
+        | Ppat_array pats -> pp_array ~loc pats
         | Ppat_constraint (p, ct) -> pp_constraint p ct
         | Ppat_type pt -> pp_type pt
-        | Ppat_lazy p -> pp_lazy ~loc ps p
+        | Ppat_lazy p -> pp_lazy ~loc p
         | Ppat_unpack (name, typ) -> pp_unpack name typ
-        | Ppat_exception p -> pp_exception ~loc ps p
+        | Ppat_exception p -> pp_exception ~loc p
         | Ppat_extension ext -> Extension.pp Item ext
-        | Ppat_open (lid, p) -> pp_open ps lid p
+        | Ppat_open (lid, p) -> pp_open lid p
       )
 end
 
 and Application : sig
-  val pp_simple : Printing_stack.t -> document
+  val pp_simple : document
     -> (arg_label * expression) -> (arg_label * expression) list -> document
 
-  val pp : Printing_stack.t -> expression -> (arg_label * expression) list
+  val pp : expression -> (arg_label * expression) list
     -> document
 end = struct
-  let argument ps (lbl, exp) =
+  let argument (lbl, exp) =
     let suffix ~prefix:sym lbl =
       match exp.pexp_desc with
       | Pexp_ident Lident id when lbl.txt = id.txt -> sym ++ str lbl
       | Pexp_fun (params, body) when exp.pexp_attributes = [] ->
         let lbl = string ~loc:lbl.loc (lbl.txt ^ ":") in
-        let ps = [ Printing_stack.Expression exp.pexp_desc ] in
         let fun_, args, arrow, body =
           Expression.fun_chunks ~loc:exp.pexp_loc
-            ~ext_attrs:exp.pexp_ext_attributes ps params body
+            ~ext_attrs:exp.pexp_ext_attributes params body
         in
         let open_ = (sym ++ lbl) ^^ (lparen ++ break_before ~spaces:0 fun_) in
         let unclosed =
@@ -790,7 +760,6 @@ end = struct
         break_after ~spaces:0 unclosed +++ rparen
       | Pexp_function (c :: cs) when exp.pexp_attributes = [] ->
         let lbl = string ~loc:lbl.loc (lbl.txt ^ ":") in
-        let ps = [ Printing_stack.Expression exp.pexp_desc ] in
         let compact =
           match !Options.Match.compact with
           | Multi -> false
@@ -798,7 +767,7 @@ end = struct
         in
         let function_, cases =
           Expression.function_chunks ~compact ~loc:exp.pexp_loc
-            ~ext_attrs:exp.pexp_ext_attributes ps c cs
+            ~ext_attrs:exp.pexp_ext_attributes c cs
         in
         let open_ =
           (sym ++ lbl) ^^ (lparen ++ break_before ~spaces:0 function_)
@@ -807,11 +776,11 @@ end = struct
         break_after ~spaces:0 unclosed +++ rparen
       | _ ->
         let lbl = string ~loc:lbl.loc (lbl.txt ^ ":") in
-        let exp = Expression.pp ps exp in
+        let exp = Expression.pp exp in
         group (sym ++ lbl ^^ break_before ~spaces:0 exp)
     in
     match lbl with
-    | Nolabel -> Expression.pp ps exp
+    | Nolabel -> Expression.pp exp
     | Labelled lbl -> suffix ~prefix:tilde lbl
     | Optional lbl -> suffix ~prefix:qmark lbl
 
@@ -836,12 +805,11 @@ end = struct
     | Fully_built doc :: rest ->
       combine_app_chunks (acc ^^ nest 2 @@ group (break_before doc)) rest
 
-  let smart_arg ps ~prefix:p lbl = function
+  let smart_arg ~prefix:p lbl = function
     | { pexp_desc = Pexp_fun (params, body); pexp_attributes = []; _ } as exp ->
-      let ps = [ Printing_stack.Expression exp.pexp_desc ] in
       let fun_, args, arrow, body =
         Expression.fun_chunks ~loc:exp.pexp_loc
-          ~ext_attrs:exp.pexp_ext_attributes ps params body
+          ~ext_attrs:exp.pexp_ext_attributes params body
       in
       let first_chunk =
         group ((prefix ~indent:2 ~spaces:1 fun_ args) ^/^ arrow)
@@ -852,7 +820,6 @@ end = struct
       let snd_chunk = group body in
       Function { fst_chunk; snd_chunk; break = true }
     | { pexp_desc = Pexp_function (c :: cs); pexp_attributes = []; _ } as exp ->
-      let ps = [ Printing_stack.Expression exp.pexp_desc ] in
       let compact =
         match !Options.Match.compact with
         | Multi -> false
@@ -860,7 +827,7 @@ end = struct
       in
       let function_, cases =
         Expression.function_chunks ~compact ~loc:exp.pexp_loc
-          ~ext_attrs:exp.pexp_ext_attributes ps c cs
+          ~ext_attrs:exp.pexp_ext_attributes c cs
       in
       let fst_chunk =
         p ^^ group @@ lparen ++ break_before ~spaces:0 function_
@@ -868,33 +835,32 @@ end = struct
       let snd_chunk = group cases in
       Function { fst_chunk; snd_chunk; break = false }
     | arg ->
-      Fully_built (argument ps (lbl, arg))
+      Fully_built (argument (lbl, arg))
 
-  let smart_arg ps (lbl, exp) =
+  let smart_arg (lbl, exp) =
     match lbl with
     | Nolabel ->
       let prefix =
         empty ~loc:{ exp.pexp_loc with loc_end = exp.pexp_loc.loc_start }
       in
-      smart_arg ps ~prefix lbl exp
+      smart_arg ~prefix lbl exp
     | Labelled l ->
       let prefix = tilde ++ string ~loc:l.loc (l.txt ^ ":") in
-      smart_arg ps ~prefix lbl exp
+      smart_arg ~prefix lbl exp
     | Optional l ->
       let prefix = qmark ++ string ~loc:l.loc (l.txt ^ ":") in
-      smart_arg ps ~prefix lbl exp
+      smart_arg ~prefix lbl exp
 
-  let pp_simple ps applied arg args =
-    let ps, enclose = Printing_stack.parenthesize ps in
+  let pp_simple applied arg args =
     let fit_or_vertical () =
-      let args = separate_map (break 1) ~f:(argument ps) arg args in
+      let args = separate_map (break 1) ~f:argument arg args in
       prefix ~indent:2 ~spaces:1 applied args
     in
     let doc =
       match !Options.Applications.layout with
       | Fit_or_vertical -> fit_or_vertical ()
       | Wrap ->
-        let args = List.map (argument ps) (arg :: args) in
+        let args = List.map argument (arg :: args) in
         nest 2 @@ left_assoc_map ~f:Fun.id applied args
       | Smart ->
         let nb_labels, len_labels =
@@ -911,68 +877,58 @@ end = struct
         if nb_labels > 4 && len_labels > 8 then
           fit_or_vertical ()
         else
-          let args = List.map (smart_arg ps) (arg :: args) in
+          let args = List.map smart_arg (arg :: args) in
           combine_app_chunks applied args
     in
-    enclose doc
+    doc
 
-  let simple_apply ps exp arg args =
-    let exp = Expression.pp ps exp in
-    pp_simple ps exp arg args
+  let simple_apply exp arg args =
+    let exp = Expression.pp exp in
+    pp_simple exp arg args
 
-  let prefix_op ps (exp, op) arg args =
+  let prefix_op (exp, op) arg args =
     if fst arg <> Nolabel || args <> [] then
-      simple_apply ps exp arg args
+      simple_apply exp arg args
     else
-      let ps = Printing_stack.Prefix_op :: List.tl ps in
-      let ps, enclose =
-        match ps with
-        | [ _ ; Function_parameter ] -> ps, break_before ~spaces:1
-        | _ -> Printing_stack.parenthesize ps
-      in
       let op = str op in
-      let arg = argument ps arg in
+      let arg = argument arg in
       let doc = nest 2 (op ^^ arg) in
-      enclose doc
+      doc
 
-  let infix_op ps (exp, op) arg args =
+  let infix_op (exp, op) arg args =
     match arg, args with
     | (Nolabel, fst), [ (Nolabel, snd) ] ->
-      let ps = Printing_stack.top_is_op ~on_left:true op.txt ps in
-      let ps, enclose = Printing_stack.parenthesize ps in
-      let fst = Expression.pp ps fst in
-      let ps = Printing_stack.top_is_op ~on_left:false op.txt ps in
-      let snd = Expression.pp ps snd in
+      let fst = Expression.pp fst in
+      let snd = Expression.pp snd in
       let doc = infix ~indent:2 ~spaces:1 (str op) fst snd in
-      enclose doc
+      doc
     | _ ->
-      simple_apply ps exp arg args
+      simple_apply exp arg args
 
   let classify_fun exp =
     match exp.pexp_desc with
     | Pexp_ident Lident s when s.txt <> "" -> Ident_class.classify s
     | _ -> Normal
 
-  let pp ps exp = function
+  let pp exp = function
     | [] ->
       (* An application node without arguments? That can't happen. *)
       assert false
     | arg :: args ->
       match classify_fun exp with
-      | Normal -> simple_apply ps exp arg args
-      | Prefix_op op -> prefix_op ps (exp, op) arg args
-      | Infix_op op -> infix_op ps (exp, op) arg args
+      | Normal -> simple_apply exp arg args
+      | Prefix_op op -> prefix_op (exp, op) arg args
+      | Infix_op op -> infix_op (exp, op) arg args
 
 end
 
 and Expression : sig
-  val pp : Printing_stack.t -> expression -> document
+  val pp : expression -> document
 
   val function_chunks
     : compact:bool
     -> loc:Location.t
     -> ext_attrs:string loc option * attributes
-    -> Printing_stack.t
     -> case
     -> case list
     -> document * document
@@ -980,85 +936,76 @@ and Expression : sig
   val fun_chunks
     : loc:Location.t
     -> ext_attrs:string loc option * attributes
-    -> Printing_stack.t
     -> fun_param list
     -> expression
     -> document * document * document * document
 end = struct
-  let rec pp ps { pexp_desc;pexp_attributes;pexp_ext_attributes;pexp_loc;_ } =
-    let ps, enclose =
-      if Attribute.has_non_doc pexp_attributes then
-        Printing_stack.parenthesize (Attribute :: ps)
-      else
-        ps, Fun.id
-    in
-    let ps = Printing_stack.Expression pexp_desc :: ps in
+  let rec pp { pexp_desc;pexp_attributes;pexp_ext_attributes;pexp_loc;_ } =
     let desc =
-      group (pp_desc ~ext_attrs:pexp_ext_attributes ~loc:pexp_loc ps pexp_desc)
+      group (pp_desc ~ext_attrs:pexp_ext_attributes ~loc:pexp_loc pexp_desc)
     in
-    let doc = Attribute.attach_to_item desc pexp_attributes in
-    enclose doc
+    Attribute.attach_to_item desc pexp_attributes
 
-  and pp_desc ~loc ~ext_attrs ps = function
+  and pp_desc ~loc ~ext_attrs = function
     | Pexp_parens { exp; _ } -> pp_parens exp
     | Pexp_ident id -> pp_ident id
     | Pexp_constant c -> Constant.pp ~loc c
-    | Pexp_let (rf, vbs, body) -> pp_let ~loc ~ext_attrs ps rf vbs body
-    | Pexp_function cases -> pp_function ~loc ~ext_attrs ps cases
-    | Pexp_fun (params, exp) -> pp_fun ~loc ~ext_attrs ps params exp
-    | Pexp_apply (expr, args) -> Application.pp ps expr args
-    | Pexp_match (arg, cases) -> pp_match ~loc ~ext_attrs ps arg cases
-    | Pexp_try (arg, cases) -> pp_try ~loc ~ext_attrs ps arg cases
-    | Pexp_tuple exps -> pp_tuple ps exps
-    | Pexp_list_lit exps -> pp_list_literal ~loc ps exps
-    | Pexp_cons (hd, tl) -> pp_cons ps hd tl
-    | Pexp_construct (lid, arg) -> pp_construct ps lid arg
-    | Pexp_variant (tag, arg) -> pp_variant ps tag arg
-    | Pexp_record (fields, exp) -> pp_record ~loc ps fields exp
-    | Pexp_field (exp, fld) -> pp_field ps exp fld
-    | Pexp_setfield (exp, fld, val_) -> pp_setfield ps exp fld val_
-    | Pexp_array elts -> pp_array ~loc ps elts
-    | Pexp_ifthen branches -> pp_if_then ps branches
-    | Pexp_ifthenelse (branches, else_) -> pp_if_then_else ps branches else_
-    | Pexp_sequence (e1, e2) -> pp_sequence ps e1 e2
-    | Pexp_while (cond, body) -> pp_while ~loc ~ext_attrs ps cond body
+    | Pexp_let (rf, vbs, body) -> pp_let ~loc ~ext_attrs rf vbs body
+    | Pexp_function cases -> pp_function ~loc ~ext_attrs cases
+    | Pexp_fun (params, exp) -> pp_fun ~loc ~ext_attrs params exp
+    | Pexp_apply (expr, args) -> Application.pp expr args
+    | Pexp_match (arg, cases) -> pp_match ~loc ~ext_attrs arg cases
+    | Pexp_try (arg, cases) -> pp_try ~loc ~ext_attrs arg cases
+    | Pexp_tuple exps -> pp_tuple exps
+    | Pexp_list_lit exps -> pp_list_literal ~loc exps
+    | Pexp_cons (hd, tl) -> pp_cons hd tl
+    | Pexp_construct (lid, arg) -> pp_construct lid arg
+    | Pexp_variant (tag, arg) -> pp_variant tag arg
+    | Pexp_record (fields, exp) -> pp_record ~loc fields exp
+    | Pexp_field (exp, fld) -> pp_field exp fld
+    | Pexp_setfield (exp, fld, val_) -> pp_setfield exp fld val_
+    | Pexp_array elts -> pp_array ~loc elts
+    | Pexp_ifthen branches -> pp_if_then branches
+    | Pexp_ifthenelse (branches, else_) -> pp_if_then_else branches else_
+    | Pexp_sequence (e1, e2) -> pp_sequence e1 e2
+    | Pexp_while (cond, body) -> pp_while ~loc ~ext_attrs cond body
     | Pexp_for (it, start, stop, dir, body) ->
-      pp_for ~loc ~ext_attrs ps it start stop dir body
+      pp_for ~loc ~ext_attrs it start stop dir body
     | Pexp_constraint (e, ct) -> pp_constraint e ct
     | Pexp_coerce (e, ct_start, ct) -> pp_coerce e ct_start ct
-    | Pexp_send (e, meth) -> pp_send ps e meth
-    | Pexp_new lid -> pp_new ~loc ~ext_attrs ps lid
-    | Pexp_setinstvar (lbl, exp) -> pp_setinstvar ps lbl exp
+    | Pexp_send (e, meth) -> pp_send e meth
+    | Pexp_new lid -> pp_new ~loc ~ext_attrs lid
+    | Pexp_setinstvar (lbl, exp) -> pp_setinstvar lbl exp
     | Pexp_override fields -> pp_override ~loc fields
     | Pexp_letmodule (name, mb, body) ->
-      pp_letmodule ~loc ~ext_attrs ps name mb body
-    | Pexp_letexception (exn, exp) -> pp_letexception ~loc ~ext_attrs ps exn exp
-    | Pexp_assert exp -> pp_assert ~loc ~ext_attrs ps exp
-    | Pexp_lazy exp -> pp_lazy ~loc ~ext_attrs ps exp
-    | Pexp_object cl -> pp_object ~loc ~ext_attrs ps cl
+      pp_letmodule ~loc ~ext_attrs name mb body
+    | Pexp_letexception (exn, exp) -> pp_letexception ~loc ~ext_attrs exn exp
+    | Pexp_assert exp -> pp_assert ~loc ~ext_attrs exp
+    | Pexp_lazy exp -> pp_lazy ~loc ~ext_attrs exp
+    | Pexp_object cl -> pp_object ~loc ~ext_attrs cl
     | Pexp_pack (me, pkg) -> pp_pack ~loc ~ext_attrs me pkg
     | Pexp_open (lid, exp) -> pp_open lid exp
-    | Pexp_letopen (od, exp) -> pp_letopen ~loc ~ext_attrs ps od exp
-    | Pexp_letop letop -> pp_letop ps letop
+    | Pexp_letopen (od, exp) -> pp_letopen ~loc ~ext_attrs od exp
+    | Pexp_letop letop -> pp_letop letop
     | Pexp_extension ext -> Extension.pp Item ext
     | Pexp_unreachable -> string ~loc "."
-    | Pexp_array_get (arr, idx) -> pp_array_get ps arr idx
-    | Pexp_array_set (arr, idx, e) -> pp_array_set ps arr idx e
-    | Pexp_string_get (str, idx) -> pp_string_get ps str idx
-    | Pexp_string_set (str, idx, c) -> pp_string_set ps str idx c
-    | Pexp_bigarray_get (ba, idx) -> pp_bigarray_get ps ba idx
-    | Pexp_bigarray_set (ba, idx, c) -> pp_bigarray_set ps ba idx c
+    | Pexp_array_get (arr, idx) -> pp_array_get arr idx
+    | Pexp_array_set (arr, idx, e) -> pp_array_set arr idx e
+    | Pexp_string_get (str, idx) -> pp_string_get str idx
+    | Pexp_string_set (str, idx, c) -> pp_string_set str idx c
+    | Pexp_bigarray_get (ba, idx) -> pp_bigarray_get ba idx
+    | Pexp_bigarray_set (ba, idx, c) -> pp_bigarray_set ba idx c
     | Pexp_dotop_get { accessed; op; left; right; indices } ->
-      pp_dotop_get ps accessed op left right indices
+      pp_dotop_get accessed op left right indices
     | Pexp_dotop_set { accessed; op; left; right; indices; value } ->
-      pp_dotop_set ps accessed op left right indices value
+      pp_dotop_set accessed op left right indices value
 
   and pp_ident = Longident.pp
 
   and pp_parens e =
-    parens (pp [] e)
+    parens (pp e)
 
-  and pp_let ~ext_attrs:(extension, attrs) ~loc ps rf vbs body =
+  and pp_let ~ext_attrs:(extension, attrs) ~loc rf vbs body =
     assert (attrs = []);
     let vbs =
       let previous_vb = ref None in
@@ -1100,16 +1047,13 @@ end = struct
       ) vbs
     in
     let vbs = separate hardline (List.hd vbs) (List.tl vbs) in
-    let ps, enclose = Printing_stack.parenthesize ps in
-    let body = pp ps body in
+    let body = pp body in
     let in_ = token_between vbs body IN in
-    enclose (
-      concat ~sep:hardline (group (vbs ^/^ in_)) body
-    )
+    concat ~sep:hardline (group (vbs ^/^ in_)) body
 
-  and case ps { pc_lhs; pc_guard; pc_rhs } =
-    let lhs = Pattern.pp ~indent:2 [] pc_lhs in
-    let rhs = pp ps pc_rhs in
+  and case { pc_lhs; pc_guard; pc_rhs } =
+    let lhs = Pattern.pp ~indent:2 pc_lhs in
+    let rhs = pp pc_rhs in
     let lhs =
       match pc_guard with
       | None ->
@@ -1117,7 +1061,7 @@ end = struct
         prefix ~indent:2 ~spaces:1 lhs arrow
       | Some guard ->
         let guarded =
-          let guard = pp ps guard in
+          let guard = pp guard in
           let when_ = token_between lhs guard WHEN in
           group (prefix ~indent:2 ~spaces:1 when_ guard)
         in
@@ -1131,19 +1075,18 @@ end = struct
     | Always -> lhs ^^ nest !Options.Cases.body_indent (hardline ++ rhs)
     | When_needed -> prefix ~indent:!Options.Cases.body_indent ~spaces:1 lhs rhs
 
-  and cases ~compact:compact_layout orig_ps c cs =
-    let fmt ps acc elt =
-      let elt = case ps elt in
+  and cases ~compact:compact_layout c cs =
+    let fmt acc elt =
+      let elt = case elt in
       let bar = token_between acc elt BAR in
       acc ^/^ group (bar ^^ space ++ elt)
     in
-    let ps = [ List.hd orig_ps ] in
     let rec iterator acc = function
       | [] -> acc
-      | [ x ] -> fmt (List.tl orig_ps) acc x
-      | x :: xs -> iterator (fmt ps acc x) xs
+      | [ x ] -> fmt acc x
+      | x :: xs -> iterator (fmt acc x) xs
     in
-    let cases = iterator (case ps c) cs in
+    let cases = iterator (case c) cs in
     let prefix =
       let open PPrint in
       let multi = hardline ^^ bar in
@@ -1151,26 +1094,25 @@ end = struct
     in
     prefix ++ cases
 
-  and function_chunks ~compact ~loc ~ext_attrs:(extension, attrs) ps c cs =
-    let cases = cases ~compact ps c cs in
+  and function_chunks ~compact ~loc ~ext_attrs:(extension, attrs) c cs =
+    let cases = cases ~compact c cs in
     let keyword =
       let kw = token_before ~start:loc.Location.loc_start cases FUNCTION in
       Keyword.decorate kw ~extension attrs ~later:cases
     in
     keyword, cases
 
-  and pp_function ~loc ~ext_attrs ps = function
+  and pp_function ~loc ~ext_attrs = function
     | [] -> assert false (* always at least one case *)
     | c :: cs ->
       let compact =
         match !Options.Match.compact with
         | Multi -> false
         | Compact -> true
-        | Compact_under_app -> under_app ps
+        | Compact_under_app -> false (* FIXME *) (* under_app ps *)
       in
-      let ps, enclose = Printing_stack.parenthesize ps in
-      let keyword, cases = function_chunks ~compact ~loc ~ext_attrs ps c cs in
-      enclose (keyword ^^ cases)
+      let keyword, cases = function_chunks ~compact ~loc ~ext_attrs c cs in
+      (keyword ^^ cases)
 
   and fun_syntactic_elts ~loc ~ext_attrs:(extension, attrs) ~args body =
     let kw = token_before ~start:loc.Location.loc_start args FUN in
@@ -1178,41 +1120,35 @@ end = struct
     let arrow = token_between args body MINUSGREATER in
     kw, arrow
 
-  and fun_chunks ~loc ~ext_attrs ps params exp =
+  and fun_chunks ~loc ~ext_attrs params exp =
     match params with
     | [] -> assert false
     | param :: params ->
       let args = left_assoc_map ~f:Fun_param.pp param params in
-      let body = pp ps exp in
+      let body = pp exp in
       let kw, arrow = fun_syntactic_elts ~loc ~ext_attrs ~args body in
       kw, args, arrow, body
 
-  and pp_fun ~loc ~ext_attrs ps params exp =
-    let ps, enclose = Printing_stack.parenthesize ps in
-    let fun_, args, arrow, body = fun_chunks ~loc ~ext_attrs ps params exp in
+  and pp_fun ~loc ~ext_attrs params exp =
+    let fun_, args, arrow, body = fun_chunks ~loc ~ext_attrs params exp in
     let doc =
       prefix ~indent:2 ~spaces:1
         (group ((prefix ~indent:2 ~spaces:1 fun_ args) ^/^ arrow))
         body
     in
-    enclose doc
+    doc
 
-  and pp_match ~loc ~ext_attrs:(extension, attrs) ps arg = function
+  and pp_match ~loc ~ext_attrs:(extension, attrs) arg = function
     | [] -> assert false (* always at least one case *)
     | c :: cs ->
-      let arg = pp [] arg in
+      let arg = pp arg in
       let compact =
         match !Options.Match.compact with
         | Multi -> false
         | Compact -> true
-        | Compact_under_app -> under_app ps
+        | Compact_under_app -> false (* FIXME: under_app ps *)
       in
-      let ps, enclose =
-        Printing_stack.parenthesize ps
-          ~situations:!Options.Match.parenthesing_situations
-          ~style:!Options.Match.parens_style
-      in
-      let cases = cases ~compact ps c cs in
+      let cases = cases ~compact c cs in
       let match_ =
         let token = token_before ~start:loc.Location.loc_start arg MATCH in
         Keyword.decorate token ~extension attrs ~later:arg
@@ -1225,20 +1161,19 @@ end = struct
           with_
         ) ^^ cases
       in
-      enclose doc
+      doc
 
-  and pp_try ~loc ~ext_attrs:(extension, attrs) ps arg = function
+  and pp_try ~loc ~ext_attrs:(extension, attrs) arg = function
     | [] -> assert false
     | c :: cs ->
-      let arg = pp [] arg in
+      let arg = pp arg in
       let compact =
         match !Options.Match.compact with
         | Multi -> false
         | Compact -> true
-        | Compact_under_app -> under_app ps
+        | Compact_under_app -> false (* FIXME: under_app ps *)
       in
-      let ps, enclose = Printing_stack.parenthesize ps in
-      let cases = cases ~compact ps c cs in
+      let cases = cases ~compact c cs in
       let try_ =
         let token = token_before ~start:loc.Location.loc_start arg TRY in
         Keyword.decorate token ~extension attrs ~later:arg
@@ -1252,56 +1187,44 @@ end = struct
         with_ ^^
         cases
       in
-      enclose doc
+      doc
 
-  and pp_tuple ps = function
+  and pp_tuple = function
     | [] -> assert false
     | exp :: exps ->
-      let ps, enclose = Printing_stack.parenthesize ps in
-      let doc =
-        group (separate_map PPrint.(comma ^^ break 1) ~f:(pp ps) exp exps)
-      in
-      enclose doc
+      group (separate_map PPrint.(comma ^^ break 1) ~f:pp exp exps)
 
-  and pp_construct ps lid arg_opt =
+  and pp_construct lid arg_opt =
     let name = Longident.pp lid in
     match arg_opt with
     | None -> name
     | Some arg ->
-      let ps, enclose = Printing_stack.parenthesize ps in
-      let arg  = pp ps arg in
+      let arg  = pp arg in
       let doc  = prefix ~indent:2 ~spaces:1 name arg in
-      enclose doc
+      doc
 
-  and pp_cons ps hd tl =
-    let ps = Printing_stack.top_is_op ~on_left:false "::" ps in
-    let ps, enclose = Printing_stack.parenthesize ps in
-    let hd =
-      let ps = Printing_stack.top_is_op ~on_left:true "::" ps in
-      Expression.pp ps hd
-    in
-    let tl = Expression.pp ps tl in
+  and pp_cons hd tl =
+    let hd = pp hd in
+    let tl = pp tl in
     let cons = token_between hd tl COLONCOLON in
     let doc = infix ~indent:2 ~spaces:1 cons hd tl in
-    enclose doc
+    doc
 
-  and pp_list_literal ~loc ps elts =
-    let ps = [ List.hd ps ] in
-    let elts = List.map (pp ps) elts in
+  and pp_list_literal ~loc elts =
+    let elts = List.map pp elts in
     List_like.pp ~loc
       ~formatting:Wrap (* TODO: add an option *)
       ~left:lbracket ~right:rbracket
       elts
 
-  and pp_variant ps tag arg_opt =
+  and pp_variant tag arg_opt =
     let tag = Polymorphic_variant_tag.pp tag in
     match arg_opt with
     | None -> tag
     | Some arg ->
-      let ps, enclose = Printing_stack.parenthesize ps in
-      let arg  = pp ps arg in
+      let arg  = pp arg in
       let doc  = prefix ~indent:2 ~spaces:1 tag arg in
-      enclose doc
+      doc
 
   and record_field (lid, (oct1, oct2), exp) =
     let params =
@@ -1311,14 +1234,14 @@ end = struct
     let binding : Binding.t =
       { lhs = Longident.pp lid;
         params;
-        constr = Option.map (Core_type.pp []) oct1;
-        coerce = Option.map (Core_type.pp []) oct2;
-        rhs = Option.map (pp [ Printing_stack.Record_field ]) exp;
+        constr = Option.map Core_type.pp oct1;
+        coerce = Option.map Core_type.pp oct2;
+        rhs = Option.map pp exp;
       }
     in
     Binding.pp binding
 
-  and pp_record ~loc ps fields updated_record =
+  and pp_record ~loc fields updated_record =
     let fields = List.map record_field fields in
     match updated_record with
     | None ->
@@ -1328,7 +1251,7 @@ end = struct
         ~right:rbrace
         fields
     | Some e ->
-      let update = pp ps e in
+      let update = pp e in
       let fields =
         List_like.pp_fields ~formatting:!Options.Record.expression
           (List.hd fields) (List.tl fields)
@@ -1337,39 +1260,33 @@ end = struct
       enclose ~before:lbrace ~after:PPrint.(break 1 ^^ rbrace)
         (group (group (break_before update) ^/^ with_) ^/^ fields)
 
-  and pp_field ps re fld =
-    let ps, enclose = Printing_stack.parenthesize ps in
-    let record = pp ps re in
+  and pp_field re fld =
+    let record = pp re in
     let field = Longident.pp fld in
     let dot = token_between record field DOT in
     let doc = flow (break 0) record [ dot; field ] in
-    enclose doc
+    doc
 
-  and pp_setfield ps re fld val_ =
-    let field =
-      let ps = Printing_stack.Expression (Pexp_field (re, fld)) :: List.tl ps in
-      pp_field ps re fld
-    in
-    let ps, enclose = Printing_stack.parenthesize ps in
-    let value = pp (List.tl ps) val_ in
+  and pp_setfield re fld val_ =
+    let field = pp_field re fld in
+    let value = pp val_ in
     let larrow = token_between field value LESSMINUS in
     let doc =
       prefix ~indent:2 ~spaces:1
         (group (field ^/^ larrow))
         value
     in
-    enclose doc
+    doc
 
-  and pp_array ~loc ps elts =
-    let elts = List.map (pp ps) elts in
+  and pp_array ~loc elts =
+    let elts = List.map pp elts in
     (* TODO: add an option *)
     List_like.pp ~loc ~formatting:Wrap
       ~left:PPrint.(lbracket ^^ bar)
       ~right:PPrint.(bar ^^ rbracket) elts
 
-  and pp_gen_get ?prefix ?dot enclosing ps arr idx =
-    let ps, enclose = Printing_stack.parenthesize ps in
-    let arr = pp ps arr in
+  and pp_gen_get ?prefix ?dot enclosing arr idx =
+    let arr = pp arr in
     let dot =
       match prefix, dot with
       | None, None -> token_between arr idx DOT
@@ -1380,51 +1297,39 @@ end = struct
       | Some _, None -> assert false
     in
     let doc = flow (break 0) arr [ dot; enclosing idx ] in
-    enclose doc
+    doc
 
-  and pp_gen_set ?prefix:p ?dot enclosing access_ps ps arr idx val_ =
-    let access = pp_gen_get ?prefix:p ?dot enclosing access_ps arr idx in
-    let ps, enclose = Printing_stack.parenthesize ps in
-    let value = pp (List.tl ps) val_ in
+  and pp_gen_set ?prefix:p ?dot enclosing arr idx val_ =
+    let access = pp_gen_get ?prefix:p ?dot enclosing arr idx in
+    let value = pp val_ in
     let larrow = token_between access value LESSMINUS in
     let doc =
       prefix ~indent:2 ~spaces:1
         (group (access ^/^ larrow))
         value
     in
-    enclose doc
+    doc
 
-  and pp_array_get ps arr idx = pp_gen_get parens ps arr (pp [] idx)
-  and pp_array_set ps arr idx val_ =
-    let access_ps =
-      Printing_stack.Expression (Pexp_array_get (arr, idx)) :: List.tl ps
-    in
-    pp_gen_set parens access_ps ps arr (pp [] idx) val_
+  and pp_array_get arr idx = pp_gen_get parens arr (pp idx)
+  and pp_array_set arr idx val_ = pp_gen_set parens arr (pp idx) val_
 
-  and pp_string_get ps arr idx = pp_gen_get brackets ps arr (pp [] idx)
-  and pp_string_set ps arr idx val_ =
-    let access_ps =
-      Printing_stack.Expression (Pexp_string_get (arr, idx)) :: List.tl ps
-    in
-    pp_gen_set brackets access_ps ps arr (pp [] idx) val_
+  and pp_string_get arr idx = pp_gen_get brackets arr (pp idx)
+  and pp_string_set arr idx val_ = pp_gen_set brackets arr (pp idx) val_
 
-  and pp_bigarray_get ps arr idx =
-    let idx = pp_tuple ps idx in
-    pp_gen_get braces ps arr idx
+  and pp_bigarray_get arr idx =
+    let idx = pp_tuple idx in
+    pp_gen_get braces arr idx
 
-  and pp_bigarray_set ps arr idx val_ =
-    let access_ps =
-      Printing_stack.Expression (Pexp_bigarray_get (arr, idx)) :: List.tl ps
-    in
-    let idx = pp_tuple ps idx in
-    pp_gen_set braces access_ps ps arr idx val_
+  and pp_bigarray_set arr idx val_ =
+    let idx = pp_tuple idx in
+    pp_gen_set braces arr idx val_
 
-  and pp_dotop_get ps accessed op left right indices =
+  and pp_dotop_get accessed op left right indices =
     let enclose doc = str left ^^ doc ^^ str right in
     let indices =
       match indices with
       | [] -> assert false (* I think *)
-      | idx :: ids -> separate_map semi ~f:(pp []) idx ids
+      | idx :: ids -> separate_map semi ~f:pp idx ids
     in
     let prefix, op =
       match op with
@@ -1432,18 +1337,14 @@ end = struct
       | Ldot (lid, s) -> Some (Longident.pp lid), str s
       | Lapply _ -> assert false
     in
-    pp_gen_get ?prefix ~dot:(!^"." ++ op) enclose ps accessed indices
+    pp_gen_get ?prefix ~dot:(!^"." ++ op) enclose accessed indices
 
-  and pp_dotop_set ps accessed op left right indices val_ =
+  and pp_dotop_set accessed op left right indices val_ =
     let enclose doc = group (Longident.pp op ^^ str left) ^^ doc ^^ str right in
-    let access_ps =
-      [ Printing_stack.Expression
-          (Pexp_dotop_get { accessed; op; left; right; indices }) ]
-    in
     let indices =
       match indices with
       | [] -> assert false (* I think *)
-      | idx :: ids -> separate_map semi ~f:(pp []) idx ids
+      | idx :: ids -> separate_map semi ~f:pp idx ids
     in
     let prefix, op =
       match op with
@@ -1451,10 +1352,10 @@ end = struct
       | Ldot (lid, s) -> Some (Longident.pp lid), str s
       | Lapply _ -> assert false
     in
-    pp_gen_set ?prefix ~dot:(!^"." ++ op) enclose access_ps ps accessed indices
+    pp_gen_set ?prefix ~dot:(!^"." ++ op) enclose accessed indices
       val_
 
-  and fmt_if_branch ps exp =
+  and fmt_if_branch exp =
     let style = !Options.If_branch.parens_style in
     match !Options.If_branch.parenthesing_situations with
     | Always ->
@@ -1470,14 +1371,14 @@ end = struct
            | Parens -> ")"
            | Begin_end -> "end")
       in
-      [ opening; pp [] exp; closing ]
+      [ opening; pp exp; closing ]
     | When_needed ->
-      [pp ps exp]
+      [pp exp]
     | When_nontrivial ->
       assert false
 
-  and fmt_if_chunk ~first_branch ps ib =
-    let cond = pp [] ib.if_cond in
+  and fmt_if_chunk ~first_branch ib =
+    let cond = pp ib.if_cond in
     let keyword =
       let if_kw =
         let if_ = token_before ~start:ib.if_loc.loc_start cond IF in
@@ -1497,7 +1398,7 @@ end = struct
       let with_attrs = Attribute.attach_to_item with_ext ib.if_attrs in
       with_attrs
     in
-    match fmt_if_branch ps ib.if_body with
+    match fmt_if_branch ib.if_body with
     | [then_branch] ->
       let then_kw = token_between cond then_branch THEN in
       let if_and_cond =
@@ -1523,64 +1424,56 @@ end = struct
     | _ ->
       assert false
 
-  and pp_if_then ps if_branches =
-    let rec iterator ?(first_branch=true) ps = function
+  and pp_if_then if_branches =
+    let rec iterator ?(first_branch=true) = function
       | [] -> assert false
       | [ x ] ->
-        let ps = Printing_stack.Last_if_branch :: List.tl ps in
-        fmt_if_chunk ~first_branch ps x
+        fmt_if_chunk ~first_branch x
       | x :: xs ->
-        fmt_if_chunk ~first_branch ps x
-          ^/^ iterator ~first_branch:false ps xs
+        fmt_if_chunk ~first_branch x
+          ^/^ iterator ~first_branch:false xs
     in
-    let ps, enclose = Printing_stack.parenthesize ps in
-    let ps = Printing_stack.Then_branch :: List.tl ps in
-    enclose (iterator ps if_branches)
+    iterator if_branches
 
-  and pp_if_then_else ps if_branches else_branch =
-    let rec iterator ?(first_branch=true) ps = function
+  and pp_if_then_else if_branches else_branch =
+    let rec iterator ?(first_branch=true) = function
       | [] -> assert false
       | [ x ] ->
-        fmt_if_chunk ~first_branch ps x
+        fmt_if_chunk ~first_branch x
       | x :: xs ->
-        fmt_if_chunk ~first_branch ps x
-          ^/^ iterator ~first_branch:false ps xs
+        fmt_if_chunk ~first_branch x
+          ^/^ iterator ~first_branch:false xs
     in
-    let ps, enclose = Printing_stack.parenthesize ps in
-    let if_ =
-      let ps = Printing_stack.Then_branch :: List.tl ps in
-      iterator ps if_branches
-    in
+    let if_ = iterator if_branches in
     let else_ =
-      let else_branch = pp ps else_branch in
+      let else_branch = pp else_branch in
       let else_ = token_between if_ else_branch ELSE in
       break_before else_ ^^
       nest 2 (break_before else_branch)
     in
     let doc = group (if_ ^^ else_) in
-    enclose doc
+    doc
 
-  and pp_sequence ps e1 e2 =
+  and pp_sequence e1 e2 =
     let compact =
       match !Options.Sequences.compact with
       | Multi -> false
       | Compact -> true
-      | Compact_under_app -> under_app ps
+      | Compact_under_app -> false (* FIXME: under_app ps *)
     in
-    let ps, enclose = Printing_stack.parenthesize ps in
-    let e1 = pp ps e1 in
-    let e2 = pp (List.tl ps) e2 in
+    let e1 = pp e1 in
+    let e2 = pp e2 in
     let semi = token_between e1 e2 SEMI in
     let doc =
       if compact
       then e1 ^^ semi ^/^ e2
       else concat ~sep:hardline (e1 ^^ semi) e2
     in
-    enclose doc
+    doc
 
-  and pp_while ~(loc:Location.t) ~ext_attrs:(extension, attrs) ps cond body =
-    let cond = pp [] cond in
-    let body = pp [] body in
+  and pp_while ~(loc:Location.t) ~ext_attrs:(extension, attrs) cond body =
+    let cond = pp cond in
+    let body = pp body in
     let do_ = token_between cond body DO in
     let while_ = token_before ~start:loc.loc_start cond WHILE in
     let while_ = Keyword.decorate while_ ~extension attrs ~later:cond in
@@ -1596,22 +1489,21 @@ end = struct
         done_
       )
     in
-    let _, enclose = Printing_stack.parenthesize ps in
-    enclose doc
+    doc
 
-  and pp_for ~(loc:Location.t) ~ext_attrs:(extension, attrs) ps it start stop
+  and pp_for ~(loc:Location.t) ~ext_attrs:(extension, attrs) it start stop
       dir body =
-    let it = Pattern.pp [ Printing_stack.Value_binding ] it in
-    let start = pp [] start in
+    let it = Pattern.pp it in
+    let start = pp start in
     let equals = token_between it start EQUAL in
-    let stop = pp [] stop in
+    let stop = pp stop in
     let dir =
       token_between start stop
         (match dir with
          | Upto -> TO
          | Downto -> DOWNTO)
     in
-    let body = pp [] body in
+    let body = pp body in
     let do_ = token_between stop body DO in
     let for_ = token_before ~start:loc.loc_start it FOR in
     let for_ = Keyword.decorate for_ ~extension attrs ~later:it in
@@ -1631,22 +1523,21 @@ end = struct
         done_
       )
     in
-    let _, enclose = Printing_stack.parenthesize ps in
-    enclose doc
+    doc
 
   and pp_constraint exp ct =
-    let exp = pp [] exp in
-    let ct = Core_type.pp [] ct in
+    let exp = pp exp in
+    let ct = Core_type.pp ct in
     let colon = token_between exp ct COLON in
     group (parens (exp ^/^ colon ^/^ ct))
 
   and pp_coerce exp ct_start ct =
-    let exp = pp [] exp in
-    let ct = Core_type.pp [] ct in
+    let exp = pp exp in
+    let ct = Core_type.pp ct in
     let ct_start =
       let loc = { exp.loc with loc_start = exp.loc.loc_end } in
       optional ~loc (fun ct ->
-        let ct = Core_type.pp [] ct in
+        let ct = Core_type.pp ct in
         let colon = token_between exp ct COLON in
         break_before colon ^/^ ct
       ) ct_start
@@ -1654,36 +1545,32 @@ end = struct
     let coerce = token_between ct_start ct COLONGREATER in
     group (parens (group (exp ^^ ct_start) ^/^ coerce ^/^  ct))
 
-  and pp_send ps exp met =
-    let ps = Printing_stack.top_is_op ~on_left:true "#" ps in
-    let ps, enclose = Printing_stack.parenthesize ps in
-    let exp = pp ps exp in
+  and pp_send exp met =
+    let exp = pp exp in
     let met = str met in
     let sharp = token_between exp met HASH in
     let doc = flow (break 0) exp [ sharp; met ] in
-    enclose doc
+    doc
 
-  and pp_new ps ~loc ~ext_attrs:(extension, attrs) lid =
+  and pp_new ~loc ~ext_attrs:(extension, attrs) lid =
     let lid = Longident.pp lid in
     let new_ = token_before ~start:loc.loc_start lid NEW in
     let new_ = Keyword.decorate new_ ~extension attrs ~later:lid in
-    let _, enclose = Printing_stack.parenthesize ps in
-    enclose (group (new_ ^/^ lid))
+    (group (new_ ^/^ lid))
 
-  and pp_setinstvar ps lbl exp =
-    let ps, enclose = Printing_stack.parenthesize ps in
+  and pp_setinstvar lbl exp =
     let lbl = str lbl in
-    let exp = pp (List.tl ps) exp in
+    let exp = pp exp in
     let larrow = token_between lbl exp LESSMINUS in
     let doc = lbl ^/^ larrow ^/^ exp in
-    enclose doc
+    doc
 
   and obj_field_override (lbl, exp) =
     let fld = str lbl in
     match exp.pexp_desc with
     | Pexp_ident Lident s when s.txt = lbl.txt -> fld
     | _ ->
-      let exp = pp [ Printing_stack.Record_field ] exp in
+      let exp = pp exp in
       let equals = token_between fld exp EQUAL in
       fld ^/^ equals ^/^ exp
 
@@ -1694,7 +1581,7 @@ end = struct
       ~right:PPrint.(rangle ^^ rbrace)
       (List.map obj_field_override fields)
 
-  and pp_letmodule ~loc ~ext_attrs:(extension, attrs) ps name
+  and pp_letmodule ~loc ~ext_attrs:(extension, attrs) name
       (params, typ, mexp) expr =
     let binding = Module_binding.pp_raw name params typ mexp [] in
     let bind =
@@ -1705,17 +1592,14 @@ end = struct
       in
       Binding.Module.pp ~keyword ~context:Struct binding
     in
-    let ps, enclose = Printing_stack.parenthesize ps in
-    let expr = pp (List.tl ps) expr in
+    let expr = pp expr in
     let in_ = token_between bind expr IN in
     let doc = bind ^/^ in_ ^/^ expr in
-    enclose doc
+    doc
 
-  and pp_letexception ~(loc:Location.t) ~ext_attrs:(extension, attrs) ps exn
-      exp =
+  and pp_letexception ~(loc:Location.t) ~ext_attrs:(extension, attrs) exn exp =
     let exn = Constructor_decl.pp_extension exn in
-    let ps, enclose = Printing_stack.parenthesize ps in
-    let exp = pp (List.tl ps) exp in
+    let exp = pp exp in
     let keyword =
       let let_ = token_before ~start:loc.loc_start exn LET in
       let exc = token_between let_ exn EXCEPTION in
@@ -1727,32 +1611,28 @@ end = struct
                (group (exn ^/^ in_)))
       ^/^ exp
     in
-    enclose doc
+    doc
 
-  and pp_assert ~(loc:Location.t) ~ext_attrs:(extension, attrs) ps exp =
-    let ps, enclose = Printing_stack.parenthesize ps in
-    let exp = pp ps exp in
+  and pp_assert ~(loc:Location.t) ~ext_attrs:(extension, attrs) exp =
+    let exp = pp exp in
     let assert_ =
       let kw = token_before ~start:loc.loc_start exp ASSERT in
       Keyword.decorate kw ~extension attrs ~later:exp
     in
     let doc = prefix ~indent:2 ~spaces:1 assert_ exp in
-    enclose doc
+    doc
 
-  and pp_lazy ~(loc:Location.t) ~ext_attrs:(extension, attrs) ps exp =
-    let ps, enclose = Printing_stack.parenthesize ps in
-    let exp = pp ps exp in
+  and pp_lazy ~(loc:Location.t) ~ext_attrs:(extension, attrs) exp =
+    let exp = pp exp in
     let lazy_ =
       let kw = token_before ~start:loc.loc_start exp LAZY in
       Keyword.decorate kw ~extension attrs ~later:exp
     in
     let doc = prefix ~indent:2 ~spaces:1 lazy_ exp in
-    enclose doc
+    doc
 
-  and pp_object ~loc ~ext_attrs ps cs =
-    let doc = Class_structure.pp ~loc ~ext_attrs cs in
-    let _, enclose = Printing_stack.parenthesize ps in
-    enclose doc
+  and pp_object ~loc ~ext_attrs cs =
+    Class_structure.pp ~loc ~ext_attrs cs
 
   and pp_pack ~loc ~ext_attrs:(extension, attrs) me pkg =
     let me = Module_expr.pp me in
@@ -1773,7 +1653,7 @@ end = struct
 
   and pp_open lid exp =
     let lid = Longident.pp lid in
-    let exp = pp [] exp in
+    let exp = pp exp in
     let dot = token_between lid exp DOT in
     let exp =
       enclose (nest 2 @@ break_before ~spaces:0 exp)
@@ -1782,28 +1662,26 @@ end = struct
     in
     lid ^^ dot ^^ exp
 
-  and pp_letopen ~(loc:Location.t) ~ext_attrs ps od exp =
+  and pp_letopen ~(loc:Location.t) ~ext_attrs od exp =
     let od = Open_declaration.pp ~ext_attrs Attached_to_item od in
-    let ps, enclose = Printing_stack.parenthesize ps in
-    let exp = pp (List.tl ps) exp in
+    let exp = pp exp in
     let in_ = token_between od exp IN in
     let let_ = token_before ~start:loc.loc_start od LET in
     let doc = group (let_ ^/^ od ^/^ in_) ^/^ exp in
-    enclose doc
+    doc
 
   and pp_binding_op (bop : binding_op) =
     let binding = Value_binding.pp_bop Attached_to_item bop in
     let keyword = Longident.pp_ident bop.pbop_op in
     Binding.pp ~keyword binding
 
-  and pp_letop ps { let_; ands; body } =
+  and pp_letop { let_; ands; body } =
     let let_ = pp_binding_op let_ in
     let ands = List.map pp_binding_op ands in
     let bindings = separate hardline let_ ands in
-    let ps, enclose = Printing_stack.parenthesize ps in
-    let body = pp (List.tl ps) body in
+    let body = pp body in
     let in_ = token_between bindings body IN in
-    enclose (group (bindings ^/^ in_) ^^ hardline ++ body)
+    (group (bindings ^/^ in_) ^^ hardline ++ body)
 end
 
 and Fun_param : sig
@@ -1811,7 +1689,7 @@ and Fun_param : sig
 end = struct
   let punned_label_with_annot prefix_token lbl ct =
     let lbl = str lbl in
-    let ct = Core_type.pp [] ct in
+    let ct = Core_type.pp ct in
     let colon = token_between lbl ct COLON in
     prefix_token ++ parens (lbl ^^ colon ^^ break_before ~spaces:0 ct)
 
@@ -1823,21 +1701,11 @@ end = struct
     | None, Some ct ->
       punned_label_with_annot prefix_token lbl ct
     | Some pat, None ->
-      let fresh_stack =
-        Printing_stack.[
-          if optional then Function_parameter else Value_binding
-        ]
-      in
-      let pat = Pattern.pp fresh_stack pat in
+      let pat = Pattern.pp pat in
       prefix_token ++ join_with_colon lbl pat
     | Some pat, Some ct ->
-      let fresh_stack =
-        Printing_stack.[
-          if optional then Function_parameter else Value_binding
-        ]
-      in
-      let pat = Pattern.pp fresh_stack pat in
-      let ct = Core_type.pp [] ct in
+      let pat = Pattern.pp pat in
+      let ct = Core_type.pp ct in
       let rhs =
         let colon = token_between pat ct COLON in
         parens (pat ^^ colon ^^ ct)
@@ -1846,25 +1714,23 @@ end = struct
 
   let build_optional_with_default lbl def (pat_opt, ct_opt) =
     let lbl = str lbl in
-    let def = Expression.pp [ Printing_stack.Function_parameter ] def in
+    let def = Expression.pp def in
     qmark ++ match pat_opt, ct_opt with
     | None, None ->
       let eq = token_between lbl def EQUAL in
       parens (lbl ^^ eq ^^ def)
     | None, Some ct ->
-      let ct = Core_type.pp [] ct in
+      let ct = Core_type.pp ct in
       let colon = token_between lbl def COLON in
       let eq = token_between ct def EQUAL in
       parens (lbl ^^ colon ^^ ct ^^ eq ^^ def)
     | Some pat, None ->
-      let fresh_stack = [ Printing_stack.Value_binding ] in
-      let pat = Pattern.pp fresh_stack pat in
+      let pat = Pattern.pp pat in
       let eq = token_between pat def EQUAL in
       lbl ^^ colon ++ break_before ~spaces:0 (parens (group (pat ^^ eq ^^ def)))
     | Some pat, Some ct ->
-      let fresh_stack = [ Printing_stack.Value_binding ] in
-      let pat = Pattern.pp fresh_stack pat in
-      let ct = Core_type.pp [] ct in
+      let pat = Pattern.pp pat in
+      let ct = Core_type.pp ct in
       let eq = token_between ct def EQUAL in
       let col = token_between pat ct COLON in
       lbl ^^ colon ++ break_before ~spaces:0
@@ -1875,7 +1741,7 @@ end = struct
     match lbl with
     | Nolabel ->
       begin match pat_and_ty with
-      | Some pat, None -> Pattern.pp [ Printing_stack.Value_binding ] pat
+      | Some pat, None -> Pattern.pp pat
       | _ -> assert false
       end
     | Labelled lbl -> build_simple_label ~optional:false lbl pat_and_ty
@@ -1898,12 +1764,12 @@ and Value_binding : sig
 end = struct
 
   let pp_raw attr_kind pvb_pat pvb_params pvb_type pvb_expr pvb_attributes =
-    let pat = Pattern.pp [ Printing_stack.Value_binding ] pvb_pat in
+    let pat = Pattern.pp pvb_pat in
     let params = List.map Fun_param.pp pvb_params in
     let constr, coerce = pvb_type in
-    let constr = Option.map (Core_type.pp [ Value_binding ]) constr in
-    let coerce = Option.map (Core_type.pp [ Value_binding ]) coerce in
-    let rhs = Expression.pp [] pvb_expr in
+    let constr = Option.map Core_type.pp constr in
+    let coerce = Option.map Core_type.pp coerce in
+    let rhs = Expression.pp pvb_expr in
     let rhs = Some (Attribute.attach attr_kind rhs pvb_attributes) in
     let params =
       let loc = { pat.loc with loc_start = pat.loc.loc_end } in
@@ -1994,7 +1860,7 @@ end = struct
     parens (me ^/^ colon ^/^ mty)
 
   and pp_unpack ~(loc:Location.t) exp =
-    let exp = Expression.pp [ Unpack ] exp in
+    let exp = Expression.pp exp in
     let val_=
       let loc = { loc with loc_end = exp.loc.loc_start } in
       string ~loc "val"
@@ -2312,7 +2178,7 @@ end = struct
       | Pstr_class_type _ -> false
 
   let pp_eval ~first exp attrs =
-    let exp = Expression.pp [] exp in
+    let exp = Expression.pp exp in
     let doc =  Attribute.attach_to_top_item exp attrs in
     if first
     then doc
@@ -2592,7 +2458,7 @@ and Value_description : sig
 end = struct
   let pp vd =
     let name = Longident.pp_ident vd.pval_name in
-    let ctyp = Core_type.pp [] vd.pval_type in
+    let ctyp = Core_type.pp vd.pval_type in
     let kw_string, with_prim =
       match vd.pval_prim with
       | [] -> "val", ctyp
@@ -2748,7 +2614,7 @@ end = struct
     | _ -> false
 
   let pp_param (ct, var) =
-    let ct = Core_type.pp [] ct in
+    let ct = Core_type.pp ct in
     match var with
     | Invariant -> ct
     | Covariant -> plus ++ ct
@@ -2765,7 +2631,7 @@ end = struct
 
   let label_declaration { pld_name; pld_mutable; pld_type; pld_attributes; _ } =
     let name = str pld_name in
-    let typ  = Core_type.pp [ Record_field ] pld_type in
+    let typ  = Core_type.pp pld_type in
     let colon = token_between name typ COLON in
     let lhs = group (name ^/^ colon) in
     let with_mutable_ =
@@ -2810,8 +2676,8 @@ end = struct
     | Ptype_variant cstrs -> variant cstrs
 
   let pp_constraint (ct1, ct2, _) =
-    let ct1 = Core_type.pp [] ct1 in
-    let ct2 = Core_type.pp [] ct2 in
+    let ct1 = Core_type.pp ct1 in
+    let ct2 = Core_type.pp ct2 in
     let equals = token_between ct1 ct2 EQUAL in
     ct1 ^/^ equals ^/^ ct2
 
@@ -2829,12 +2695,12 @@ end = struct
     | String_prefix of string
     | Formatted of document
 
-  let pp ?override_name ?binder ~keyword manifest_ps
+  let pp ?override_name ?binder ~keyword
       { ptype_name; ptype_params; ptype_cstrs; ptype_kind; ptype_private;
         ptype_manifest; ptype_attributes; ptype_loc } =
     let name = Option.value override_name ~default:(str ptype_name) in
     let lhs = with_params ptype_params name in
-    let manifest_opt = Option.map (Core_type.pp manifest_ps) ptype_manifest in
+    let manifest_opt = Option.map Core_type.pp ptype_manifest in
     let rhs =
       (* I didn't know how to express this nightmare more cleanly. *)
       match manifest_opt, ptype_private, ptype_kind with
@@ -2883,7 +2749,7 @@ end = struct
     | Nonrecursive -> " nonrec"
 
   let pp_with_constraint ?override_name ?binder ~keyword td =
-    pp ?override_name ?binder ~keyword [ Printing_stack.With_constraint ] td
+    pp ?override_name ?binder ~keyword td
 
   let pp_decl rf decls =
     let decls =
@@ -2900,7 +2766,7 @@ end = struct
           String_prefix (if !i = 0 then "type" ^ rec_flag rf else "and")
         in
         incr i;
-        let binding = pp ~keyword [] decl in
+        let binding = pp ~keyword decl in
         Attribute.prepend_text text binding
       ) decls
     in
@@ -2919,7 +2785,7 @@ end = struct
         in
         let keyword = String_prefix (if !i = 0 then "type" else "and") in
         incr i;
-        let binding = pp ~binder:COLONEQUAL ~keyword [] decl in
+        let binding = pp ~binder:COLONEQUAL ~keyword decl in
         Attribute.prepend_text text binding
       ) decls
     in
@@ -2955,7 +2821,7 @@ end = struct
         group (
           brackets (
             break_before @@ break_after @@
-            separate_map PPrint.(comma ^^ break 1) ~f:(Core_type.pp []) x xs
+            separate_map PPrint.(comma ^^ break 1) ~f:Core_type.pp x xs
           )
         )
       in
@@ -2976,11 +2842,7 @@ end = struct
     group (let_ ^/^ od ^/^ in_) ^/^ ct
 
   and pp_arrow lbl ct cty =
-    let param =
-      (* Fake printing stack :/ *)
-      let ps = [ Printing_stack.Core_type (Ptyp_arrow ([], ct)) ] in
-      Core_type.pp_param ps (lbl, ct)
-    in
+    let param = Core_type.pp_param (lbl, ct) in
     let cty = pp cty in
     let arrow = token_between param cty MINUSGREATER in
     param ^/^ group (arrow ^/^ cty)
@@ -3034,7 +2896,7 @@ end = struct
     | arg :: args ->
       let ps, enclose = Printing_stack.parenthesize ps in
       let ce = pp ps ce in
-      Application.pp_simple ps ce arg args
+      Application.pp_simple ce arg args
       |> enclose
 
   and pp_let ~loc ps rf vbs ce =
@@ -3142,7 +3004,7 @@ end = struct
 
   let pp_virtual ~start kind name mod_tok ct =
     let name = str name in
-    let ct = Core_type.pp [] ct in
+    let ct = Core_type.pp ct in
     let keyword =
       let kw = token_before ~start name kind in
       let virt = token_between kw name VIRTUAL in
@@ -3173,9 +3035,9 @@ end = struct
       )
     in
     let params = List.map Fun_param.pp params in
-    let constr = Option.map (Core_type.pp []) constr in
-    let coerce = Option.map (Core_type.pp []) coerce in
-    let rhs = Some (Expression.pp [] expr) in
+    let constr = Option.map Core_type.pp constr in
+    let coerce = Option.map Core_type.pp coerce in
+    let rhs = Some (Expression.pp expr) in
     let params =
       let loc = { name.loc with loc_start = name.loc.loc_end } in
       { txt = params; loc }
@@ -3204,13 +3066,13 @@ end = struct
     pp_field_kind ~loc METHOD name modifier_token cfk
 
   let pp_constraint ~loc:{ Location.loc_start; _ } ct1 ct2 =
-    let ct1 = Core_type.pp [] ct1 in
-    let ct2 = Core_type.pp [] ct2 in
+    let ct1 = Core_type.pp ct1 in
+    let ct2 = Core_type.pp ct2 in
     let keyword = token_before ~start:loc_start ct1 CONSTRAINT in
     Binding.pp_simple ~keyword ct1 ct2
 
   let pp_init ~loc:{ Location.loc_start; _ } expr =
-    let expr = Expression.pp [] expr in
+    let expr = Expression.pp expr in
     let init = token_before ~start:loc_start expr INITIALIZER in
     group (init ^/^ expr)
 
@@ -3239,7 +3101,7 @@ end = struct
         let kw = token_before ~start:loc.loc_start later OBJECT in
         Keyword.decorate kw ~extension attrs ~later
       | _ ->
-        let self = Pattern.pp [] pcstr_self in
+        let self = Pattern.pp pcstr_self in
         let obj =
           Keyword.decorate (token_before ~start:loc.loc_start self OBJECT)
             ~extension attrs ~later:self
@@ -3268,7 +3130,7 @@ end = struct
 
   let pp_maybe_virtual ~start kind name mod_tok vf ct =
     let name = str name in
-    let ct = Core_type.pp [] ct in
+    let ct = Core_type.pp ct in
     let keyword =
       let kw = token_before ~start name kind in
       group (
@@ -3322,7 +3184,7 @@ end = struct
       begin match pcsig_self.ptyp_desc with
       | Ptyp_any -> string ~loc "object end" (* comments are gonna move *)
       | _ ->
-        let self = parens (Core_type.pp [] pcsig_self) in
+        let self = parens (Core_type.pp pcsig_self) in
         let obj_ = token_before ~start:loc.loc_start self OBJECT in
         let end_ = token_after ~stop:loc.loc_end self END in
         prefix ~indent:2 ~spaces:1 (group (obj_ ^/^ self)) end_
@@ -3334,7 +3196,7 @@ end = struct
         match pcsig_self.ptyp_desc with
         | Ptyp_any -> obj
         | _ ->
-          let self = parens (Core_type.pp [] pcsig_self) in
+          let self = parens (Core_type.pp pcsig_self) in
           group (obj ^/^ self)
       in
       let end_ = token_after ~stop:loc.loc_end fields END in
