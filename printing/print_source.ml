@@ -92,10 +92,7 @@ end = struct
         | None -> nb
         | Some s -> nb ^ (String.make 1 s)
       in
-      (* FIXME? nb might start with a minus… which might implying parenthesing
-         is required in some contexts. *)
-      let doc = string ~loc nb in
-      if String.get nb 0 = '-' then parens doc else doc
+      string ~loc nb
     | Pconst_char c ->
       let c = Char.escaped c in
       squotes (string ~loc c)
@@ -890,7 +887,7 @@ end = struct
     let exp = Expression.pp exp in
     pp_simple exp arg args
 
-  let classify_fun exp =
+  let _classify_fun exp =
     match exp.pexp_desc with
     | Pexp_ident Lident s when s.txt <> "" -> Ident_class.classify s
     | _ -> Normal
@@ -898,11 +895,7 @@ end = struct
   let pp_prefix op arg =
     let sep =
       match arg.pexp_desc with
-      | Pexp_apply (exp, _) ->
-        begin match classify_fun exp with
-        | Prefix_op _ -> PPrint.break 1
-        | _ -> PPrint.empty
-        end
+      | Pexp_prefix_apply _ -> PPrint.break 1
       | _ -> PPrint.empty
     in
     let op = str op in
