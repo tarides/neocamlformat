@@ -182,7 +182,11 @@ module Exp = struct
   let ident ?loc ?attrs a = mk ?loc ?attrs (Pexp_ident a)
   let constant ?loc ?attrs a = mk ?loc ?attrs (Pexp_constant a)
   let let_ ?loc ?attrs a b c = mk ?loc ?attrs (Pexp_let (a, b, c))
-  let fun_ ?loc ?attrs a b c d = mk ?loc ?attrs (Pexp_fun ([Term (a, b, c)], d))
+  let fun_ ?loc ?attrs a b c d =
+    let term = 
+      Term { lbl = a; default = b; pat_with_annot = c; parens = false }
+    in
+    mk ?loc ?attrs (Pexp_fun ([term], d))
   let function_ ?loc ?attrs a = mk ?loc ?attrs (Pexp_function a)
   let apply ?loc ?attrs a b = mk ?loc ?attrs (Pexp_apply (a, b))
   let match_ ?loc ?attrs a b = mk ?loc ?attrs (Pexp_match (a, b))
@@ -335,7 +339,11 @@ module Cl = struct
 
   let constr ?loc ?attrs a b = mk ?loc ?attrs (Pcl_constr (a, b))
   let structure ?loc ?attrs a = mk ?loc ?attrs (Pcl_structure a)
-  let fun_ ?loc ?attrs a b c d = mk ?loc ?attrs (Pcl_fun ([Term (a, b, c)], d))
+  let fun_ ?loc ?attrs a b c d =
+    let term = 
+      Term { lbl = a; default = b; pat_with_annot = c; parens = false }
+    in
+    mk ?loc ?attrs (Pcl_fun ([term], d))
   let apply ?loc ?attrs a b = mk ?loc ?attrs (Pcl_apply (a, b))
   let let_ ?loc ?attrs a b c = mk ?loc ?attrs (Pcl_let (a, b, c))
   let constraint_ ?loc ?attrs a b = mk ?loc ?attrs (Pcl_constraint (a, b))

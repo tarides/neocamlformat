@@ -102,8 +102,8 @@ let reloc_typ ~loc x =
 let mkexpvar ~loc (name : string) =
   mkexp ~loc (Pexp_ident(Lident (mkrhs name loc)))
 
-let mkoperator =
-  mkexpvar
+let mkoperator ~loc (name : string) =
+  mkrhs name loc (* mkexpvar *)
 
 let mkpatvar ~loc name =
   mkpat ~loc (Ppat_var name)
@@ -132,7 +132,7 @@ let ghstr ~loc d = Str.mk ~loc:(ghost_loc loc) d
 let ghsig ~loc d = Sig.mk ~loc:(ghost_loc loc) d
 
 let mkinfix arg1 op arg2 =
-  Pexp_apply(op, [Nolabel, arg1; Nolabel, arg2])
+  Pexp_infix_apply(op, (arg1, arg2))
 
 let neg_string f =
   if String.length f > 0 && f.[0] = '-'
@@ -146,7 +146,7 @@ let mkuminus ~oploc name arg =
   | ("-" | "-."), Pexp_constant(Pconst_float (f, m)) ->
       Pexp_constant(Pconst_float(neg_string f, m))
   | _ ->
-      Pexp_apply(mkoperator ~loc:oploc ("~" ^ name), [Nolabel, arg])
+      Pexp_prefix_apply(mkoperator ~loc:oploc name, arg)
 
 let mkuplus ~oploc name arg =
   let desc = arg.pexp_desc in
@@ -154,7 +154,7 @@ let mkuplus ~oploc name arg =
   | "+", Pexp_constant(Pconst_integer _)
   | ("+" | "+."), Pexp_constant(Pconst_float _) -> desc
   | _ ->
-      Pexp_apply(mkoperator ~loc:oploc ("~" ^ name), [Nolabel, arg])
+      Pexp_prefix_apply(mkoperator ~loc:oploc name, arg)
 
 (* TODO define an abstraction boundary between locations-as-pairs
    and locations-as-Location.t; it should be clear when we move from
@@ -1555,9 +1555,10 @@ class_fun_binding:
   | COLON class_type EQUAL class_expr
       { [], Some $2, $4 }
   | labeled_simple_pattern class_fun_binding
-      { let (l,o,p) = $1 in
+      { let (lbl, default, pat_with_annot, parens) = $1 in
+        let param = Term { lbl; default; pat_with_annot; parens } in
         let params, typ, exp = $2 in
-        (Term (l, o, p) :: params), typ, exp }
+        (param :: params), typ, exp }
 ;
 
 formal_class_parameters:
@@ -1612,13 +1613,14 @@ class_fun_def:
   mkclass(
     labeled_simple_pattern MINUSGREATER e = class_expr
   | labeled_simple_pattern e = class_fun_def
-      { let (l,o,p) = $1 in
+      { let (lbl, default, pat_with_annot, parens) = $1 in
+        let param = Term { lbl; default; pat_with_annot; parens } in
         let params, e =
           match e.pcl_desc with
           | Pcl_fun (params, e) -> params, e
           | _ -> [], e
         in
-        Pcl_fun(Term (l, o, p) :: params, e) }
+        Pcl_fun(param :: params, e) }
   ) { $1 }
 ;
 %inline class_structure:
@@ -1893,21 +1895,21 @@ seq_expr:
 ;
 labeled_simple_pattern:
     QUESTION LPAREN label_let_pattern opt_default RPAREN
-      { (Optional (fst $3), $4, snd $3) }
+      { (Optional (fst $3), $4, snd $3, true) }
   | QUESTION label_var
-      { (Optional $2, None, (None, None)) }
+      { (Optional $2, None, (None, None), false) }
   | mkrhs(OPTLABEL) LPAREN let_pattern opt_default RPAREN
-      { (Optional $1, $4, $3) }
+      { (Optional $1, $4, $3, true) }
   | mkrhs(OPTLABEL) pattern_var
-      { (Optional $1, None, $2) }
+      { (Optional $1, None, $2, false) }
   | TILDE LPAREN label_let_pattern RPAREN
-      { (Labelled (fst $3), None, snd $3) }
+      { (Labelled (fst $3), None, snd $3, true) }
   | TILDE label_var
-      { (Labelled $2, None, (None, None)) }
+      { (Labelled $2, None, (None, None), false) }
   | mkrhs(LABEL) simple_pattern
-      { (Labelled $1, None, (Some $2, None)) }
+      { (Labelled $1, None, (Some $2, None), false) }
   | simple_pattern
-      { (Nolabel, None, (Some $1, None)) }
+      { (Nolabel, None, (Some $1, None), false) }
 ;
 
 pattern_var:
@@ -2008,12 +2010,13 @@ expr:
   | FUNCTION ext_attributes match_cases
       { Pexp_function $3, $2 }
   | FUN ext_attributes labeled_simple_pattern fun_def
-      { let (l,o,p) = $3 in
+      { let (lbl, default, pat_with_annot, parens) = $3 in
         let body = $4 in
+        let term = Term { lbl; default; pat_with_annot; parens } in
         let desc =
           match body.pexp_desc with
-          | Pexp_fun (lst, body) -> Pexp_fun(Term (l, o, p) :: lst, body)
-          | _ -> Pexp_fun([ Term (l, o, p)], body)
+          | Pexp_fun (lst, body) -> Pexp_fun(term :: lst, body)
+          | _ -> Pexp_fun([term], body)
         in
         desc, $2 }
   | FUN ext_attributes LPAREN TYPE lident_list RPAREN fun_def
@@ -2172,9 +2175,9 @@ simple_expr:
   | name_tag %prec prec_constant_constructor
       { Pexp_variant($1, None) }
   | op(PREFIXOP) simple_expr
-      { Pexp_apply($1, [Nolabel,$2]) }
+      { Pexp_prefix_apply($1, $2) }
   | op(BANG {"!"}) simple_expr
-      { Pexp_apply($1, [Nolabel,$2]) }
+      { Pexp_prefix_apply($1, $2) }
   | LBRACELESS object_expr_content GREATERRBRACE
       { Pexp_override $2 }
   | LBRACELESS object_expr_content error
@@ -2358,8 +2361,8 @@ strict_binding:
     EQUAL seq_expr
       { [], (None, None), $2 }
   | labeled_simple_pattern fun_binding
-      { let (l, o, p) = $1 in
-        let param = Term (l, o, p) in
+      { let (lbl, default, pat_with_annot, parens) = $1 in
+        let param = Term { lbl; default; pat_with_annot; parens } in
         let params, typ, expr = $2 in
         param :: params, typ, expr }
   | LPAREN TYPE lident_list RPAREN fun_binding
@@ -2388,13 +2391,14 @@ fun_def:
 /* Cf #5939: we used to accept (fun p when e0 -> e) */
   | labeled_simple_pattern fun_def
       {
-       let (l,o,p) = $1 in
+       let (lbl, default, pat_with_annot, parens) = $1 in
+       let term = Term { lbl; default; pat_with_annot; parens } in
        let body = $2 in
        match body.pexp_desc with
        | Pexp_fun (lst, body) ->
-           ghexp ~loc:$sloc (Pexp_fun(Term (l, o, p) :: lst, body))
+           ghexp ~loc:$sloc (Pexp_fun(term :: lst, body))
        | _ ->
-           ghexp ~loc:$sloc (Pexp_fun([ Term (l, o, p)], body))
+           ghexp ~loc:$sloc (Pexp_fun([term], body))
       }
   | LPAREN TYPE lident_list RPAREN fun_def
       { mk_newtypes ~loc:$sloc $3 $5 }
@@ -3286,7 +3290,13 @@ ident:
 ;
 val_ident:
     LIDENT                    { mkrhs $1 $sloc }
-  | LPAREN operator RPAREN    { mkrhs $2 $loc($2) }
+  | LPAREN operator RPAREN
+      { let str =
+          match $2 with
+          | "*" -> "( * )"
+          | x -> "(" ^ x ^ ")"
+        in
+        mkrhs str $loc($2) }
   | LPAREN operator error     { unclosed "(" $loc($1) ")" $loc($3) }
   | LPAREN error              { expecting $loc($2) "operator" }
   | LPAREN MODULE error       { expecting $loc($3) "module-expr" }

@@ -50,7 +50,7 @@ end = struct
     | Normal -> str s
     | Infix_op { loc; txt } when txt <> "" && String.get txt 0 = '*' ->
       parens (string ~loc (" " ^ txt ^ " "))
-    | Infix_op _ | Prefix_op _ -> parens (str s)
+    | Infix_op _ | Prefix_op _ -> str s
 
   let rec pp lid =
     group (aux lid)
@@ -740,6 +740,10 @@ and Application : sig
 
   val pp : expression -> (arg_label * expression) list
     -> document
+
+  val pp_infix : string loc -> expression -> expression -> document
+
+  val pp_prefix : string loc -> expression -> document
 end = struct
   let argument (lbl, exp) =
     let suffix ~prefix:sym lbl =
@@ -886,40 +890,36 @@ end = struct
     let exp = Expression.pp exp in
     pp_simple exp arg args
 
-  let prefix_op (exp, op) arg args =
-    if fst arg <> Nolabel || args <> [] then
-      simple_apply exp arg args
-    else
-      let op = str op in
-      let arg = argument arg in
-      let doc = nest 2 (op ^^ arg) in
-      doc
-
-  let infix_op (exp, op) arg args =
-    match arg, args with
-    | (Nolabel, fst), [ (Nolabel, snd) ] ->
-      let fst = Expression.pp fst in
-      let snd = Expression.pp snd in
-      let doc = infix ~indent:2 ~spaces:1 (str op) fst snd in
-      doc
-    | _ ->
-      simple_apply exp arg args
-
   let classify_fun exp =
     match exp.pexp_desc with
     | Pexp_ident Lident s when s.txt <> "" -> Ident_class.classify s
     | _ -> Normal
+
+  let pp_prefix op arg =
+    let sep =
+      match arg.pexp_desc with
+      | Pexp_apply (exp, _) ->
+        begin match classify_fun exp with
+        | Prefix_op _ -> PPrint.break 1
+        | _ -> PPrint.empty
+        end
+      | _ -> PPrint.empty
+    in
+    let op = str op in
+    let arg = Expression.pp arg in
+    nest 2 (concat ~sep op arg)
 
   let pp exp = function
     | [] ->
       (* An application node without arguments? That can't happen. *)
       assert false
     | arg :: args ->
-      match classify_fun exp with
-      | Normal -> simple_apply exp arg args
-      | Prefix_op op -> prefix_op (exp, op) arg args
-      | Infix_op op -> infix_op (exp, op) arg args
+      simple_apply exp arg args
 
+  let pp_infix op arg1 arg2 =
+    let fst = Expression.pp arg1 in
+    let snd = Expression.pp arg2 in
+    infix ~indent:2 ~spaces:1 (str op) fst snd
 end
 
 and Expression : sig
@@ -954,6 +954,8 @@ end = struct
     | Pexp_function cases -> pp_function ~loc ~ext_attrs cases
     | Pexp_fun (params, exp) -> pp_fun ~loc ~ext_attrs params exp
     | Pexp_apply (expr, args) -> Application.pp expr args
+    | Pexp_infix_apply (op, (arg1, arg2)) -> Application.pp_infix op arg1 arg2
+    | Pexp_prefix_apply (op, arg) -> Application.pp_prefix op arg
     | Pexp_match (arg, cases) -> pp_match ~loc ~ext_attrs arg cases
     | Pexp_try (arg, cases) -> pp_try ~loc ~ext_attrs arg cases
     | Pexp_tuple exps -> pp_tuple exps
@@ -1693,17 +1695,21 @@ end = struct
     let colon = token_between lbl ct COLON in
     prefix_token ++ parens (lbl ^^ colon ^^ break_before ~spaces:0 ct)
 
-  let build_simple_label ~optional lbl (pat_opt, cty_opt) =
+  let build_simple_label ~optional ~parentheses lbl (pat_opt, cty_opt) =
     let prefix_token = if optional then qmark else tilde in
     match pat_opt, cty_opt with
     | None, None ->
+      assert (not parentheses);
       prefix_token ++ str lbl
     | None, Some ct ->
+      assert parentheses;
       punned_label_with_annot prefix_token lbl ct
     | Some pat, None ->
       let pat = Pattern.pp pat in
+      let pat = if parentheses then parens pat else pat in
       prefix_token ++ join_with_colon lbl pat
     | Some pat, Some ct ->
+      assert parentheses;
       let pat = Pattern.pp pat in
       let ct = Core_type.pp ct in
       let rhs =
@@ -1737,24 +1743,30 @@ end = struct
                (parens (group (pat ^^ col ^^ ct ^^ eq ^^ def)))
 
 
-  let term lbl default pat_and_ty =
+  let term lbl default pat_and_ty parentheses =
     match lbl with
     | Nolabel ->
+      assert (not parentheses);
       begin match pat_and_ty with
       | Some pat, None -> Pattern.pp pat
       | _ -> assert false
       end
-    | Labelled lbl -> build_simple_label ~optional:false lbl pat_and_ty
+    | Labelled lbl ->
+      build_simple_label ~optional:false ~parentheses lbl pat_and_ty
     | Optional lbl ->
       match default with
-      | None -> build_simple_label ~optional:true lbl pat_and_ty
-      | Some def -> build_optional_with_default lbl def pat_and_ty
+      | None ->
+        build_simple_label ~optional:true ~parentheses lbl pat_and_ty
+      | Some def ->
+        assert parentheses;
+        build_optional_with_default lbl def pat_and_ty
 
   let newtype typ =
     parens (!^"type " ++ str typ)
 
   let pp = function
-    | Term (lbl, default, pat) -> group (term lbl default pat)
+    | Term {lbl; default; pat_with_annot; parens} ->
+      group (term lbl default pat_with_annot parens)
     | Type typ -> group (newtype typ)
 end
 

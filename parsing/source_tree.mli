@@ -282,7 +282,12 @@ and expression =
     }
 
 and fun_param =
-  | Term of arg_label * expression option * (pattern option * core_type option)
+  | Term of 
+      { lbl: arg_label;
+        default: expression option;
+        pat_with_annot: (pattern option * core_type option);
+        parens: bool;
+      }
   (* FIXME? location *)
   | Type of string loc
         (* fun (type t) -> E *)
@@ -319,6 +324,8 @@ and expression_desc =
 
            Invariant: n > 0
          *)
+  | Pexp_prefix_apply of string loc * expression
+  | Pexp_infix_apply of string loc * (expression * expression)
   | Pexp_match of expression * case list
         (* match E0 with P1 -> E1 | ... | Pn -> En *)
   | Pexp_try of expression * case list
