@@ -2561,7 +2561,8 @@ simple_pattern_not_ident:
   | mod_longident DOT mkrhs(LPAREN RPAREN {"()"})
     { Ppat_open($1, mkpat ~loc:$sloc (Ppat_construct(Lident $3, None))) }
   | mod_longident DOT LPAREN pattern RPAREN
-      { Ppat_open ($1, $4) }
+      { let pat = mkpat ~loc:$sloc (Ppat_parens $4) in
+        Ppat_open ($1, pat) }
   | mod_longident DOT LPAREN pattern error
       { unclosed "(" $loc($3) ")" $loc($5)  }
   | mod_longident DOT LPAREN error
