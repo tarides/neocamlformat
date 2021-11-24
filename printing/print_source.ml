@@ -1712,6 +1712,7 @@ end = struct
       prefix_token ++ join_with_colon lbl rhs
 
   let build_optional_with_default lbl def (pat_opt, ct_opt) =
+    let lbl_colon = string ~loc:lbl.loc (lbl.txt ^ ":") in
     let lbl = str lbl in
     let def = Expression.pp def in
     qmark ++ match pat_opt, ct_opt with
@@ -1726,14 +1727,13 @@ end = struct
     | Some pat, None ->
       let pat = Pattern.pp pat in
       let eq = token_between pat def EQUAL in
-      lbl ^^ colon ++ break_before ~spaces:0 (parens (group (pat ^^ eq ^^ def)))
+      lbl_colon ^^ (parens (group (pat ^^ eq ^^ def)))
     | Some pat, Some ct ->
       let pat = Pattern.pp pat in
       let ct = Core_type.pp ct in
       let eq = token_between ct def EQUAL in
       let col = token_between pat ct COLON in
-      lbl ^^ colon ++ break_before ~spaces:0
-               (parens (group (pat ^^ col ^^ ct ^^ eq ^^ def)))
+      lbl_colon ^^ (parens (group (pat ^^ col ^^ ct ^^ eq ^^ def)))
 
 
   let term lbl default pat_and_ty parentheses =
