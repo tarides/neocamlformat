@@ -1014,7 +1014,7 @@ end = struct
           in
           text, { vb with pvb_attributes = attrs }
         in
-        let binding = Value_binding.pp Attached_to_item vb in
+        let binding = Value_binding.pp Attached_to_structure_item vb in
         let keyword =
           let lhs = binding.lhs in
           let attrs =
