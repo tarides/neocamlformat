@@ -144,7 +144,8 @@ module Pat = struct
     {ppat_desc = d;
      ppat_loc = loc;
      ppat_loc_stack = [];
-     ppat_attributes = attrs}
+     ppat_attributes = attrs;
+     ppat_ext_attributes = None, [];}
   let attr d a = {d with ppat_attributes = d.ppat_attributes @ [a]}
 
   let any ?loc ?attrs () = mk ?loc ?attrs Ppat_any

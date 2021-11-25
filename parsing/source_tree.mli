@@ -204,6 +204,7 @@ and pattern =
      ppat_loc: Location.t;
      ppat_loc_stack: location_stack;
      ppat_attributes: attributes; (* ... [@id1] [@id2] *)
+     ppat_ext_attributes: string loc option * attributes;
     }
 
 and pattern_desc =

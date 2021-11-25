@@ -571,10 +571,12 @@ end
 and Pattern : sig
   val pp : ?indent:int -> pattern -> document
 end = struct
-  let rec pp ?indent { ppat_desc; ppat_attributes; ppat_loc; _ } =
-    let desc = pp_desc ?indent ~loc:ppat_loc ppat_desc in
-    let doc = Attribute.attach_to_item desc ppat_attributes in
-    doc
+  let rec pp ?indent { ppat_desc; ppat_attributes; ppat_loc;
+                       ppat_ext_attributes; _ } =
+    let desc =
+      pp_desc ?indent ~loc:ppat_loc ~ext_attrs:ppat_ext_attributes ppat_desc
+    in
+    Attribute.attach_to_item desc ppat_attributes
 
   and pp_alias pat alias =
     let pat = pp pat in
@@ -679,11 +681,15 @@ end = struct
   and pp_type typ =
     sharp ++ Longident.pp typ
 
-  and pp_lazy ~loc p =
-    let lazy_ = string ~loc "lazy" in
-    (lazy_ ^/^ pp p)
+  and pp_lazy ~loc ~ext_attrs:(extension, attrs) p =
+    let p = pp p in
+    let kw =
+      let tok = token_before ~start:loc.Location.loc_start p LAZY in
+      Keyword.decorate tok ~extension attrs ~later:p
+    in
+    kw ^/^ p
 
-  and pp_unpack mod_name ct =
+  and pp_unpack ~loc ~ext_attrs:(extension, attrs) mod_name ct =
     let mod_name = module_name mod_name in
     let with_constraint =
       match ct with
@@ -693,11 +699,26 @@ end = struct
         let colon = token_between mod_name constr COLON in
         mod_name ^/^ colon ^/^ constr
     in
-    enclose ~before:PPrint.(!^"(module ") ~after:PPrint.(!^")")
-      with_constraint
+    let module_ =
+      let lpar =
+        token_before ~start:loc.Location.loc_start with_constraint LPAREN
+      in
+      let mod_ = token_between lpar with_constraint MODULE in
+      Keyword.decorate (lpar ^^ mod_) ~extension attrs ~later:with_constraint
+    in
+    let rparen =
+      token_after ~stop:loc.Location.loc_end with_constraint RPAREN
+    in
+    prefix ~indent:2 ~spaces:1 module_ with_constraint
+      ^/^ rparen
 
-  and pp_exception ~loc p =
-    string ~loc "exception" ^/^ pp p
+  and pp_exception ~loc ~ext_attrs:(extension, attrs) p =
+    let p = pp p in
+    let kw =
+      let tok = token_before ~start:loc.Location.loc_start p EXCEPTION in
+      Keyword.decorate tok ~extension attrs ~later:p
+    in
+    kw ^/^ p
 
   and pp_open lid p =
     let lid = Longident.pp lid in
@@ -707,7 +728,7 @@ end = struct
 
   and pp_var v = Longident.pp_ident v
 
-  and pp_desc ?(indent=0) ~loc = function
+  and pp_desc ?(indent=0) ~loc ~ext_attrs = function
     | Ppat_or (p1, p2) -> pp_or ~indent p1 p2
     | otherwise ->
       nest indent @@ group (
@@ -728,9 +749,9 @@ end = struct
         | Ppat_array pats -> pp_array ~loc pats
         | Ppat_constraint (p, ct) -> pp_constraint p ct
         | Ppat_type pt -> pp_type pt
-        | Ppat_lazy p -> pp_lazy ~loc p
-        | Ppat_unpack (name, typ) -> pp_unpack name typ
-        | Ppat_exception p -> pp_exception ~loc p
+        | Ppat_lazy p -> pp_lazy ~loc ~ext_attrs p
+        | Ppat_unpack (name, typ) -> pp_unpack ~loc ~ext_attrs name typ
+        | Ppat_exception p -> pp_exception ~loc ~ext_attrs p
         | Ppat_extension ext -> Extension.pp Item ext
         | Ppat_open (lid, p) -> pp_open lid p
       )

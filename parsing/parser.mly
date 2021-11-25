@@ -228,12 +228,9 @@ let wrap_typ_attrs ~loc typ (ext, attrs) =
   | None -> typ
   | Some id -> ghtyp ~loc (Ptyp_extension (id, PTyp typ))
 
-let wrap_pat_attrs ~loc pat (ext, attrs) =
+let wrap_pat_attrs ~loc:_ pat ext_attrs =
   (* todo: keep exact location for the entire attribute *)
-  let pat = {pat with ppat_attributes = attrs @ pat.ppat_attributes} in
-  match ext with
-  | None -> pat
-  | Some id -> ghpat ~loc (Ppat_extension (id, PPat (pat, None)))
+  {pat with ppat_ext_attributes = ext_attrs }
 
 let mkpat_attrs ~loc d attrs =
   wrap_pat_attrs ~loc (mkpat ~loc d) attrs
