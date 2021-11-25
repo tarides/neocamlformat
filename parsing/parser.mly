@@ -1019,7 +1019,7 @@ module_expr:
           mkmod ~loc:$sloc (Pmod_functor (args, me))
         ) }
   | me = paren_module_expr
-      { me }
+      { mkmod ~loc:$sloc (Pmod_parens (me)) }
   | me = module_expr attr = attribute
       { Mod.attr me attr }
   | mkmod(

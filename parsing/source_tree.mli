@@ -945,6 +945,7 @@ and module_expr =
 and module_expr_desc =
   | Pmod_ident of Longident.t
         (* X *)
+  | Pmod_parens of module_expr
   | Pmod_structure of structure
         (* struct ... end *)
   | Pmod_functor of functor_parameter loc list * module_expr

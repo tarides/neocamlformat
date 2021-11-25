@@ -1817,6 +1817,7 @@ end
 and Module_expr : sig
   val pp : module_expr -> document
 end = struct
+  (* TODO: lhs_of_apply useless now that there is Pmod_parens *)
   let rec pp ?(lhs_of_apply=false) { pmod_desc; pmod_attributes; pmod_loc } =
     let doc = pp_desc ~loc:pmod_loc pmod_desc in
     let doc = Attribute.attach_to_item doc pmod_attributes in
@@ -1826,6 +1827,7 @@ end = struct
 
   and pp_desc ~loc = function
     | Pmod_ident lid -> Longident.pp lid
+    | Pmod_parens me -> parens (pp me)
     | Pmod_structure str -> pp_structure ~loc str
     | Pmod_functor (params, me) -> pp_functor ~loc params me
     | Pmod_apply (me1, me2) -> pp_apply me1 me2
