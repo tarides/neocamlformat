@@ -894,8 +894,10 @@ end = struct
 
   let pp_prefix op arg =
     let sep =
+      (* FIXME: this is most likely incomplete. *)
       match arg.pexp_desc with
-      | Pexp_prefix_apply _ -> PPrint.break 1
+      | Pexp_prefix_apply _
+      | Pexp_field ({ pexp_desc = Pexp_prefix_apply _; _ }, _) -> PPrint.break 1
       | _ -> PPrint.empty
     in
     let op = str op in
