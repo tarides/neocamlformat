@@ -3344,7 +3344,7 @@ constr_ident:
     UIDENT                                      { $1 }
   | LBRACKET RBRACKET                           { "[]" }
   | LPAREN RPAREN                               { "()" }
-  | LPAREN COLONCOLON RPAREN                    { "::" }
+  | LPAREN COLONCOLON RPAREN                    { "(::)" }
   | FALSE                                       { "false" }
   | TRUE                                        { "true" }
 ;
@@ -3355,11 +3355,11 @@ val_longident:
 ;
 constr_longident:
     mod_longident       %prec below_DOT         { $1 }
-  | mod_longident DOT mkrhs(LPAREN COLONCOLON RPAREN { "::" })
+  | mod_longident DOT mkrhs(LPAREN COLONCOLON RPAREN { "(::)" })
                                                 { Ldot($1,$3) }
   | LBRACKET RBRACKET                           { Lident (mkrhs "[]" $sloc) }
   | LPAREN RPAREN                               { Lident (mkrhs "()" $sloc) }
-  | LPAREN COLONCOLON RPAREN                    { Lident (mkrhs "::" $sloc) }
+  | LPAREN COLONCOLON RPAREN                    { Lident (mkrhs "(::)" $sloc) }
   | FALSE                                       { Lident (mkrhs "false" $sloc) }
   | TRUE                                        { Lident (mkrhs "true" $sloc) }
 ;
