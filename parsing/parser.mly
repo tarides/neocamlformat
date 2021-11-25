@@ -215,16 +215,6 @@ let loc_last (id : Longident.t) : string Location.loc =
 let exp_of_label ~loc lbl =
   mkexp ~loc (Pexp_ident (Lident lbl))
 
-let mk_newtypes ~loc newtypes exp =
-  let mkexp = mkexp ~loc in
-  let newtypes = List.map (fun s -> Type s) newtypes in
-  let params, exp =
-    match exp.pexp_desc with
-    | Pexp_fun (lst, body) -> newtypes @ lst, body
-    | _ -> newtypes, exp
-  in
-  mkexp (Pexp_fun (params, exp))
-
 let wrap_exp_attrs ~loc:_ body pexp_ext_attributes =
   { body with pexp_ext_attributes }
 
@@ -2011,16 +2001,22 @@ expr:
       { Pexp_function $3, $2 }
   | FUN ext_attributes labeled_simple_pattern fun_def
       { let (lbl, default, pat_with_annot, parens) = $3 in
-        let body = $4 in
         let term = Term { lbl; default; pat_with_annot; parens } in
         let desc =
-          match body.pexp_desc with
-          | Pexp_fun (lst, body) -> Pexp_fun(term :: lst, body)
-          | _ -> Pexp_fun([term], body)
+          match $4 with
+          | `Done body -> Pexp_fun ([term], body)
+          | `Continued (lst, body) -> Pexp_fun (term :: lst, body)
         in
         desc, $2 }
   | FUN ext_attributes LPAREN TYPE lident_list RPAREN fun_def
-      { (mk_newtypes ~loc:$sloc $5 $7).pexp_desc, $2 }
+      {
+        let newtypes = List.map (fun s -> Type s) $5 in
+        let desc =
+          match $7 with
+          | `Done body -> Pexp_fun (newtypes, body)
+          | `Continued (lst, body) -> Pexp_fun (newtypes @ lst, body)
+        in
+        desc, $2 }
   | MATCH ext_attributes seq_expr WITH match_cases
       { Pexp_match($3, $5), $2 }
   | TRY ext_attributes seq_expr WITH match_cases
@@ -2384,24 +2380,26 @@ match_case:
 ;
 fun_def:
     MINUSGREATER seq_expr
-      { $2 }
+      { `Done $2 }
   | mkexp(COLON atomic_type MINUSGREATER seq_expr
       { Pexp_constraint ($4, $2) })
-      { $1 }
+      { `Done $1 }
 /* Cf #5939: we used to accept (fun p when e0 -> e) */
   | labeled_simple_pattern fun_def
       {
        let (lbl, default, pat_with_annot, parens) = $1 in
        let term = Term { lbl; default; pat_with_annot; parens } in
-       let body = $2 in
-       match body.pexp_desc with
-       | Pexp_fun (lst, body) ->
-           ghexp ~loc:$sloc (Pexp_fun(term :: lst, body))
-       | _ ->
-           ghexp ~loc:$sloc (Pexp_fun([term], body))
+       match $2 with
+       | `Done body -> `Continued ([term], body)
+       | `Continued (lst, body) -> `Continued (term :: lst, body)
       }
   | LPAREN TYPE lident_list RPAREN fun_def
-      { mk_newtypes ~loc:$sloc $3 $5 }
+      {
+        let newtypes = List.map (fun s -> Type s) $3 in
+        match $5 with
+        | `Done body -> `Continued (newtypes, body)
+        | `Continued (lst, body) -> `Continued (newtypes @ lst, body)
+      }
 ;
 %inline expr_comma_list:
   es = separated_nontrivial_llist(COMMA, expr)
