@@ -942,7 +942,7 @@ end = struct
     Attribute.attach_to_item desc pexp_attributes
 
   and pp_desc ~loc ~ext_attrs = function
-    | Pexp_parens { exp; _ } -> pp_parens exp
+    | Pexp_parens { exp; begin_end } -> pp_parens ~loc ~ext_attrs ~begin_end exp
     | Pexp_ident id -> pp_ident id
     | Pexp_constant c -> Constant.pp ~loc c
     | Pexp_let (rf, vbs, body) -> pp_let ~loc ~ext_attrs rf vbs body
@@ -999,8 +999,20 @@ end = struct
 
   and pp_ident = Longident.pp
 
-  and pp_parens e =
-    parens (pp e)
+  and pp_parens ~loc ~ext_attrs:(extension, attrs) ~begin_end e =
+    let e = pp e in
+    if not begin_end then (
+      assert (extension = None && attrs = []);
+      (* /!\ Losing comments here *)
+      parens e
+    ) else (
+      let begin_ =
+        let tok = token_before ~start:loc.Location.loc_start e BEGIN in
+        Keyword.decorate tok ~extension attrs ~later:e
+      in
+      let end_ = token_after ~stop:loc.Location.loc_end e END in
+      (prefix ~indent:2 ~spaces:1 begin_ e) ^/^ end_
+    )
 
   and pp_let ~ext_attrs:(extension, attrs) ~loc rf vbs body =
     assert (attrs = []);
