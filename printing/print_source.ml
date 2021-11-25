@@ -1397,15 +1397,7 @@ end = struct
           let else_ = token_before ~start:ib.if_loc.loc_start if_ ELSE in
           else_ ^/^ if_
       in
-      let with_ext =
-        match ib.if_ext with
-        | None -> if_kw
-        | Some { txt = ext_name ; loc } ->
-          let tag = string ~loc ("%" ^ ext_name) in
-          if_kw ^^ brackets tag
-      in
-      let with_attrs = Attribute.attach_to_item with_ext ib.if_attrs in
-      with_attrs
+      Keyword.decorate if_kw ~extension:ib.if_ext ib.if_attrs ~later:cond
     in
     match fmt_if_branch ib.if_body with
     | [then_branch] ->
