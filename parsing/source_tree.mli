@@ -946,9 +946,9 @@ and module_expr_desc =
   | Pmod_ident of Longident.t
         (* X *)
   | Pmod_parens of module_expr
-  | Pmod_structure of structure
+  | Pmod_structure of attributes * structure
         (* struct ... end *)
-  | Pmod_functor of functor_parameter loc list * module_expr
+  | Pmod_functor of attributes * functor_parameter loc list * module_expr
         (* functor(X : MT1) -> ME *)
   | Pmod_apply of module_expr * module_expr
         (* ME1(ME2) *)

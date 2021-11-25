@@ -1828,31 +1828,41 @@ end = struct
   and pp_desc ~loc = function
     | Pmod_ident lid -> Longident.pp lid
     | Pmod_parens me -> parens (pp me)
-    | Pmod_structure str -> pp_structure ~loc str
-    | Pmod_functor (params, me) -> pp_functor ~loc params me
+    | Pmod_structure (attrs, str) -> pp_structure ~loc ~attrs str
+    | Pmod_functor (attrs, params, me) -> pp_functor ~loc ~attrs params me
     | Pmod_apply (me1, me2) -> pp_apply me1 me2
     | Pmod_constraint (me, mty) -> pp_constraint me mty
     | Pmod_unpack e -> pp_unpack ~loc e
     | Pmod_extension ext -> Extension.pp Item ext
 
-  and pp_structure ~loc = function
-    | [] -> string ~loc "struct end"
+  and pp_structure ~loc ~attrs = function
+    | [] ->
+      let loc_end = { loc with loc_start = loc.loc_end } in
+      let fake_end = { Location.txt = "end"; loc = loc_end } in
+      let struct_ = token_before ~start:loc.loc_start fake_end STRUCT in
+      let end_ = token_after ~stop:loc.loc_end struct_ END in
+      let struct_ = Keyword.decorate struct_ ~extension:None attrs ~later:end_ in
+      group (struct_ ^/^ end_)
     | si :: st ->
       let str = Structure.pp_nonempty si st in
+      let struct_ =
+        let token = token_before ~start:loc.loc_start str STRUCT in
+        Keyword.decorate token ~extension:None attrs ~later:str
+      in
+      let end_ = token_after ~stop:loc.Location.loc_end str END in
       group (
-        enclose ~before:!^"struct" ~after:PPrint.(break 1 ^^ !^"end")
-          (nest 2 (break_before str))
+        (prefix ~indent:2 ~spaces:1 struct_ str) ^/^ end_
       )
 
-  and pp_functor ~(loc:Location.t) params me =
+  and pp_functor ~(loc:Location.t) ~attrs params me =
     let params =
       separate_map (PPrint.break 1)
         ~f:Functor_param.pp (List.hd params) (List.tl params)
     in
     let me = pp me in
     let functor_ =
-      let loc = { loc with loc_end = params.loc.loc_start } in
-      string ~loc "functor"
+      let token = token_before ~start:loc.loc_start params FUNCTOR in
+      Keyword.decorate token ~extension:None attrs ~later:params
     in
     let arrow = token_between params me MINUSGREATER in
     functor_ ^/^ params ^/^ arrow ^/^ me
@@ -2026,7 +2036,8 @@ end = struct
 
   let pp_me ({ pmod_desc; pmod_attributes; _ } as me) =
     match pmod_desc, pmod_attributes with
-    | Pmod_structure (si :: st), [] ->
+    | Pmod_structure (_, si :: st), [] ->
+      (* FIXME: attrs ^ ? *)
       Binding.Module.Items (Structure.pp_nonempty si st)
     | _ -> Binding.Module.Generic (Module_expr.pp me)
 

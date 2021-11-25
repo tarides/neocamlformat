@@ -240,8 +240,6 @@ let mkpat_attrs ~loc d attrs =
 
 let wrap_class_attrs ~loc:_ body attrs =
   {body with pcl_attributes = attrs @ body.pcl_attributes}
-let wrap_mod_attrs ~loc:_ attrs body =
-  {body with pmod_attributes = attrs @ body.pmod_attributes}
 let wrap_mty_attrs ~loc:_ attrs body =
   {body with pmty_attributes = attrs @ body.pmty_attributes}
 
@@ -1011,13 +1009,11 @@ module_name:
 
 module_expr:
   | STRUCT attrs = attributes s = structure END
-      { mkmod ~loc:$sloc ~attrs (Pmod_structure s) }
+      { mkmod ~loc:$sloc (Pmod_structure (attrs, s)) }
   | STRUCT attributes structure error
       { unclosed "struct" $loc($1) "end" $loc($4) }
   | FUNCTOR attrs = attributes args = functor_args MINUSGREATER me = module_expr
-      { wrap_mod_attrs ~loc:$sloc attrs (
-          mkmod ~loc:$sloc (Pmod_functor (args, me))
-        ) }
+      { mkmod ~loc:$sloc (Pmod_functor (attrs, args, me)) }
   | me = paren_module_expr
       { mkmod ~loc:$sloc (Pmod_parens (me)) }
   | me = module_expr attr = attribute
@@ -1032,7 +1028,7 @@ module_expr:
     | (* Application to unit is sugar for application to an empty structure. *)
       me1 = module_expr LPAREN RPAREN
         { (* TODO review mkmod location *)
-          Pmod_apply(me1, mkmod ~loc:$sloc (Pmod_structure [])) }
+          Pmod_apply(me1, mkmod ~loc:$sloc (Pmod_structure ([], []))) (* FIXME *)}
     | (* An extension. *)
       ex = extension
         { Pmod_extension ex }
