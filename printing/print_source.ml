@@ -2885,7 +2885,7 @@ end = struct
     let desc, attrs = pp_desc ~loc:pcl_loc pcl_desc pcl_attributes in
     Attribute.attach_to_item (group desc) attrs
 
-  and pp_fun ~loc params ce =
+  and pp_fun ~loc ~attrs params ce =
     let params =
       separate_map (PPrint.break 1) ~f:Fun_param.pp
         (List.hd params) (List.tl params)
@@ -2893,8 +2893,8 @@ end = struct
     let body = pp ce in
     (* FIXME: copied from expressions. factorize. *)
     let fun_ =
-      let loc = { loc with Location.loc_end = params.loc.loc_start } in
-      string ~loc "fun"
+      let token = token_before ~start:loc.Location.loc_start params FUN in
+      Keyword.decorate token ~extension:None attrs ~later:params
     in
     let arrow = token_between params body MINUSGREATER in
     prefix ~indent:2 ~spaces:1
@@ -2971,7 +2971,7 @@ end = struct
     match desc with
     | Pcl_constr (name, args) -> Class_type.pp_constr name args, attrs
     | Pcl_structure str -> Class_structure.pp ~loc str, attrs
-    | Pcl_fun (params, ce) -> pp_fun ~loc params ce, attrs
+    | Pcl_fun (params, ce) -> pp_fun ~loc ~attrs params ce, []
     | Pcl_apply (ce, args) -> pp_apply ce args, attrs
     | Pcl_let (rf, vbs, ce) -> pp_let ~loc rf vbs ce, attrs
     | Pcl_constraint (ce, ct) -> pp_constraint ce ct, attrs

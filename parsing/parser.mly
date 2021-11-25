@@ -238,8 +238,9 @@ let wrap_pat_attrs ~loc pat (ext, attrs) =
 let mkpat_attrs ~loc d attrs =
   wrap_pat_attrs ~loc (mkpat ~loc d) attrs
 
-let wrap_class_attrs ~loc:_ body attrs =
-  {body with pcl_attributes = attrs @ body.pcl_attributes}
+let wrap_class_attrs ~loc body attrs =
+  {body with
+  pcl_loc = (make_loc loc); pcl_attributes = attrs @ body.pcl_attributes}
 let wrap_mty_attrs ~loc:_ attrs body =
   {body with pmty_attributes = attrs @ body.pmty_attributes}
 
