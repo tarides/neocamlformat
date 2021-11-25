@@ -2882,8 +2882,8 @@ end = struct
   (* TODO: much of this is just copy pasted from Expression; factorize. *)
 
   let rec pp { pcl_desc; pcl_loc; pcl_attributes } =
-    let desc = group (pp_desc ~loc:pcl_loc pcl_desc) in
-    Attribute.attach_to_item desc pcl_attributes
+    let desc, attrs = pp_desc ~loc:pcl_loc pcl_desc pcl_attributes in
+    Attribute.attach_to_item (group desc) attrs
 
   and pp_fun ~loc params ce =
     let params =
@@ -2957,8 +2957,8 @@ end = struct
     let colon = token_between ce ct COLON in
     group (parens (ce ^/^ colon ^/^ ct))
 
-  and pp_open ~loc od ce =
-    let od = Open_description.pp od in
+  and pp_open ~loc od ce attrs =
+    let od = Open_description.pp ~extra_attrs:attrs od in
     let ce = pp ce in
     let in_ = token_between od ce IN in
     let let_ =
@@ -2967,16 +2967,17 @@ end = struct
     in
     group (let_ ^/^ od ^/^ in_) ^/^ ce
 
-  and pp_desc ~loc = function
-    | Pcl_constr (name, args) -> Class_type.pp_constr name args
-    | Pcl_structure str -> Class_structure.pp ~loc str
-    | Pcl_fun (params, ce) -> pp_fun ~loc params ce
-    | Pcl_apply (ce, args) -> pp_apply ce args
-    | Pcl_let (rf, vbs, ce) -> pp_let ~loc rf vbs ce
-    | Pcl_constraint (ce, ct) -> pp_constraint ce ct
-    | Pcl_extension ext -> Extension.pp Item ext
-    | Pcl_open (od, ce) -> pp_open ~loc od ce
-    | Pcl_parens ce -> parens (pp ce)
+  and pp_desc ~loc desc attrs =
+    match desc with
+    | Pcl_constr (name, args) -> Class_type.pp_constr name args, attrs
+    | Pcl_structure str -> Class_structure.pp ~loc str, attrs
+    | Pcl_fun (params, ce) -> pp_fun ~loc params ce, attrs
+    | Pcl_apply (ce, args) -> pp_apply ce args, attrs
+    | Pcl_let (rf, vbs, ce) -> pp_let ~loc rf vbs ce, attrs
+    | Pcl_constraint (ce, ct) -> pp_constraint ce ct, attrs
+    | Pcl_extension ext -> Extension.pp Item ext, attrs
+    | Pcl_open (od, ce) -> pp_open ~loc od ce attrs, []
+    | Pcl_parens ce -> parens (pp ce), attrs
 end
 
 and Class_structure : sig
