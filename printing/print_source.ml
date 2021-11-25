@@ -1919,7 +1919,7 @@ end = struct
     | Pmty_ident lid (* [module _ : A] *)
       -> Longident.pp lid
     | Pmty_signature sg -> pp_signature ~loc sg
-    | Pmty_functor (params, mty) -> pp_functor ~loc params mty
+    | Pmty_functor (attrs, params, mty) -> pp_functor ~loc ~attrs params mty
     | Pmty_with (mty, cstrs) -> pp_with mty cstrs
     | Pmty_typeof me -> pp_typeof me
     | Pmty_extension ext -> Extension.pp Item ext
@@ -1939,25 +1939,25 @@ end = struct
     let arrow = token_between param_mty res_mty MINUSGREATER in
     param_mty ^/^ arrow ^/^ res_mty
 
-  and pp_regular_functor ~(loc:Location.t) params mty =
+  and pp_regular_functor ~(loc:Location.t) ~attrs params mty =
     let params =
       separate_map (PPrint.break 1)
         ~f:Functor_param.pp (List.hd params) (List.tl params)
     in
     let mty = pp mty in
     let functor_ =
-      let loc = { loc with loc_end = params.loc.loc_start } in
-      string ~loc "functor"
+      let tok = token_before ~start:loc.loc_start params FUNCTOR in
+      Keyword.decorate tok ~extension:None attrs ~later:params
     in
     let arrow = token_between params mty MINUSGREATER in
     functor_ ^/^ params ^/^ arrow ^/^ mty
 
-  and pp_functor ~loc params mty =
-    match params with
-    | [ { txt = Named ({ txt = None; _ }, param_mty); _ } ] ->
+  and pp_functor ~loc ~attrs params mty =
+    match attrs, params with
+    | [], [ { txt = Named ({ txt = None; _ }, param_mty); _ } ] ->
       pp_short_functor param_mty mty
     | _ ->
-      pp_regular_functor ~loc params mty
+      pp_regular_functor ~loc ~attrs params mty
 
   and attach_constraint mty is_first_cstr (kw, cstr) =
     let keyword =
@@ -3191,7 +3191,7 @@ end = struct
 
   let pp_field { pctf_desc; pctf_loc; pctf_attributes } =
     let doc = pp_field_desc ~loc:pctf_loc pctf_desc in
-    Attribute.attach_to_item doc pctf_attributes
+    Attribute.attach_to_top_item doc pctf_attributes
 
   let pp ~loc { pcsig_self; pcsig_fields } =
     match pcsig_fields with

@@ -241,8 +241,6 @@ let mkpat_attrs ~loc d attrs =
 let wrap_class_attrs ~loc body attrs =
   {body with
   pcl_loc = (make_loc loc); pcl_attributes = attrs @ body.pcl_attributes}
-let wrap_mty_attrs ~loc:_ attrs body =
-  {body with pmty_attributes = attrs @ body.pmty_attributes}
 
 let wrap_str_ext ~loc body ext =
   match ext with
@@ -1296,14 +1294,12 @@ module_type:
   | FUNCTOR attrs = attributes args = functor_args
     MINUSGREATER mty = module_type
       %prec below_WITH
-      { wrap_mty_attrs ~loc:$sloc attrs (
-          mkmty ~loc:$sloc (Pmty_functor (args, mty))
-        ) }
+      { mkmty ~loc:$sloc (Pmty_functor (attrs, args, mty)) }
   | mkmty(
       module_type MINUSGREATER module_type
         %prec below_WITH
         { let param = mkrhs (Named (mknoloc None, $1)) $loc($1) in
-          Pmty_functor([ param ], $3) }
+          Pmty_functor([], [ param ], $3) }
     | module_type_no_with with_constraints
         { Pmty_with($1, $2) }
     )

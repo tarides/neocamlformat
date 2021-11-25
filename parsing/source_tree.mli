@@ -791,7 +791,7 @@ and module_type_desc =
         (* S *)
   | Pmty_signature of signature
         (* sig ... end *)
-  | Pmty_functor of functor_parameter loc list * module_type
+  | Pmty_functor of attributes * functor_parameter loc list * module_type
         (* functor(X : MT1) -> MT2 *)
   | Pmty_with of module_type * located_with_constraint list
         (* MT with ... *)
