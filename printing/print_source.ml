@@ -317,8 +317,13 @@ end = struct
     | [] -> tag
     | si :: sg as items ->
       let sg = Signature.pp_nonempty si sg in
-      let colon = token_between tag sg COLON in
-      let res = tag ^^ nest 2 (colon ^/^ sg) in
+      let res =
+        match token_between tag sg COLON with
+        | colon -> tag ^^ nest 2 (colon ^/^ sg)
+        | exception Assert_failure _ ->
+          (* Can disappear when we properly handle exts and attrs on kw *)
+          tag +++ !^":" ^^ nest 2 (break_before ~spaces:1 sg)
+      in
       if Signature.ends_in_obj items
       then break_after res
       else res
