@@ -79,6 +79,10 @@ let mapper =
           (Pat.or_ ~loc:loc1 ~attrs:attrs1
              (Pat.or_ ~loc:loc2 ~attrs:attrs2 pat1 pat2)
              pat3)
+    | Ppat_interval (c1, c2) ->
+      (* Waiting for ocaml/ocaml#10543 *)
+      Pat.interval ~loc:Location.none ~attrs:(m.attributes m attrs1)
+        (m.constant m c1) (m.constant m c2)
     | _ -> Ast_mapper.default_mapper.pat m pat
   in
   let typ (m : Ast_mapper.mapper) typ =
