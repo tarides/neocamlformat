@@ -54,7 +54,8 @@ module Typ = struct
     {ptyp_desc = d;
      ptyp_loc = loc;
      ptyp_loc_stack = [];
-     ptyp_attributes = attrs}
+     ptyp_attributes = attrs;
+     ptyp_ext_attributes = None, []; }
 
   let attr d a = {d with ptyp_attributes = d.ptyp_attributes @ [a]}
 

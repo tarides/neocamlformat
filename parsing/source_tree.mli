@@ -92,6 +92,7 @@ and core_type =
      ptyp_loc: Location.t;
      ptyp_loc_stack: location_stack;
      ptyp_attributes: attributes; (* ... [@id1] [@id2] *)
+     ptyp_ext_attributes: string loc option * attributes; (* ... [@id1] [@id2] *)
     }
 
 and core_type_desc =

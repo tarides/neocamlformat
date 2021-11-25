@@ -410,12 +410,14 @@ end = struct
     | None -> string ~loc ("'" ^ v)
     | Some _ -> string ~loc ("' " ^ v)
 
-  let rec pp { ptyp_loc; ptyp_desc; ptyp_attributes; ptyp_loc_stack = _ } =
-    let doc = group (pp_desc ~loc:ptyp_loc ptyp_desc) in
-    let doc = Attribute.attach_to_item doc ptyp_attributes in
-    doc
+  let rec pp { ptyp_loc; ptyp_desc; ptyp_attributes; ptyp_ext_attributes; 
+               ptyp_loc_stack = _ } =
+    let doc =
+      group (pp_desc ~loc:ptyp_loc ~ext_attrs:ptyp_ext_attributes ptyp_desc)
+    in
+    Attribute.attach_to_item doc ptyp_attributes
 
-  and pp_desc ~loc = function
+  and pp_desc ~loc ~ext_attrs = function
     | Ptyp_any -> underscore ~loc
     | Ptyp_var v -> pp_var ~loc v
     | Ptyp_parens ct -> parens (pp ct)
@@ -429,7 +431,7 @@ end = struct
       Polymorphic_variant.pp_row ~loc fields closed present
     | Ptyp_poly (vars, ct) -> pp_poly vars ct
     | Ptype_poly (vars, ct) -> pp_newtype_poly ~loc vars ct
-    | Ptyp_package pkg -> pp_package ~loc pkg
+    | Ptyp_package pkg -> pp_package ~loc ext_attrs pkg
     | Ptyp_extension ext -> Extension.pp Item ext
 
   and pp_param (arg_label, ct) =
@@ -519,9 +521,13 @@ end = struct
         (group (type_ ^/^ vars ^^ dot))
         ct
 
-  and pp_package ~loc pkg =
-    let module_ = string ~loc "module" in
-    parens (module_ ^/^ Package_type.pp pkg)
+  and pp_package ~loc (extension, attrs) pkg =
+    let pkg = Package_type.pp pkg in
+    let module_ = 
+      let tok = token_before ~start:loc.loc_start pkg MODULE in
+      Keyword.decorate tok ~extension attrs ~later:pkg
+    in
+    parens (module_ ^/^ pkg)
 
   let () = Constructor_decl.pp_core_type := pp
   let () = Polymorphic_variant.pp_core_type := pp
