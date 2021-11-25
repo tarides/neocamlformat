@@ -3389,11 +3389,12 @@ end = struct
       { popen_expr; popen_override; popen_attributes; popen_loc } =
     let expr = Module_expr.pp popen_expr in
     let kw =
-      let loc = { popen_loc with loc_end = expr.loc.loc_start } in
-      string ~loc
-        (match popen_override with
-         | Override -> "open!"
-         | _ -> "open")
+      let tok = token_before ~start:popen_loc.loc_start expr OPEN in
+      match popen_override with
+      | Override ->
+        let over = token_between tok expr BANG in
+        tok ^^ over
+      | _ -> tok
     in
     let kw = Keyword.decorate kw ~extension attrs ~later:expr in
     let opn = group (kw ^/^ expr) in
