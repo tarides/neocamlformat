@@ -1337,7 +1337,7 @@ end = struct
     pp_gen_get ?prefix ~dot:(!^"." ++ op) enclose accessed indices
 
   and pp_dotop_set accessed op left right indices val_ =
-    let enclose doc = group (Longident.pp op ^^ str left) ^^ doc ^^ str right in
+    let enclose doc = str left ^^ doc ^^ str right in
     let indices =
       match indices with
       | [] -> assert false (* I think *)
