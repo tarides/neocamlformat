@@ -952,6 +952,7 @@ and module_expr_desc =
         (* functor(X : MT1) -> ME *)
   | Pmod_apply of module_expr * module_expr
         (* ME1(ME2) *)
+  | Pmod_gen_apply of module_expr
   | Pmod_constraint of module_expr * module_type
         (* (ME : MT) *)
   | Pmod_unpack of expression

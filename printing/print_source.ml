@@ -1830,7 +1830,8 @@ end = struct
     | Pmod_parens me -> parens (pp me)
     | Pmod_structure (attrs, str) -> pp_structure ~loc ~attrs str
     | Pmod_functor (attrs, params, me) -> pp_functor ~loc ~attrs params me
-    | Pmod_apply (me1, me2) -> pp_apply me1 me2
+    | Pmod_apply (me1, me2) -> pp_apply ~loc me1 me2
+    | Pmod_gen_apply me -> pp_gen_apply ~loc me
     | Pmod_constraint (me, mty) -> pp_constraint me mty
     | Pmod_unpack e -> pp_unpack ~loc e
     | Pmod_extension ext -> Extension.pp Item ext
@@ -1867,10 +1868,18 @@ end = struct
     let arrow = token_between params me MINUSGREATER in
     functor_ ^/^ params ^/^ arrow ^/^ me
 
-  and pp_apply me1 me2 =
+  and pp_apply ~loc me1 me2 =
     let me1 = pp ~lhs_of_apply:true me1 in
     let me2 = pp me2 in
-    me1 ^^ break_before ~spaces:0 (parens me2)
+    let rparen = token_after ~stop:loc.loc_end me2 RPAREN in
+    let lparen = token_between me1 me2 LPAREN in
+    me1 ^^ break_before ~spaces:0 (lparen ^^ me2 ^^ rparen)
+
+  and pp_gen_apply ~loc me =
+    let me = pp ~lhs_of_apply:true me in
+    let rparen = token_after ~stop:loc.loc_end me RPAREN in
+    let lparen = token_between me rparen LPAREN in
+    me ^^ break_before ~spaces:0 (lparen ^^  rparen)
 
   and pp_constraint me mty =
     let me = pp me in
