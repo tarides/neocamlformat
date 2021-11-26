@@ -523,7 +523,7 @@ and type_declaration =
 and type_kind =
   | Ptype_abstract
   | Ptype_variant of constructor_declaration list loc
-  | Ptype_record of label_declaration list
+  | Ptype_record of Location.t * label_declaration list
         (* Invariant: non-empty list *)
   | Ptype_open of Location.t
 
@@ -553,7 +553,7 @@ and constructor_declaration =
 
 and constructor_arguments =
   | Pcstr_tuple of core_type list
-  | Pcstr_record of label_declaration list
+  | Pcstr_record of Location.t * label_declaration list
 
 (*
   | C of T1 * ... * Tn     (res = None,    args = Pcstr_tuple [])

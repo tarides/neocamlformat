@@ -6,8 +6,8 @@ open Document
 (* Waiting for: https://github.com/ocaml/RFCs/pull/11 *)
 (******************************************************)
 
-let pp_record : (label_declaration list -> t) ref =
-  ref (fun _ -> assert false)
+let pp_record : (loc:Location.t -> label_declaration list -> t) ref =
+  ref (fun ~loc:_ _ -> assert false)
 let pp_core_type : (core_type -> t) ref =
   ref (fun _ -> assert false)
 let attach_attributes : (t -> attributes -> t) ref =
@@ -23,7 +23,7 @@ let has_args = function
 
 let constructor_arguments = function
   | Pcstr_tuple [] -> assert false (* [has_args] was called *)
-  | Pcstr_record lbl_decls -> !pp_record lbl_decls
+  | Pcstr_record (loc, lbl_decls) -> !pp_record ~loc lbl_decls
   | Pcstr_tuple (a1 :: args) ->
     left_assoc_map ~sep:STAR ~f:!pp_core_type a1 args
 

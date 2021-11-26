@@ -2765,7 +2765,8 @@ nonempty_type_kind:
   | oty = type_synonym
     priv = inline_private_flag
     LBRACE ls = label_declarations RBRACE
-      { (Ptype_record ls, priv, oty) }
+      { let loc = ($startpos($3), $endpos($5)) in
+        (Ptype_record (make_loc loc, ls), priv, oty) }
 ;
 %inline type_synonym:
   ioption(terminated(core_type, EQUAL))
@@ -2893,7 +2894,7 @@ constructor_arguments:
     %prec below_HASH
       { Pcstr_tuple tys }
   | LBRACE label_declarations RBRACE
-      { Pcstr_record $2 }
+      { Pcstr_record (make_loc $sloc, $2) }
 ;
 label_declarations:
     label_declaration                           { [$1] }

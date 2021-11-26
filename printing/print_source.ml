@@ -505,7 +505,7 @@ end = struct
       | OClosed -> fields
       | OOpen loc -> fields @ [ string ~loc "..", [] ]
     in
-    Record_like.pp ~loc ~formatting:Fit_or_vertical ~left:langle ~right:rangle
+    Record_like.pp ~loc ~formatting:Fit_or_vertical ~left:LESS ~right:GREATER
       fields
 
   and pp_class name args =
@@ -635,11 +635,10 @@ end = struct
     doc
 
   and pp_list_literal ~loc elts =
-    let elts = List.map pp elts in
     List_like.pp ~loc
       ~formatting:Wrap (* TODO: add an option *)
-      ~left:lbracket ~right:rbracket
-      elts
+      ~left:LBRACKET ~right:RBRACKET
+      (List.map pp elts)
 
   and pp_cons hd tl =
     let hd = pp hd in
@@ -688,14 +687,14 @@ end = struct
     in
     List_like.pp ~loc
       ~formatting:!Options.Record.pattern
-      ~left:lbrace ~right:rbrace
+      ~left:LBRACE ~right:RBRACE
       (fields @ extra_fields)
 
   and pp_array ~loc pats =
     let pats = List.map pp pats in
     (* TODO: add an option *)
     List_like.pp ~loc ~formatting:Wrap
-      ~left:PPrint.(lbracket ^^ bar) ~right:PPrint.(bar ^^ rbracket) pats
+      ~left:LBRACKETBAR ~right:BARRBRACKET pats
 
   and pp_or ~indent p1 p2 =
     let p1 = pp ~indent p1 in
@@ -1322,7 +1321,7 @@ end = struct
     let elts = List.map pp elts in
     List_like.pp ~loc
       ~formatting:Wrap (* TODO: add an option *)
-      ~left:lbracket ~right:rbracket
+      ~left:LBRACKET ~right:RBRACKET
       elts
 
   and pp_variant tag arg_opt =
@@ -1355,8 +1354,8 @@ end = struct
     | None ->
       List_like.pp ~loc
         ~formatting:!Options.Record.expression
-        ~left:lbrace
-        ~right:rbrace
+        ~left:LBRACE
+        ~right:RBRACE
         fields
     | Some e ->
       let update = pp e in
@@ -1390,8 +1389,8 @@ end = struct
     let elts = List.map pp elts in
     (* TODO: add an option *)
     List_like.pp ~loc ~formatting:Wrap
-      ~left:PPrint.(lbracket ^^ bar)
-      ~right:PPrint.(bar ^^ rbracket) elts
+      ~left:LBRACKETBAR
+      ~right:BARRBRACKET elts
 
   and pp_gen_get ?prefix ?dot enclosing arr idx =
     let arr = pp arr in
@@ -1677,8 +1676,8 @@ end = struct
   and pp_override ~loc fields =
     List_like.pp ~loc
       ~formatting:!Options.Record.expression
-      ~left:PPrint.(lbrace ^^ langle)
-      ~right:PPrint.(rangle ^^ rbrace)
+      ~left:LBRACELESS
+      ~right:GREATERRBRACE
       (List.map obj_field_override fields)
 
   and pp_letmodule ~loc ~ext_attrs:(extension, attrs) name
@@ -2791,13 +2790,13 @@ end = struct
     let decl = group (nest 2 (with_mutable_ ^/^ typ)) in
     decl, List.map (Attribute.pp Attached_to_item) pld_attributes
 
-  let record lbl_decls =
+  let record ~loc lbl_decls =
     (* FIXME: loc won't be use since the list is nonempty *)
     let fields = List.map label_declaration lbl_decls in
-    Record_like.pp ~loc:Location.none
+    Record_like.pp ~loc
       ~formatting:Fit_or_vertical (* never wrap decls *)
-      ~left:lbrace
-      ~right:rbrace
+      ~left:LBRACE
+      ~right:RBRACE
       fields
 
   let () = Constructor_decl.pp_record := record
@@ -2821,7 +2820,7 @@ end = struct
   let non_abstract_kind = function
     | Ptype_abstract -> assert false
     | Ptype_open loc -> string ~loc ".."
-    | Ptype_record lbl_decls -> record lbl_decls
+    | Ptype_record (loc, lbl_decls) -> record ~loc lbl_decls
     | Ptype_variant cstrs -> variant cstrs
 
   let pp_constraint (ct1, ct2, _) =

@@ -403,7 +403,8 @@ module Enclosed_separated = struct
   module Wrapped : sig
     val pp_fields: raw -> raw list -> t
 
-    val pp : left:document -> right:document -> raw -> raw list -> t
+    val pp : loc:Location.t ->
+      left:Parser.token -> right:Parser.token -> raw -> raw list -> t
   end = struct
     let ( * ) before after =
       { after with doc = before ^^ after.doc }
@@ -432,16 +433,18 @@ module Enclosed_separated = struct
       in
       res.doc
 
-    let pp ~left ~right x xs =
+    let pp ~loc ~left ~right x xs =
       let fields = pp_fields x xs in
-      enclose ~before:left ~after:PPrint.(group (break 1 ^^ right))
-        fields
+      let left = token_before ~start:loc.loc_start fields left in
+      let right = token_after ~stop:loc.loc_end fields right in
+      left ^^ fields ^^ group (break_before right)
   end
 
   module Fit_or_vertical : sig
     val pp_fields: raw -> raw list -> t
 
-    val pp : left:document -> right:document -> raw -> raw list -> t
+    val pp : loc:Location.t ->
+      left:Parser.token -> right:Parser.token -> raw -> raw list -> t
   end = struct
     let fmt (doc, attrs) =
       match attrs with
@@ -467,27 +470,24 @@ module Enclosed_separated = struct
       let fields = pp_fields_aux (x :: xs) in
       nest 2 (break_before fields)
 
-    let pp ~left ~right x xs  =
+    let pp ~loc ~left ~right x xs  =
       let fields = pp_fields x xs in
-      enclose ~before:left ~after:PPrint.(break 1 ^^ right) fields
+      let left = token_before ~start:loc.loc_start fields left in
+      let right = token_after ~stop:loc.loc_end fields right in
+      left ^^ fields ^/^ right
   end
 
   let pp ~loc ~formatting ~left ~right = function
     | [] ->
-      (* FIXME: this looks weird. *)
-      let open PPrint in
-      let cmts =
-        match comments_between_pos loc.loc_start loc.loc_end with
-        | [], [] -> empty
-        | l1, l2 ->
-          separate (break 1) (List.map (fun { txt; _ } -> txt) l1)
-          ^/^ separate (break 1) (List.map (fun { txt; _ } -> txt) l2)
-      in
-      { txt = left ^/^ cmts ^^ right; loc }
+      let start = { txt = (); loc = { loc with loc_end = loc.loc_start }} in
+      let stop = { txt = (); loc = { loc with loc_start = loc.loc_end }} in
+      let fst = token_between start stop left in
+      let snd = token_between start stop right in
+      group (fst ^/^ snd)
     | x :: xs ->
       match (formatting : Options.Wrappable.t) with
-      | Wrap -> Wrapped.pp ~left ~right x xs
-      | Fit_or_vertical -> Fit_or_vertical.pp ~left ~right x xs
+      | Wrap -> Wrapped.pp ~loc ~left ~right x xs
+      | Fit_or_vertical -> Fit_or_vertical.pp ~loc ~left ~right x xs
 
   let pp_fields ~formatting x xs =
     match (formatting : Options.Wrappable.t) with
@@ -497,9 +497,9 @@ end
 
 module List_like = struct
 
-  let pp ~loc ~formatting ~left ~right elts =
+  let pp ~formatting ~left ~right elts =
     let elts = List.map (fun x -> (x, [])) elts in
-    Enclosed_separated.pp ~loc ~formatting ~left ~right elts
+    Enclosed_separated.pp ~formatting ~left ~right elts
 
   let pp_fields ~formatting x xs =
     Enclosed_separated.pp_fields ~formatting
