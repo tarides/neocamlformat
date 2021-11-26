@@ -52,14 +52,21 @@ end = struct
       parens (string ~loc (" " ^ txt ^ " "))
     | Infix_op _ | Prefix_op _ -> str s
 
+  let pp_empty ~(loc:Location.t) left right =
+    let start = { txt = (); loc = { loc with loc_end = loc.loc_start }} in
+    let stop = { txt = (); loc = { loc with loc_start = loc.loc_end }} in
+    let fst = token_between start stop left in
+    let snd = token_between start stop right in
+    group (fst ^^ snd)
+
   let rec pp lid =
     group (aux lid)
 
   and aux = function
     | Lident { txt = "()"; loc } ->
-      let loc_open  = { loc with loc_end = loc.loc_start } in
-      let loc_close = { loc with loc_start = loc.loc_end } in
-      string ~loc:loc_open "(" ^^ string ~loc:loc_close ")"
+      pp_empty ~loc LPAREN RPAREN
+    | Lident { txt = "[]"; loc } ->
+      pp_empty ~loc LBRACKET RBRACKET
     | Lident s -> pp_ident s
     | Ldot (lid, s) -> concat (pp lid) ~sep:PPrint.(dot ^^ break 0) (pp_ident s)
     | Lapply (l1, l2) -> concat (pp l1) ~sep:(break 0) (parens (pp l2))
@@ -299,6 +306,19 @@ end = struct
         token ^^ percent ^^ str ext
     in
     Attribute.attach_to_item ~spaces:0 kw attrs
+end
+
+and Empty_delimited : sig
+  val pp : loc:Location.t -> ?extension:string loc -> attributes ->
+    Parser.token -> Parser.token -> document
+end = struct
+  let pp ~(loc:Location.t) ?extension attrs start_tok end_tok =
+    let start = { txt = (); loc = { loc with loc_end = loc.loc_start }} in
+    let stop = { txt = (); loc = { loc with loc_start = loc.loc_end }} in
+    let fst = token_between start stop start_tok in
+    let snd = token_between start stop end_tok in
+    let fst = Keyword.decorate fst ~extension attrs ~later:snd in
+    group (fst ^/^ snd)
 end
 
 and Payload : sig
@@ -1885,13 +1905,7 @@ end = struct
     | Pmod_extension ext -> Extension.pp Item ext
 
   and pp_structure ~loc ~attrs = function
-    | [] ->
-      let loc_end = { loc with loc_start = loc.loc_end } in
-      let fake_end = { Location.txt = "end"; loc = loc_end } in
-      let struct_ = token_before ~start:loc.loc_start fake_end STRUCT in
-      let end_ = token_after ~stop:loc.loc_end struct_ END in
-      let struct_ = Keyword.decorate struct_ ~extension:None attrs ~later:end_ in
-      group (struct_ ^/^ end_)
+    | [] -> Empty_delimited.pp ~loc attrs STRUCT END
     | si :: st ->
       let str = Structure.pp_nonempty si st in
       let struct_ =
@@ -1982,7 +1996,7 @@ end = struct
     | Pmty_parens mty -> parens (pp mty)
 
   and pp_signature ~loc = function
-    | [] -> string ~loc "sig end"
+    | [] -> Empty_delimited.pp ~loc [] SIG END
     | si :: sg ->
       let sg = Signature.pp_nonempty si sg in
       let sig_ = token_before ~start:loc.loc_start sg SIG in
@@ -3252,7 +3266,7 @@ end = struct
     match pcsig_fields with
     | [] ->
       begin match pcsig_self with
-      | None -> string ~loc "object end" (* FIXME: comments are gonna move *)
+      | None -> Empty_delimited.pp ~loc [] OBJECT END
       | Some pcsig_self ->
         let self = parens (Core_type.pp pcsig_self) in
         let obj_ = token_before ~start:loc.loc_start self OBJECT in
