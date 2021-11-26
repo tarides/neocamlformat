@@ -2984,10 +2984,7 @@ end = struct
     let od = Open_description.pp ~extra_attrs:attrs od in
     let ct = pp ct in
     let in_ = token_between od ct IN in
-    let let_ =
-      let loc = { loc with Location.loc_end = od.loc.loc_start } in
-      string ~loc "let"
-    in
+    let let_ = token_before ~start:loc.Location.loc_start od LET in
     group (let_ ^/^ od ^/^ in_) ^/^ ct
 
   and pp_arrow lbl ct cty =
@@ -3488,11 +3485,12 @@ end = struct
       { popen_expr; popen_override; popen_attributes; popen_loc } =
     let expr = Longident.pp popen_expr in
     let kw =
-      let loc = { popen_loc with loc_end = expr.loc.loc_start } in
-      string ~loc
-        (match popen_override with
-         | Override -> "open!"
-         | _ -> "open")
+      let tok = token_before ~start:popen_loc.loc_start expr OPEN in
+      match popen_override with
+      | Override ->
+        let over = token_between tok expr BANG in
+        tok ^^ over
+      | _ -> tok
     in
     let opn = group (Attribute.attach_to_item kw extra_attrs ^/^ expr) in
     Attribute.attach_to_top_item opn popen_attributes
