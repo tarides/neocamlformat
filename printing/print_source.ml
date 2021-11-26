@@ -1869,7 +1869,7 @@ end = struct
     | Pmod_apply (me1, me2) -> pp_apply ~loc me1 me2
     | Pmod_gen_apply me -> pp_gen_apply ~loc me
     | Pmod_constraint (me, mty) -> pp_constraint me mty
-    | Pmod_unpack e -> pp_unpack ~loc e
+    | Pmod_unpack (attrs, e, pkg1, pkg2) -> pp_unpack ~loc ~attrs e pkg1 pkg2
     | Pmod_extension ext -> Extension.pp Item ext
 
   and pp_structure ~loc ~attrs = function
@@ -1923,13 +1923,30 @@ end = struct
     let colon = token_between me mty COLON in
     parens (me ^/^ colon ^/^ mty)
 
-  and pp_unpack ~(loc:Location.t) exp =
+  and pp_unpack ~(loc:Location.t) ~attrs exp pkg1 pkg2 =
     let exp = Expression.pp exp in
-    let val_=
-      let loc = { loc with loc_end = exp.loc.loc_start } in
-      string ~loc "val"
+    let val_exp =
+      let tok = token_before ~start:loc.loc_start exp VAL in
+      prefix ~spaces:1 ~indent:2
+        (Keyword.decorate tok ~extension:None attrs ~later:exp)
+        exp
     in
-    parens (val_ ^/^ exp)
+    let with_annot =
+      match pkg1 with
+      | None -> val_exp
+      | Some pkg ->
+        let pkg = Package_type.pp pkg in
+        let colon = token_between val_exp pkg COLON in
+        prefix ~spaces:1 ~indent:2 val_exp
+          (group (colon ^/^ pkg))
+    in
+    match pkg2 with
+    | None -> with_annot
+    | Some pkg ->
+      let pkg = Package_type.pp pkg in
+      let coerce = token_between val_exp pkg COLONGREATER in
+      prefix ~spaces:1 ~indent:2 with_annot
+        (group (coerce ^/^ pkg))
 
   let pp = pp ~lhs_of_apply:false
 end

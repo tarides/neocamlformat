@@ -957,7 +957,8 @@ and module_expr_desc =
   | Pmod_gen_apply of module_expr
   | Pmod_constraint of module_expr * module_type
         (* (ME : MT) *)
-  | Pmod_unpack of expression
+  | Pmod_unpack of
+      attributes * expression * package_type option * package_type option
         (* (val E) *)
   | Pmod_extension of extension
         (* [%id] *)

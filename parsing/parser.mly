@@ -1043,7 +1043,8 @@ paren_module_expr:
   | (* A core language expression that produces a first-class module.
        This expression can be annotated in various ways. *)
     LPAREN VAL attrs = attributes e = expr_colon_package_type RPAREN
-      { mkmod ~loc:$sloc ~attrs (Pmod_unpack e) }
+      { let (e, p1, p2) = e in
+        mkmod ~loc:$sloc (Pmod_unpack (attrs, e, p1, p2)) }
   | LPAREN VAL attributes expr COLON error
       { unclosed "(" $loc($1) ")" $loc($6) }
   | LPAREN VAL attributes expr COLONGREATER error
@@ -1056,13 +1057,33 @@ paren_module_expr:
    produces a first-class module that we wish to unpack. *)
 %inline expr_colon_package_type:
     e = expr
-      { e }
+      { e, None, None }
   | e = expr COLON ty = package_type
-      { ghexp ~loc:$loc (Pexp_constraint (e, ty)) }
+      { let pkg =
+          match ty.ptyp_desc with
+          | Ptyp_package pkg -> pkg
+          | _ -> assert false
+        in
+        e, Some pkg, None }
   | e = expr COLON ty1 = package_type COLONGREATER ty2 = package_type
-      { ghexp ~loc:$loc (Pexp_coerce (e, Some ty1, ty2)) }
+      { let pkg1 =
+          match ty1.ptyp_desc with
+          | Ptyp_package pkg -> pkg
+          | _ -> assert false
+        in
+        let pkg2 =
+          match ty2.ptyp_desc with
+          | Ptyp_package pkg -> pkg
+          | _ -> assert false
+        in
+        e, Some pkg1, Some pkg2 }
   | e = expr COLONGREATER ty2 = package_type
-      { ghexp ~loc:$loc (Pexp_coerce (e, None, ty2)) }
+      { let pkg =
+          match ty2.ptyp_desc with
+          | Ptyp_package pkg -> pkg
+          | _ -> assert false
+        in
+        e, None, Some pkg }
 ;
 
 (* A structure, which appears between STRUCT and END (among other places),
