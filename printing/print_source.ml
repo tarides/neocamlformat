@@ -314,7 +314,7 @@ end = struct
       else res
 
   let psig tag = function
-    | [] -> tag
+    | [] -> tag +++ !^":" (* FIXME *)
     | si :: sg as items ->
       let sg = Signature.pp_nonempty si sg in
       let res =
