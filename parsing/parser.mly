@@ -2009,8 +2009,8 @@ expr:
         let term = Term { lbl; default; pat_with_annot; parens } in
         let desc =
           match $4 with
-          | `Done body -> Pexp_fun ([term], body)
-          | `Continued (lst, body) -> Pexp_fun (term :: lst, body)
+          | `Done (t, body) -> Pexp_fun ([term], t, body)
+          | `Continued (lst, t, body) -> Pexp_fun (term :: lst, t, body)
         in
         desc, $2 }
   | FUN ext_attributes LPAREN TYPE lident_list RPAREN fun_def
@@ -2018,8 +2018,8 @@ expr:
         let newtypes = List.map (fun s -> Type s) $5 in
         let desc =
           match $7 with
-          | `Done body -> Pexp_fun (newtypes, body)
-          | `Continued (lst, body) -> Pexp_fun (newtypes @ lst, body)
+          | `Done (t, body) -> Pexp_fun (newtypes, t, body)
+          | `Continued (lst, t, body) -> Pexp_fun (newtypes @ lst, t, body)
         in
         desc, $2 }
   | MATCH ext_attributes seq_expr WITH match_cases
@@ -2385,25 +2385,28 @@ match_case:
 ;
 fun_def:
     MINUSGREATER seq_expr
-      { `Done $2 }
+      { `Done (None, $2) }
   | mkexp(COLON atomic_type MINUSGREATER seq_expr
       { Pexp_constraint ($4, $2) })
-      { `Done $1 }
+      { match $1.pexp_desc with
+        | Pexp_constraint (e, t) -> `Done (Some t, e) 
+        | _ -> assert false
+      }
 /* Cf #5939: we used to accept (fun p when e0 -> e) */
   | labeled_simple_pattern fun_def
       {
        let (lbl, default, pat_with_annot, parens) = $1 in
        let term = Term { lbl; default; pat_with_annot; parens } in
        match $2 with
-       | `Done body -> `Continued ([term], body)
-       | `Continued (lst, body) -> `Continued (term :: lst, body)
+       | `Done (t, body) -> `Continued ([term], t, body)
+       | `Continued (lst, t, body) -> `Continued (term :: lst, t, body)
       }
   | LPAREN TYPE lident_list RPAREN fun_def
       {
         let newtypes = List.map (fun s -> Type s) $3 in
         match $5 with
-        | `Done body -> `Continued (newtypes, body)
-        | `Continued (lst, body) -> `Continued (newtypes @ lst, body)
+        | `Done (t, body) -> `Continued (newtypes, t, body)
+        | `Continued (lst, t, body) -> `Continued (newtypes @ lst, t, body)
       }
 ;
 %inline expr_comma_list:
@@ -2853,7 +2856,7 @@ str_exception_declaration:
   attrs = post_item_attributes
   { let loc = make_loc $sloc in
     let docs = symbol_docs $sloc in
-    Te.mk_exception ~attrs
+    Te.mk_exception ~loc ~attrs
       (Te.rebind id lid ~attrs:(attrs1 @ attrs2) ~loc ~docs)
     , ext }
 ;

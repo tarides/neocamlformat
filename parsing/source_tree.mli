@@ -308,7 +308,7 @@ and expression_desc =
          *)
   | Pexp_function of case list
         (* function P1 -> E1 | ... | Pn -> En *)
-  | Pexp_fun of fun_param list * expression
+  | Pexp_fun of fun_param list * core_type option * expression
         (* fun P -> E1                          (Simple, None)
            fun ~l:P -> E1                       (Labelled l, None)
            fun ?l:P -> E1                       (Optional l, None)
@@ -797,7 +797,7 @@ and module_type_desc =
         (* functor(X : MT1) -> MT2 *)
   | Pmty_with of module_type * located_with_constraint list
         (* MT with ... *)
-  | Pmty_typeof of module_expr
+  | Pmty_typeof of attributes * module_expr
         (* module type of ME *)
   | Pmty_extension of extension
         (* [%id] *)

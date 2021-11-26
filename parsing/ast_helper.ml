@@ -188,7 +188,7 @@ module Exp = struct
     let term = 
       Term { lbl = a; default = b; pat_with_annot = c; parens = false }
     in
-    mk ?loc ?attrs (Pexp_fun ([term], d))
+    mk ?loc ?attrs (Pexp_fun ([term], None, d))
   let function_ ?loc ?attrs a = mk ?loc ?attrs (Pexp_function a)
   let apply ?loc ?attrs a b = mk ?loc ?attrs (Pexp_apply (a, b))
   let match_ ?loc ?attrs a b = mk ?loc ?attrs (Pexp_match (a, b))
@@ -225,7 +225,7 @@ module Exp = struct
   let assert_ ?loc ?attrs a = mk ?loc ?attrs (Pexp_assert a)
   let lazy_ ?loc ?attrs a = mk ?loc ?attrs (Pexp_lazy a)
   let object_ ?loc ?attrs a = mk ?loc ?attrs (Pexp_object a)
-  let newtype ?loc ?attrs a b = mk ?loc ?attrs (Pexp_fun ([Type a], b))
+  let newtype ?loc ?attrs a b = mk ?loc ?attrs (Pexp_fun ([Type a], None, b))
   let pack ?loc ?attrs a = mk ?loc ?attrs (Pexp_pack (a, None))
   let open_ ?loc ?attrs a b = mk ?loc ?attrs (Pexp_letopen (a, b))
   let letop ?loc ?attrs let_ ands body =
@@ -261,7 +261,7 @@ module Mty = struct
   let signature ?loc ?attrs a = mk ?loc ?attrs (Pmty_signature a)
   let functor_ ?loc ?attrs a b = mk ?loc ?attrs (Pmty_functor ([], a, b))
   let with_ ?loc ?attrs a b = mk ?loc ?attrs (Pmty_with (a, b))
-  let typeof_ ?loc ?attrs a = mk ?loc ?attrs (Pmty_typeof a)
+  let typeof_ ?loc ?attrs a = mk ?loc ?attrs (Pmty_typeof ([], a))
   let extension ?loc ?attrs a = mk ?loc ?attrs (Pmty_extension a)
 end
 

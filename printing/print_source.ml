@@ -778,11 +778,11 @@ end = struct
     let suffix ~prefix:sym lbl =
       match exp.pexp_desc with
       | Pexp_ident Lident id when lbl.txt = id.txt -> sym ++ str lbl
-      | Pexp_fun (params, body) when exp.pexp_attributes = [] ->
+      | Pexp_fun (params, tycstr, body) when exp.pexp_attributes = [] ->
         let lbl = string ~loc:lbl.loc (lbl.txt ^ ":") in
         let fun_, args, arrow, body =
           Expression.fun_chunks ~loc:exp.pexp_loc
-            ~ext_attrs:exp.pexp_ext_attributes params body
+            ~ext_attrs:exp.pexp_ext_attributes params tycstr body
         in
         let open_ = (sym ++ lbl) ^^ (lparen ++ break_before ~spaces:0 fun_) in
         let unclosed =
@@ -839,10 +839,11 @@ end = struct
       combine_app_chunks (acc ^^ nest 2 @@ group (break_before doc)) rest
 
   let smart_arg ~prefix:p lbl = function
-    | { pexp_desc = Pexp_fun (params, body); pexp_attributes = []; _ } as exp ->
+    | { pexp_desc = Pexp_fun (params, ty, body); pexp_attributes = []; _ }
+      as exp ->
       let fun_, args, arrow, body =
         Expression.fun_chunks ~loc:exp.pexp_loc
-          ~ext_attrs:exp.pexp_ext_attributes params body
+          ~ext_attrs:exp.pexp_ext_attributes params ty body
       in
       let first_chunk =
         group ((prefix ~indent:2 ~spaces:1 fun_ args) ^/^ arrow)
@@ -964,6 +965,7 @@ and Expression : sig
     : loc:Location.t
     -> ext_attrs:string loc option * attributes
     -> fun_param list
+    -> core_type option
     -> expression
     -> document * document * document * document
 end = struct
@@ -979,7 +981,7 @@ end = struct
     | Pexp_constant c -> Constant.pp ~loc c
     | Pexp_let (rf, vbs, body) -> pp_let ~loc ~ext_attrs rf vbs body
     | Pexp_function cases -> pp_function ~loc ~ext_attrs cases
-    | Pexp_fun (params, exp) -> pp_fun ~loc ~ext_attrs params exp
+    | Pexp_fun (params, ty, exp) -> pp_fun ~loc ~ext_attrs params ty exp
     | Pexp_apply (expr, args) -> Application.pp expr args
     | Pexp_infix_apply (op, (arg1, arg2)) -> Application.pp_infix op arg1 arg2
     | Pexp_prefix_apply (op, arg) -> Application.pp_prefix op arg
@@ -1155,23 +1157,33 @@ end = struct
       let keyword, cases = function_chunks ~compact ~loc ~ext_attrs c cs in
       (keyword ^^ cases)
 
-  and fun_syntactic_elts ~loc ~ext_attrs:(extension, attrs) ~args body =
-    let kw = token_before ~start:loc.Location.loc_start args FUN in
-    let kw = Keyword.decorate kw ~extension attrs ~later:args in
-    let arrow = token_between args body MINUSGREATER in
+  and fun_syntactic_elts ~loc ~ext_attrs:(extension, attrs) ~lhs ~rhs =
+    let kw = token_before ~start:loc.Location.loc_start lhs FUN in
+    let kw = Keyword.decorate kw ~extension attrs ~later:lhs in
+    let arrow = token_between lhs rhs MINUSGREATER in
     kw, arrow
 
-  and fun_chunks ~loc ~ext_attrs params exp =
+  and fun_chunks ~loc ~ext_attrs params tycstr exp =
     match params with
     | [] -> assert false
     | param :: params ->
       let args = left_assoc_map ~f:Fun_param.pp param params in
       let body = pp exp in
-      let kw, arrow = fun_syntactic_elts ~loc ~ext_attrs ~args body in
-      kw, args, arrow, body
+      let with_annot =
+        match tycstr with
+        | None -> args
+        | Some cty ->
+          let ty = Core_type.pp cty in
+          let colon = token_between args ty COLON in
+          args ^/^ group (colon ^/^ ty)
+      in
+      let kw, arrow =
+        fun_syntactic_elts ~loc ~ext_attrs ~lhs:with_annot ~rhs:body
+      in
+      kw, with_annot, arrow, body
 
-  and pp_fun ~loc ~ext_attrs params exp =
-    let fun_, args, arrow, body = fun_chunks ~loc ~ext_attrs params exp in
+  and pp_fun ~loc ~ext_attrs params ty exp =
+    let fun_, args, arrow, body = fun_chunks ~loc ~ext_attrs params ty exp in
     let doc =
       prefix ~indent:2 ~spaces:1
         (group ((prefix ~indent:2 ~spaces:1 fun_ args) ^/^ arrow))
@@ -2616,10 +2628,7 @@ and Type_exception : sig
 end = struct
   let pp { ptyexn_constructor; ptyexn_attributes; ptyexn_loc } =
     let cstr = Constructor_decl.pp_extension ptyexn_constructor in
-    let kw =
-      let loc = { ptyexn_loc with loc_end = cstr.loc.loc_start } in
-      string ~loc "exception"
-    in
+    let kw = token_before ~start:ptyexn_loc.loc_start cstr EXCEPTION in
     let doc = group (prefix ~spaces:1 ~indent:2 kw cstr) in
     Attribute.attach_to_top_item doc ptyexn_attributes
 
