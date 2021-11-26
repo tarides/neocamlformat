@@ -349,8 +349,7 @@ let left_assoc_map ?sep ~f first rest =
 let flow_map sep f first rest =
   List.fold_left (fun t elt ->
     let elt = f elt in
-    let sep = { txt = sep; loc = loc_between t elt } in
-    t ^^ group (sep ^^ elt)
+    t ^^ group (sep ++ elt)
   ) (f first) rest
 
 let flow sep first rest =
