@@ -415,7 +415,7 @@ module Enclosed_separated = struct
       | [] -> { doc; has_semi = false }
       | x :: xs ->
         let attrs = group (separate (PPrint.break 0) x xs) in
-        { doc = group (suffix ~after:doc PPrint.semi ^/^ attrs)
+        { doc = prefix ~indent:2 ~spaces:1 (suffix ~after:doc PPrint.semi) attrs
         ; has_semi = true }
 
     let pp_fields x xs =
@@ -451,7 +451,8 @@ module Enclosed_separated = struct
       | [] -> { doc = group doc; has_semi = false }
       | x :: xs ->
         let attrs = separate (PPrint.break 0) x xs in
-        { doc = group (group (suffix ~after:doc semi) ^/^ attrs)
+        { doc =
+            prefix ~indent:2 ~spaces:1 (group (suffix ~after:doc semi)) attrs
         ; has_semi = true }
 
     let rec pp_fields_aux = function
