@@ -2519,10 +2519,7 @@ end = struct
 
   let pp_include { pincl_mod; pincl_attributes; pincl_loc } =
     let incl = Module_type.pp pincl_mod in
-    let kw =
-      let loc = { pincl_loc with loc_end = incl.loc.loc_start } in
-      string ~loc "include"
-    in
+    let kw = token_before ~start:pincl_loc.loc_start incl INCLUDE in
     Attribute.attach_to_top_item
       (group (kw ^/^ incl))
       pincl_attributes
