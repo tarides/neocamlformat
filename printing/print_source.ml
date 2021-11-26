@@ -1977,7 +1977,7 @@ end = struct
     | Pmty_signature sg -> pp_signature ~loc sg
     | Pmty_functor (attrs, params, mty) -> pp_functor ~loc ~attrs params mty
     | Pmty_with (mty, cstrs) -> pp_with mty cstrs
-    | Pmty_typeof me -> pp_typeof me
+    | Pmty_typeof (attrs, me) -> pp_typeof ~loc ~attrs me
     | Pmty_extension ext -> Extension.pp Item ext
     | Pmty_parens mty -> parens (pp mty)
 
@@ -2067,10 +2067,15 @@ end = struct
     in
     with_constraints
 
-  and pp_typeof exp =
+  and pp_typeof ~loc ~attrs exp =
     let me = Module_expr.pp exp in
-    let pre = PPrint.flow (break 1) [ !^"module"; !^"type"; !^"of" ] in
-    pre ++ break_before me
+    let module_ = token_before ~start:loc.loc_start me MODULE in
+    let type_ = token_between module_ me TYPE in
+    let of_ =
+      let tok = token_between type_ me OF in
+      Keyword.decorate tok ~extension:None attrs ~later:me
+    in
+    flow (break 1) module_ [type_; of_; me]
 
 end
 

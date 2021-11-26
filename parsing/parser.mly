@@ -1325,7 +1325,7 @@ module_type_no_with:
   | SIG attributes signature error
       { unclosed "sig" $loc($1) "end" $loc($4) }
   | MODULE TYPE OF attributes module_expr %prec below_LBRACKETAT
-      { mkmty ~loc:$sloc ~attrs:$4 (Pmty_typeof $5) }
+      { mkmty ~loc:$sloc (Pmty_typeof ($4, $5)) }
   | LPAREN module_type RPAREN
       { mkmty ~loc:$sloc (Pmty_parens $2) }
   | LPAREN module_type error
