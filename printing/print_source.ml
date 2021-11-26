@@ -123,6 +123,7 @@ module rec Attribute : sig
     | Attached_to_structure_item
     | Attached_to_item
 
+  val is_non_doc : attribute -> bool
   val has_non_doc : attributes -> bool
 
   val pp : kind -> attribute -> document
@@ -221,12 +222,13 @@ end = struct
       else
         doc
 
+  let is_non_doc attr =
+    match attr.attr_name.txt with
+    | "ocaml.doc" | "ocaml.text" -> false
+    | _ -> true
+
   let has_non_doc =
-    List.exists (fun attr ->
-      match attr.attr_name.txt with
-      | "ocaml.doc" | "ocaml.text" -> false
-      | _ -> true
-    )
+    List.exists is_non_doc
 
   let attach_to_item ?spaces doc =
     attach ?spaces Attached_to_item doc
@@ -1784,26 +1786,32 @@ end = struct
   let build_optional_with_default lbl def (pat_opt, ct_opt) =
     let lbl_colon = string ~loc:lbl.loc (lbl.txt ^ ":") in
     let lbl = str lbl in
+    let spaces =
+      match def.pexp_desc with
+      | Pexp_prefix_apply _ -> 1
+      | _ -> 0
+    in
     let def = Expression.pp def in
     qmark ++ match pat_opt, ct_opt with
     | None, None ->
       let eq = token_between lbl def EQUAL in
-      parens (lbl ^^ eq ^^ def)
+      parens (lbl ^^ eq ^^ break_before ~spaces def)
     | None, Some ct ->
       let ct = Core_type.pp ct in
       let colon = token_between lbl def COLON in
       let eq = token_between ct def EQUAL in
-      parens (lbl ^^ colon ^^ ct ^^ eq ^^ def)
+      parens (lbl ^^ colon ^^ ct ^^ eq ^^ break_before ~spaces def)
     | Some pat, None ->
       let pat = Pattern.pp pat in
       let eq = token_between pat def EQUAL in
-      lbl_colon ^^ (parens (group (pat ^^ eq ^^ def)))
+      lbl_colon ^^ (parens (group (pat ^^ eq ^^ break_before ~spaces def)))
     | Some pat, Some ct ->
       let pat = Pattern.pp pat in
       let ct = Core_type.pp ct in
       let eq = token_between ct def EQUAL in
       let col = token_between pat ct COLON in
-      lbl_colon ^^ (parens (group (pat ^^ col ^^ ct ^^ eq ^^ def)))
+      lbl_colon ^^
+      (parens (group (pat ^^ col ^^ ct ^^ eq ^^ break_before ~spaces def)))
 
 
   let term lbl default pat_and_ty parentheses =
@@ -2421,14 +2429,24 @@ end = struct
     | Pstr_class _, Pstr_class _
     | Pstr_class_type _, Pstr_class_type _
     | Pstr_include _, Pstr_include _
-    | Pstr_attribute _, Pstr_attribute _
     | Pstr_extension _, Pstr_extension _ -> true
+    | Pstr_attribute a1, Pstr_attribute a2 ->
+      (Attribute.is_non_doc a1 && Attribute.is_non_doc a2) ||
+      (not (Attribute.is_non_doc a1) && not (Attribute.is_non_doc a2))
     | _ -> false
+
+  let pp_group ?(first=false) = function
+    | [] -> assert false
+    | x :: xs -> pp_item ~first x :: List.map pp_item xs
+
+  let pp_groups = function
+    | [] -> assert false
+    | g :: gs -> pp_group ~first:true g :: List.map pp_group gs
 
   let pp_nonempty i is =
     match
       group_by_desc [ i ] is
-      |> List.map (List.map pp_item)
+      |> pp_groups
       |> List.map collate_toplevel_items
     with
     | [] -> assert false
