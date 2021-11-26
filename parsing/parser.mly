@@ -3297,10 +3297,11 @@ ident:
 val_ident:
     LIDENT                    { mkrhs $1 $sloc }
   | LPAREN operator RPAREN
-      { let str =
-          match $2 with
-          | "*" -> "( * )"
-          | x -> "(" ^ x ^ ")"
+      { let op = $2 in
+        let str =
+          match String.get op 0 with
+          | '*' -> "( " ^ op ^ " )"
+          | _ -> "(" ^ op ^ ")"
         in
         mkrhs str $loc($2) }
   | LPAREN operator error     { unclosed "(" $loc($1) ")" $loc($3) }

@@ -46,11 +46,15 @@ end = struct
   include Longident
 
   let pp_ident s =
+    str s
+    (* Following is now handled from the parser: *)
+      (*
     match Ident_class.classify s with
     | Normal -> str s
     | Infix_op { loc; txt } when txt <> "" && String.get txt 0 = '*' ->
       parens (string ~loc (" " ^ txt ^ " "))
     | Infix_op _ | Prefix_op _ -> str s
+         *)
 
   let pp_empty ~(loc:Location.t) left right =
     let start = { txt = (); loc = { loc with loc_end = loc.loc_start }} in
