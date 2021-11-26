@@ -2087,7 +2087,7 @@ expr:
 
 simple_expr:
   | LPAREN seq_expr RPAREN
-      { Exp.parens $2 }
+      { Exp.parens ~loc:(make_loc $sloc) $2 }
   | LPAREN seq_expr error
       { unclosed "(" $loc($1) ")" $loc($3) }
   | LPAREN seq_expr type_constraint RPAREN

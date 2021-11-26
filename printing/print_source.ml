@@ -804,7 +804,11 @@ end = struct
     let suffix ~prefix:sym lbl =
       match exp.pexp_desc with
       | Pexp_ident Lident id when lbl.txt = id.txt -> sym ++ str lbl
-      | Pexp_fun (params, tycstr, body) when exp.pexp_attributes = [] ->
+      | Pexp_parens { exp = { pexp_desc = Pexp_fun (params, tycstr, body); _ }
+                            as e
+                    ; begin_end = _ (* FIXME *) } when
+          exp.pexp_attributes = [] ->
+        let exp = e in
         let lbl = string ~loc:lbl.loc (lbl.txt ^ ":") in
         let fun_, args, arrow, body =
           Expression.fun_chunks ~loc:exp.pexp_loc
@@ -817,7 +821,11 @@ end = struct
             body
         in
         break_after ~spaces:0 unclosed +++ rparen
-      | Pexp_function (c :: cs) when exp.pexp_attributes = [] ->
+      | Pexp_parens { exp = { pexp_desc = Pexp_function (c :: cs); _ }
+                            as e
+                    ; begin_end = _ (* FIXME *) } when
+          exp.pexp_attributes = [] ->
+        let exp = e in
         let lbl = string ~loc:lbl.loc (lbl.txt ^ ":") in
         let compact =
           match !Options.Match.compact with
@@ -865,8 +873,11 @@ end = struct
       combine_app_chunks (acc ^^ nest 2 @@ group (break_before doc)) rest
 
   let smart_arg ~prefix:p lbl = function
-    | { pexp_desc = Pexp_fun (params, ty, body); pexp_attributes = []; _ }
-      as exp ->
+    | { pexp_desc =
+          Pexp_parens { exp = { pexp_desc = Pexp_fun (params, ty, body);
+                                pexp_attributes = []; _ } as exp
+                      ; begin_end = _ (* TODO? *) };
+        pexp_attributes = []; _ } ->
       let fun_, args, arrow, body =
         Expression.fun_chunks ~loc:exp.pexp_loc
           ~ext_attrs:exp.pexp_ext_attributes params ty body
@@ -879,7 +890,11 @@ end = struct
       in
       let snd_chunk = group body in
       Function { fst_chunk; snd_chunk; break = true }
-    | { pexp_desc = Pexp_function (c :: cs); pexp_attributes = []; _ } as exp ->
+    | { pexp_desc =
+          Pexp_parens { exp = { pexp_desc = Pexp_function (c :: cs);
+                                pexp_attributes = []; _ } as exp
+                      ; begin_end = _ (*TODO?*) };
+        pexp_attributes = []; _ } ->
       let compact =
         match !Options.Match.compact with
         | Multi -> false
@@ -1060,18 +1075,26 @@ end = struct
   and pp_ident = Longident.pp
 
   and pp_parens ~loc ~ext_attrs:(extension, attrs) ~begin_end e =
-    let e = pp e in
     if not begin_end then (
       assert (extension = None && attrs = []);
       (* /!\ Losing comments here *)
-      parens e
+      parens (pp e)
     ) else (
+      let fake_e = { txt = (); loc = e.pexp_loc } in
       let begin_ =
-        let tok = token_before ~start:loc.Location.loc_start e BEGIN in
-        Keyword.decorate tok ~extension attrs ~later:e
+        let tok = token_before ~start:loc.Location.loc_start fake_e BEGIN in
+        Keyword.decorate tok ~extension attrs ~later:fake_e
       in
-      let end_ = token_after ~stop:loc.Location.loc_end e END in
-      (prefix ~indent:2 ~spaces:1 begin_ e) ^/^ end_
+      let end_ = token_after ~stop:loc.Location.loc_end fake_e END in
+      match e.pexp_desc with
+      | Pexp_match (arg, cases) when e.pexp_attributes = [] ->
+        group (
+          pp_match ~parens:(begin_, end_) ~loc:e.pexp_loc
+            ~ext_attrs:e.pexp_ext_attributes
+            arg cases
+        )
+      | _ ->
+        (prefix ~indent:2 ~spaces:1 begin_ (pp e)) ^/^ end_
     )
 
   and pp_let ~ext_attrs:(extension, attrs) ~loc rf vbs body =
@@ -1217,7 +1240,7 @@ end = struct
     in
     doc
 
-  and pp_match ~loc ~ext_attrs:(extension, attrs) arg = function
+  and pp_match ?parens ~loc ~ext_attrs:(extension, attrs) arg = function
     | [] -> assert false (* always at least one case *)
     | c :: cs ->
       let arg = pp arg in
@@ -1233,14 +1256,20 @@ end = struct
         Keyword.decorate token ~extension attrs ~later:arg
       in
       let with_ = token_between arg cases WITH in
-      let doc =
+      match parens with
+      | None ->
         group (
           match_ ^^
           nest 2 (break_before arg) ^/^
           with_
         ) ^^ cases
-      in
-      doc
+      | Some (before, after) ->
+        group (
+          group (before ^/^ match_) ^^
+          nest 2 (break_before arg) ^/^
+          with_
+        ) ^^ cases ^/^ after
+
 
   and pp_try ~loc ~ext_attrs:(extension, attrs) arg = function
     | [] -> assert false
