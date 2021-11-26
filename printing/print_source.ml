@@ -3165,15 +3165,12 @@ end = struct
   let pp ~(loc:Location.t) ?ext_attrs:(extension, attrs = None, [])
       { pcstr_self; pcstr_fields } =
     let obj_with_self =
-      match pcstr_self.ppat_desc with
-      | Ppat_any -> (* no self *)
-        let later =
-          (* We don't know what comes next yet! *)
-          { txt = (); loc = pcstr_self.ppat_loc }
-        in
+      match pcstr_self with
+      | None -> (* no self: we don't know what comes next yet! *)
+        let later = { txt = (); loc = { loc with loc_start = loc.loc_end } } in
         let kw = token_before ~start:loc.loc_start later OBJECT in
         Keyword.decorate kw ~extension attrs ~later
-      | _ ->
+      | Some pcstr_self ->
         let self = Pattern.pp pcstr_self in
         let obj =
           Keyword.decorate (token_before ~start:loc.loc_start self OBJECT)
@@ -3254,9 +3251,9 @@ end = struct
   let pp ~loc { pcsig_self; pcsig_fields } =
     match pcsig_fields with
     | [] ->
-      begin match pcsig_self.ptyp_desc with
-      | Ptyp_any -> string ~loc "object end" (* comments are gonna move *)
-      | _ ->
+      begin match pcsig_self with
+      | None -> string ~loc "object end" (* FIXME: comments are gonna move *)
+      | Some pcsig_self ->
         let self = parens (Core_type.pp pcsig_self) in
         let obj_ = token_before ~start:loc.loc_start self OBJECT in
         let end_ = token_after ~stop:loc.loc_end self END in
@@ -3266,9 +3263,9 @@ end = struct
       let fields = separate_map PPrint.(twice hardline) ~f:pp_field f fs in
       let obj_ =
         let obj = token_before ~start:loc.loc_start fields OBJECT in
-        match pcsig_self.ptyp_desc with
-        | Ptyp_any -> obj
-        | _ ->
+        match pcsig_self with
+        | None -> obj
+        | Some pcsig_self ->
           let self = parens (Core_type.pp pcsig_self) in
           group (obj ^/^ self)
       in

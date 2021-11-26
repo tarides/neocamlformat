@@ -635,7 +635,7 @@ and class_type_desc =
 
 and class_signature =
     {
-     pcsig_self: core_type;
+     pcsig_self: core_type option;
      pcsig_fields: class_type_field list;
     }
 (* object('selfpat) ... end
@@ -731,7 +731,7 @@ and class_expr_desc =
 
 and class_structure =
     {
-     pcstr_self: pattern;
+     pcstr_self: pattern option;
      pcstr_fields: class_field list;
     }
 (* object(selfpat) ... end

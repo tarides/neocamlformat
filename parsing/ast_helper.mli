@@ -465,13 +465,13 @@ module Ci:
 (** Class signatures *)
 module Csig:
   sig
-    val mk: core_type -> class_type_field list -> class_signature
+    val mk: core_type option -> class_type_field list -> class_signature
   end
 
 (** Class structures *)
 module Cstr:
   sig
-    val mk: pattern -> class_field list -> class_structure
+    val mk: pattern option -> class_field list -> class_structure
   end
 
 (** Row fields *)

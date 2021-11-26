@@ -126,7 +126,6 @@ let mkpatvar ~loc name =
   it must be ghost.
 *)
 let ghexp ~loc d = Exp.mk ~loc:(ghost_loc loc) d
-let ghpat ~loc d = Pat.mk ~loc:(ghost_loc loc) d
 let ghtyp ~loc d = Typ.mk ~loc:(ghost_loc loc) d
 let ghstr ~loc d = Str.mk ~loc:(ghost_loc loc) d
 let ghsig ~loc d = Sig.mk ~loc:(ghost_loc loc) d
@@ -1624,12 +1623,12 @@ class_fun_def:
 ;
 class_self_pattern:
     LPAREN pattern RPAREN
-      { reloc_pat ~loc:$sloc $2 }
+      { Some (reloc_pat ~loc:$sloc $2) }
   | mkpat(LPAREN pattern COLON core_type RPAREN
       { Ppat_constraint($2, $4) })
-      { $1 }
+      { Some $1 }
   | /* empty */
-      { ghpat ~loc:$sloc Ppat_any }
+      { None }
 ;
 %inline class_fields:
   flatten(text_cstr(class_field)*)
@@ -1747,9 +1746,9 @@ class_signature:
 ;
 class_self_type:
     LPAREN core_type RPAREN
-      { $2 }
+      { Some $2 }
   | mktyp((* empty *) { Ptyp_any })
-      { $1 }
+      { None }
 ;
 %inline class_sig_fields:
   flatten(text_csig(class_sig_field)*)
