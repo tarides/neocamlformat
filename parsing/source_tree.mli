@@ -817,6 +817,7 @@ and signature = signature_item list
 and signature_item =
     {
      psig_desc: signature_item_desc;
+     psig_ext_attributes: string loc option * attributes;
      psig_loc: Location.t;
     }
 
@@ -968,6 +969,7 @@ and structure = structure_item list
 and structure_item =
     {
      pstr_desc: structure_item_desc;
+     pstr_ext_attributes: string loc option * attributes;
      pstr_loc: Location.t;
     }
 

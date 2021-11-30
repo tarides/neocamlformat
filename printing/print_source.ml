@@ -436,7 +436,7 @@ end = struct
     | None -> string ~loc ("'" ^ v)
     | Some _ -> string ~loc ("' " ^ v)
 
-  let rec pp { ptyp_loc; ptyp_desc; ptyp_attributes; ptyp_ext_attributes; 
+  let rec pp { ptyp_loc; ptyp_desc; ptyp_attributes; ptyp_ext_attributes;
                ptyp_loc_stack = _ } =
     let doc =
       group (pp_desc ~loc:ptyp_loc ~ext_attrs:ptyp_ext_attributes ptyp_desc)
@@ -549,7 +549,7 @@ end = struct
 
   and pp_package ~loc (extension, attrs) pkg =
     let pkg = Package_type.pp pkg in
-    let module_ = 
+    let module_ =
       let tok = token_before ~start:loc.loc_start pkg MODULE in
       Keyword.decorate tok ~extension attrs ~later:pkg
     in
@@ -2199,7 +2199,8 @@ end = struct
 end
 
 and Module_declaration : sig
-  val pp : module_declaration -> document
+  val pp
+    : ext_attrs:string loc option * attributes -> module_declaration -> document
 
   val pp_raw : module_declaration -> Binding.Module.t
 
@@ -2237,10 +2238,11 @@ end = struct
     | Pmty_alias _ -> Struct
     | _ -> Sig
 
-  let pp pmd =
+  let pp ~ext_attrs:(extension, attrs) pmd =
     let kw =
-      let loc = { pmd.pmd_loc with loc_end = pmd.pmd_name.loc.loc_start } in
-      string ~loc "module"
+      Keyword.decorate
+        (token_before ~start:pmd.pmd_loc.loc_start pmd.pmd_name MODULE)
+        ~extension attrs ~later:pmd.pmd_name
     in
     let text, pmd =
       let text, attrs =
@@ -2257,12 +2259,15 @@ end = struct
 end
 
 and Module_substitution : sig
-  val pp : module_substitution -> document
+  val pp :
+    ext_attrs:string loc option * attributes -> module_substitution -> document
 end = struct
-  let pp { pms_name; pms_manifest; pms_attributes; pms_loc } =
+  let pp ~ext_attrs:(extension, attrs)
+      { pms_name; pms_manifest; pms_attributes; pms_loc } =
     let kw =
-      let loc = { pms_loc with loc_end = pms_name.loc.loc_start } in
-      string ~loc "module "
+      Keyword.decorate
+        (token_before ~start:pms_loc.loc_start pms_name MODULE)
+        ~extension attrs ~later:pms_name
     in
     let name = str pms_name in
     let man = Longident.pp pms_manifest in
@@ -2271,20 +2276,24 @@ end = struct
 end
 
 and Module_type_declaration : sig
-  val pp : module_type_declaration -> document
+  val pp : ext_attrs:(string loc option * attributes)
+    -> module_type_declaration -> document
 end = struct
-  let pp { pmtd_name; pmtd_type; pmtd_attributes; pmtd_loc } =
+  let pp ~ext_attrs:(extension, attrs)
+      { pmtd_name; pmtd_type; pmtd_attributes; pmtd_loc } =
     let text, pmtd_attributes =
       Attribute.extract_text pmtd_attributes ~item_start_pos:pmtd_loc.loc_start
     in
-    let kw =
-      let loc = { pmtd_loc with loc_end = pmtd_name.loc.loc_start } in
-      string ~loc "module type"
-    in
     let name = str pmtd_name in
+    let kw =
+      let module_ = token_before ~start:pmtd_loc.loc_start pmtd_name MODULE in
+      let type_ = token_between module_ pmtd_name TYPE in
+      group
+        (module_ ^/^ (Keyword.decorate type_ ~extension attrs ~later:pmtd_name))
+    in
     let doc =
       match pmtd_type with
-      | None -> kw ^/^ name
+      | None -> group (kw ^/^ name)
       | Some mty ->
         let typ = Module_type.pp mty in
         Binding.pp_simple ~keyword:kw name typ
@@ -2328,7 +2337,8 @@ end = struct
     then doc
     else !^";; " ++ doc
 
-  let pp_value ~loc rf vbs =
+  let pp_value ~loc ~ext_attrs:(extension, attrs1) rf vbs =
+    assert (attrs1 = []);
     let vbs =
       let previous_vb = ref None in
       List.concat_map (fun vb ->
@@ -2350,7 +2360,9 @@ end = struct
           let token, modifier =
             match !previous_vb with
             | None ->
-              token_before ~start:loc.Location.loc_start lhs LET,
+              Keyword.decorate
+                (token_before ~start:loc.Location.loc_start lhs LET)
+                ~extension [] ~later:lhs,
               rec_token ~recursive_by_default:false rf
             | Some prev_vb ->
               token_between prev_vb lhs AND, None
@@ -2369,7 +2381,7 @@ end = struct
     in
     separate (twice hardline) (List.hd vbs) (List.tl vbs)
 
-  let pp_modules ~loc rf mbs =
+  let pp_modules ~loc ~ext_attrs:(extension, attrs) rf mbs =
     let mbs =
       let previous_mb = ref None in
       List.concat_map (fun mb ->
@@ -2383,15 +2395,16 @@ end = struct
         let binding = Module_binding.pp mb in
         let keyword =
           let lhs = binding.name in
-          let token, modifier =
+          let kw, modifier =
             match !previous_mb with
             | None ->
-              token_before ~start:loc.Location.loc_start lhs MODULE,
+              Keyword.decorate
+                (token_before ~start:loc.Location.loc_start lhs MODULE)
+                ~extension attrs ~later:lhs,
               rec_token ~recursive_by_default:false rf
             | Some prev_mb ->
               token_between prev_mb lhs AND, None
           in
-          let kw = Keyword.decorate token ~extension:None [] ~later:lhs in
           match modifier with
           | None -> kw
           | Some tok ->
@@ -2405,14 +2418,17 @@ end = struct
     in
     separate (twice hardline) (List.hd mbs) (List.tl mbs)
 
-  let pp_module ~loc mb = pp_modules ~loc Nonrecursive [ mb ]
-  let pp_recmodule ~loc mbs = pp_modules ~loc Recursive mbs
+  let pp_module ~loc ~ext_attrs mb =
+    pp_modules ~loc ~ext_attrs Nonrecursive [ mb ]
+  let pp_recmodule ~loc ~ext_attrs mbs =
+    pp_modules ~loc ~ext_attrs Recursive mbs
 
-  let pp_include { pincl_mod; pincl_attributes; pincl_loc } =
+  let pp_include ~ext_attrs:(extension, attrs)
+      { pincl_mod; pincl_attributes; pincl_loc } =
     let incl = Module_expr.pp pincl_mod in
     let kw =
-      let loc = { pincl_loc with loc_end = incl.loc.loc_start } in
-      string ~loc "include"
+      Keyword.decorate (token_before ~start:pincl_loc.loc_start incl INCLUDE)
+        ~extension attrs ~later:incl
     in
     Attribute.attach_to_top_item
       (group (kw ^/^ incl))
@@ -2422,21 +2438,23 @@ end = struct
     let ext = Extension.pp Structure_item ext in
     Attribute.attach_to_top_item ext attrs
 
-  let pp_item ?(first=false) ({ pstr_desc; pstr_loc = loc; _ } as _item) =
+  let pp_item ?(first=false) { pstr_desc; pstr_loc = loc;
+                               pstr_ext_attributes = ext_attrs }  =
     match pstr_desc with
     | Pstr_eval (e, attrs) -> pp_eval ~first e attrs
-    | Pstr_value (rf, vbs) -> pp_value ~loc rf vbs
-    | Pstr_primitive vd -> Value_description.pp vd
-    | Pstr_type (rf, tds) -> Type_declaration.pp_decl rf tds
-    | Pstr_typext te -> Type_extension.pp te
-    | Pstr_exception exn -> Type_exception.pp exn
-    | Pstr_module mb -> pp_module ~loc mb
-    | Pstr_recmodule mbs -> pp_recmodule ~loc mbs
-    | Pstr_modtype mtd -> Module_type_declaration.pp mtd
-    | Pstr_open od -> Open_declaration.pp Attached_to_structure_item od
-    | Pstr_class cds -> Class_declaration.pp cds
-    | Pstr_class_type ctds -> Class_type_declaration.pp ctds
-    | Pstr_include incl -> pp_include incl
+    | Pstr_value (rf, vbs) -> pp_value ~loc ~ext_attrs rf vbs
+    | Pstr_primitive vd -> Value_description.pp ~ext_attrs vd
+    | Pstr_type (rf, tds) -> Type_declaration.pp_decl ~ext_attrs rf tds
+    | Pstr_typext te -> Type_extension.pp ~ext_attrs te
+    | Pstr_exception exn -> Type_exception.pp ~ext_attrs exn
+    | Pstr_module mb -> pp_module ~loc ~ext_attrs mb
+    | Pstr_recmodule mbs -> pp_recmodule ~loc ~ext_attrs mbs
+    | Pstr_modtype mtd -> Module_type_declaration.pp ~ext_attrs mtd
+    | Pstr_open od ->
+      Open_declaration.pp ~ext_attrs Attached_to_structure_item od
+    | Pstr_class cds -> Class_declaration.pp ~ext_attrs cds
+    | Pstr_class_type ctds -> Class_type_declaration.pp ~ext_attrs ctds
+    | Pstr_include incl -> pp_include ~ext_attrs incl
     | Pstr_attribute attr -> Attribute.pp Free_floating attr
     | Pstr_extension (ext, attrs) -> pp_extension ext attrs
 
@@ -2516,14 +2534,18 @@ end = struct
     let ext = Extension.pp Structure_item ext in
     Attribute.attach_to_top_item ext attrs
 
-  let pp_include { pincl_mod; pincl_attributes; pincl_loc } =
+  let pp_include ~ext_attrs:(extension, attrs)
+      { pincl_mod; pincl_attributes; pincl_loc } =
     let incl = Module_type.pp pincl_mod in
-    let kw = token_before ~start:pincl_loc.loc_start incl INCLUDE in
+    let kw =
+      Keyword.decorate (token_before ~start:pincl_loc.loc_start incl INCLUDE)
+        ~extension attrs ~later:incl
+    in
     Attribute.attach_to_top_item
       (group (kw ^/^ incl))
       pincl_attributes
 
-  let pp_recmodules mds =
+  let pp_recmodules ~ext_attrs:(extension, attrs) mds =
     let mds =
       let i = ref 0 in
       List.concat_map (fun md ->
@@ -2534,12 +2556,19 @@ end = struct
           in
           text, { md with pmd_attributes = attrs }
         in
-        let keyword = if !i = 0 then "module rec" else "and" in
-        incr i;
         let keyword =
-          let loc = { md.pmd_loc with loc_end = md.pmd_name.loc.loc_start } in
-          string ~loc keyword
+          let decorate ?extension tok =
+            Keyword.decorate
+              (token_before ~start:md.pmd_loc.loc_start md.pmd_name tok)
+              ~extension attrs ~later:md.pmd_name
+          in
+          if !i = 0 then 
+            let module_ = decorate ?extension MODULE in
+            group (module_ ^/^ token_between module_ md.pmd_name REC)
+          else
+            decorate AND
         in
+        incr i;
         let binding =
           Binding.Module.pp (Module_declaration.pp_raw md)
             ~context:(Module_declaration.decide_context md.pmd_type) ~keyword
@@ -2549,23 +2578,23 @@ end = struct
     in
     separate (twice hardline) (List.hd mds) (List.tl mds)
 
-  let pp_item ({ psig_desc; _ } as _item) =
+  let pp_item ({ psig_desc; psig_ext_attributes = ext_attrs; _ } as _item) =
     match psig_desc with
-    | Psig_value vd -> Value_description.pp vd
-    | Psig_type (rf, decls) -> Type_declaration.pp_decl rf decls
-    | Psig_typesubst decls -> Type_declaration.pp_subst decls
-    | Psig_typext te -> Type_extension.pp te
-    | Psig_exception exn -> Type_exception.pp exn
-    | Psig_module md -> Module_declaration.pp md
-    | Psig_recmodule pmds -> pp_recmodules pmds
-    | Psig_modsubst ms -> Module_substitution.pp ms
-    | Psig_modtype mtd -> Module_type_declaration.pp mtd
-    | Psig_open od -> Open_description.pp od
-    | Psig_include incl -> pp_include incl
+    | Psig_value vd -> Value_description.pp ~ext_attrs vd
+    | Psig_type (rf, decls) -> Type_declaration.pp_decl ~ext_attrs rf decls
+    | Psig_typesubst decls -> Type_declaration.pp_subst ~ext_attrs decls
+    | Psig_typext te -> Type_extension.pp ~ext_attrs te
+    | Psig_exception exn -> Type_exception.pp ~ext_attrs exn
+    | Psig_module md -> Module_declaration.pp ~ext_attrs md
+    | Psig_recmodule pmds -> pp_recmodules ~ext_attrs pmds
+    | Psig_modsubst ms -> Module_substitution.pp ~ext_attrs ms
+    | Psig_modtype mtd -> Module_type_declaration.pp ~ext_attrs mtd
+    | Psig_open od -> Open_description.pp ~ext_attrs od
+    | Psig_include incl -> pp_include ~ext_attrs incl
     | Psig_attribute attr -> Attribute.pp Free_floating attr
     | Psig_extension (ext, attrs) -> pp_extension ext attrs
-    | Psig_class cds -> Class_description.pp cds
-    | Psig_class_type ctds -> Class_type_declaration.pp ctds
+    | Psig_class cds -> Class_description.pp ~ext_attrs cds
+    | Psig_class_type ctds -> Class_type_declaration.pp ~ext_attrs ctds
 
   let rec group_by_desc acc = function
     | [] -> [ List.rev acc ]
@@ -2605,37 +2634,40 @@ end = struct
 end
 
 and Value_description : sig
-  val pp : value_description -> document
+  val pp
+    : ext_attrs:string loc option * attributes -> value_description -> document
 end = struct
-  let pp vd =
+  let pp ~ext_attrs:(extension, attrs) vd =
     let name = Longident.pp_ident vd.pval_name in
     let ctyp = Core_type.pp vd.pval_type in
-    let kw_string, with_prim =
+    let tok, with_prim =
       match vd.pval_prim with
-      | [] -> "val", ctyp
+      | [] -> Parser.VAL, ctyp
       | p :: ps ->
         let prims =
           separate_map (break 1) ~f:(fun {loc; txt} ->
             dquotes (Constant.pp_string_lit ~loc txt)) p ps
         in
         let equals = token_between ctyp prims EQUAL in
-        "external", ctyp ^^ break_before (group (equals ^/^ prims))
+        Parser.EXTERNAL, ctyp ^^ break_before (group (equals ^/^ prims))
     in
     let kw =
-      let loc = { vd.pval_loc with loc_end = name.loc.loc_start } in
-      string ~loc kw_string
+      Keyword.decorate
+        (token_before ~start:vd.pval_loc.loc_start name tok)
+        ~extension attrs ~later:name
     in
     let colon = token_between name with_prim COLON in
     let doc =
-      prefix ~indent:2 ~spaces:1 (group (kw ^/^ name))
-        (group 
+      prefix ~indent:2 ~spaces:1
+        (prefix ~indent:2 ~spaces:1 kw name)
+        (group
            (concat colon with_prim ~sep:PPrint.(ifflat space (twice space))))
     in
     Attribute.attach_to_top_item doc vd.pval_attributes
 end
 
 and Type_extension : sig
-  val pp : type_extension -> document
+  val pp: ext_attrs:string loc option * attributes -> type_extension -> document
 
   val ends_in_obj : type_extension -> bool
 end = struct
@@ -2653,8 +2685,9 @@ end = struct
       in
       prefix ++ cstrs
 
-  let pp { ptyext_path; ptyext_params; ptyext_constructors; ptyext_private;
-           ptyext_attributes; ptyext_loc } =
+  let pp ~ext_attrs:(extension, attrs)
+      { ptyext_path; ptyext_params; ptyext_constructors; ptyext_private;
+        ptyext_attributes; ptyext_loc } =
     let path = Longident.pp ptyext_path in
     let lhs = Type_declaration.with_params ptyext_params path in
     let constructors = constructors ptyext_constructors in
@@ -2665,8 +2698,8 @@ end = struct
     in
     let rhs = Attribute.attach_to_top_item rhs ptyext_attributes in
     let keyword =
-      let loc = { ptyext_loc with loc_end = lhs.loc.loc_start } in
-      string ~loc "type"
+      Keyword.decorate (token_before ~start:ptyext_loc.loc_start lhs TYPE)
+        ~extension attrs ~later:lhs
     in
     Binding.pp_simple ~keyword ~binder:PLUSEQ lhs rhs
 
@@ -2689,12 +2722,16 @@ end = struct
 end
 
 and Type_exception : sig
-  val pp : type_exception -> document
+  val pp: ext_attrs:string loc option * attributes -> type_exception -> document
   val ends_in_obj : type_exception -> bool
 end = struct
-  let pp { ptyexn_constructor; ptyexn_attributes; ptyexn_loc } =
+  let pp ~ext_attrs:(extension, attrs)
+      { ptyexn_constructor; ptyexn_attributes; ptyexn_loc } =
     let cstr = Constructor_decl.pp_extension ptyexn_constructor in
-    let kw = token_before ~start:ptyexn_loc.loc_start cstr EXCEPTION in
+    let kw =
+      Keyword.decorate (token_before ~start:ptyexn_loc.loc_start cstr EXCEPTION)
+        ~extension attrs ~later:cstr
+    in
     let doc = group (prefix ~spaces:1 ~indent:2 kw cstr) in
     Attribute.attach_to_top_item doc ptyexn_attributes
 
@@ -2727,12 +2764,17 @@ and Type_declaration : sig
     -> document
 
   type keyword =
-    | String_prefix of string
     | Formatted of document
+    | Type of string loc option * rec_flag
+    | And
 
-  val pp_decl : rec_flag -> type_declaration list -> document
+  val pp_decl
+    : ext_attrs:string loc option * attributes -> rec_flag
+    -> type_declaration list -> document
 
-  val pp_subst : type_declaration list -> document
+  val pp_subst
+    : ext_attrs:string loc option * attributes
+    -> type_declaration list -> document
 
   val pp_with_constraint
     :  ?override_name:document
@@ -2840,8 +2882,9 @@ end = struct
         (kw ^/^ hang 2 (break_before ~spaces:0 cstrs))
 
   type keyword =
-    | String_prefix of string
     | Formatted of document
+    | Type of string loc option * rec_flag
+    | And
 
   let pp ?override_name ?binder ~keyword
       { ptype_name; ptype_params; ptype_cstrs; ptype_kind; ptype_private;
@@ -2876,11 +2919,16 @@ end = struct
     in
     let keyword =
       match keyword with
-      | String_prefix keyword ->
-        let loc = { ptype_loc with loc_end = lhs.loc.loc_start } in
-        string ~loc keyword
       | Formatted doc ->
         doc
+      | Type (extension, rf) ->
+        let tok = token_before ~start:ptype_loc.loc_start lhs TYPE in
+        let tok = Keyword.decorate tok ~extension [] ~later:lhs in
+        begin match rf with
+        | Recursive -> tok
+        | Nonrecursive -> group (tok ^/^ token_between tok lhs NONREC)
+        end
+      | And -> token_before ~start:ptype_loc.loc_start lhs AND
     in
     match rhs with
     | Some rhs ->
@@ -2892,14 +2940,11 @@ end = struct
         let decl = add_constraints decl ptype_cstrs in
         Attribute.attach_to_top_item decl ptype_attributes
 
-  let rec_flag = function
-    | Recursive -> ""
-    | Nonrecursive -> " nonrec"
-
   let pp_with_constraint ?override_name ?binder ~keyword td =
     pp ?override_name ?binder ~keyword td
 
-  let pp_decl rf decls =
+  let pp_decl ~ext_attrs:(extension, attrs) rf decls =
+    assert (attrs = []);
     let decls =
       let i = ref 0 in
       List.concat_map (fun decl ->
@@ -2911,7 +2956,9 @@ end = struct
           text, { decl with ptype_attributes = attrs }
         in
         let keyword =
-          String_prefix (if !i = 0 then "type" ^ rec_flag rf else "and")
+          if !i = 0
+          then Type (extension, rf)
+          else And
         in
         incr i;
         let binding = pp ~keyword decl in
@@ -2920,7 +2967,8 @@ end = struct
     in
     separate (twice hardline) (List.hd decls) (List.tl decls)
 
-  let pp_subst decls =
+  let pp_subst ~ext_attrs:(extension, attrs) decls =
+    assert (attrs = []);
     let decls =
       let i = ref 0 in
       List.concat_map (fun decl ->
@@ -2931,7 +2979,7 @@ end = struct
           in
           text, { decl with ptype_attributes = attrs }
         in
-        let keyword = String_prefix (if !i = 0 then "type" else "and") in
+        let keyword = if !i = 0 then Type (extension, Recursive) else And in
         incr i;
         let binding = pp ~binder:COLONEQUAL ~keyword decl in
         Attribute.prepend_text text binding
@@ -2980,7 +3028,7 @@ end = struct
     Attribute.attach_to_item doc attrs
 
   and pp_open ~loc od ct attrs =
-    let od = Open_description.pp ~extra_attrs:attrs od in
+    let od = Open_description.pp ~ext_attrs:(None, []) ~extra_attrs:attrs od in
     let ct = pp ct in
     let in_ = token_between od ct IN in
     let let_ = token_before ~start:loc.Location.loc_start od LET in
@@ -3083,7 +3131,7 @@ end = struct
     group (parens (ce ^/^ colon ^/^ ct))
 
   and pp_open ~loc od ce attrs =
-    let od = Open_description.pp ~extra_attrs:attrs od in
+    let od = Open_description.pp ~ext_attrs:(None, []) ~extra_attrs:attrs od in
     let ce = pp ce in
     let in_ = token_between od ce IN in
     let let_ =
@@ -3332,9 +3380,10 @@ end = struct
 end
 
 and Class_declaration : sig
-  val pp : class_declaration list -> document
+  val pp : ext_attrs:string loc option * attributes
+    -> class_declaration list -> document
 end = struct
-  let pp cds =
+  let pp ~ext_attrs:(extension, attrs) cds =
     let cds =
       let previous_cd = ref None in
       List.concat_map (fun cd ->
@@ -3359,7 +3408,9 @@ end = struct
         in
         let keyword =
           match !previous_cd with
-          | None -> token_before ~start:pci_loc.loc_start lhs CLASS
+          | None ->
+            Keyword.decorate (token_before ~start:pci_loc.loc_start lhs CLASS)
+              ~extension attrs ~later:lhs
           | Some cd -> token_between cd lhs AND
         in
         let keyword =
@@ -3379,9 +3430,11 @@ end = struct
 end
 
 and Class_description : sig
-  val pp : class_description list -> document
+  val pp
+    : ext_attrs:string loc option * attributes
+    -> class_description list -> document
 end = struct
-  let pp cds =
+  let pp ~ext_attrs:(extension, attrs) cds =
     let cds =
       let previous_cd = ref None in
       List.concat_map (fun cd ->
@@ -3410,6 +3463,7 @@ end = struct
           | None -> token_before ~start:pci_loc.loc_start lhs CLASS
           | Some cd -> token_between cd lhs AND
         in
+        let keyword = Keyword.decorate keyword ~extension attrs ~later:lhs in
         let keyword =
           match pci_virt with
           | Concrete -> keyword
@@ -3427,9 +3481,10 @@ end = struct
 end
 
 and Class_type_declaration : sig
-  val pp : class_description list -> document
+  val pp : ext_attrs:string loc option * attributes
+    -> class_description list -> document
 end = struct
-  let pp cds =
+  let pp ~ext_attrs:(extension, attrs) cds =
     let cds =
       let previous_cd = ref None in
       List.concat_map (fun cd ->
@@ -3458,7 +3513,10 @@ end = struct
           | Some cd -> token_between cd lhs AND
           | None ->
             let class_ = token_before ~start:pci_loc.loc_start lhs CLASS in
-            let type_ = token_between class_ lhs TYPE in
+            let type_ =
+              Keyword.decorate (token_between class_ lhs TYPE)
+                ~extension attrs ~later:lhs
+            in
             group (class_ ^/^ type_)
         in
         let keyword =
@@ -3478,9 +3536,11 @@ end = struct
 end
 
 and Open_description : sig
-  val pp : ?extra_attrs:attributes -> open_description -> document
+  val pp
+    : ?extra_attrs:attributes
+    -> ext_attrs:string loc option * attributes -> open_description -> document
 end = struct
-  let pp ?(extra_attrs=[])
+  let pp ?(extra_attrs=[]) ~ext_attrs:(extension, attrs)
       { popen_expr; popen_override; popen_attributes; popen_loc } =
     let expr = Longident.pp popen_expr in
     let kw =
@@ -3491,6 +3551,7 @@ end = struct
         tok ^^ over
       | _ -> tok
     in
+    let kw = Keyword.decorate kw ~extension attrs ~later:expr in
     let opn = group (Attribute.attach_to_item kw extra_attrs ^/^ expr) in
     Attribute.attach_to_top_item opn popen_attributes
 end

@@ -281,7 +281,8 @@ let mk ?(loc = !default_loc) ?(attrs = []) d =
 end
 
 module Sig = struct
-  let mk ?(loc = !default_loc) d = {psig_desc = d; psig_loc = loc}
+  let mk ?(loc = !default_loc) d =
+    {psig_desc = d; psig_loc = loc; psig_ext_attributes = None, []}
 
   let value ?loc a = mk ?loc (Psig_value a)
   let type_ ?loc rec_flag a = mk ?loc (Psig_type (rec_flag, a))
@@ -306,7 +307,8 @@ module Sig = struct
 end
 
 module Str = struct
-  let mk ?(loc = !default_loc) d = {pstr_desc = d; pstr_loc = loc}
+  let mk ?(loc = !default_loc) d =
+    {pstr_desc = d; pstr_ext_attributes = None, []; pstr_loc = loc}
 
   let eval ?loc ?(attrs = []) a = mk ?loc (Pstr_eval (a, attrs))
   let value ?loc a b = mk ?loc (Pstr_value (a, b))
