@@ -1142,7 +1142,7 @@ end = struct
     let in_ = pp_token ~after:vbs ~before:body IN in
     concat ~sep:hardline (group (vbs ^/^ in_)) body
 
-  and case { pc_lhs; pc_guard; pc_rhs } =
+  and case_chunks { pc_lhs; pc_guard; pc_rhs } =
     let lhs = Pattern.pp ~indent:2 pc_lhs in
     let rhs = pp pc_rhs in
     let lhs =
@@ -1162,6 +1162,10 @@ end = struct
         in
         prefix ~spaces:1 ~indent:2 lhs with_arrow
     in
+    lhs, rhs
+
+  and case case =
+    let lhs, rhs = case_chunks case in
     match !Options.Cases.body_on_separate_line with
     | Always -> lhs ^^ nest !Options.Cases.body_indent (hardline ++ rhs)
     | When_needed -> prefix ~indent:!Options.Cases.body_indent ~spaces:1 lhs rhs
@@ -1270,10 +1274,22 @@ end = struct
         ) ^^ cases ^/^ after
 
 
-  and pp_try ~loc ~ext_attrs:(extension, attrs) arg = function
+  and pp_try ~loc ~ext_attrs:(extension, attrs) arg cs =
+    let arg = pp arg in
+    let try_ =
+      let token = pp_token ~inside:loc ~before:arg TRY in
+      Keyword.decorate token ~extension attrs ~later:arg
+    in
+    let pprefix = prefix ~indent:2 ~spaces:1 in
+    match cs with
     | [] -> assert false
+    | [ c ] (* TODO: guard this layout under an option *) ->
+      let lhs, rhs = case_chunks c in
+      let with_ = pp_token ~after:arg ~before:lhs WITH in
+      pprefix try_ arg ^/^
+      pprefix with_ lhs ^^
+      nest 2 (PPrint.(ifflat (break 1) hardline) ++ rhs)
     | c :: cs ->
-      let arg = pp arg in
       let compact =
         match !Options.Match.compact with
         | Multi -> false
@@ -1281,20 +1297,8 @@ end = struct
         | Compact_under_app -> false (* FIXME: under_app ps *)
       in
       let cases = cases ~compact c cs in
-      let try_ =
-        let token = pp_token ~inside:loc ~before:arg TRY in
-        Keyword.decorate token ~extension attrs ~later:arg
-      in
       let with_ = pp_token ~after:arg ~before:cases WITH in
-      let doc =
-        group (
-          try_ ^^
-          nest 2 (break_before arg)
-        ) ^/^
-        with_ ^^
-        cases
-      in
-      doc
+      pprefix try_ arg ^/^ with_ ^^ cases
 
   and pp_tuple = function
     | [] -> assert false
