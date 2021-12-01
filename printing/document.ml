@@ -164,14 +164,22 @@ let token_between_locs start stop tok =
   in
   token ~loc tok
 
-let token_between x1 x2 tok =
-  token_between_locs x1.loc.loc_end x2.loc.loc_start tok
-
-let token_before ~start doc tok =
-  token_between_locs start doc.loc.loc_start tok
-
-let token_after ~stop doc tok =
-  token_between_locs doc.loc.loc_end stop tok
+let pp_token ?inside ?before ?after tok =
+  match inside, after, before with
+  | _,
+    Some { loc = { loc_end = start; _ }; _ },
+    Some { loc = { loc_start = stop; _ }; _ }
+  | Some { loc_start = start; _ },
+    None,
+    Some { loc = { loc_start = stop; _ }; _ }
+  | Some { loc_end = stop; _ },
+    Some { loc = { loc_end = start; _ }; _ },
+    None ->
+    token_between_locs start stop tok
+  | None, None, _
+  | _, None, None
+  | None, _, None ->
+    invalid_arg "pp_token: need at least two positions"
 
 (* FIXME: do I really want to keep this?
    Currently it's being used for:
@@ -342,7 +350,7 @@ let left_assoc_map ?sep ~f first rest =
     match sep with
     | None -> t ^^ group (break_before elt)
     | Some sep ->
-      let sep = token_between t elt sep in
+      let sep = pp_token ~after:t ~before:elt sep in
       t ^/^ group (sep ^/^ elt)
   ) (f first) rest
 
@@ -369,7 +377,7 @@ module Two_separated_parts = struct
       v}
   *)
   let sep_with_first fst snd ~sep =
-    let sep = token_between fst snd sep in
+    let sep = pp_token ~after:fst ~before:snd sep in
     prefix ~indent:2 ~spaces:1
       (group (fst ^^ nest 2 (break_before sep)))
       snd
@@ -387,7 +395,7 @@ module Two_separated_parts = struct
       v}
   *)
   let sep_with_second fst snd ~sep =
-    let sep = token_between fst snd sep in
+    let sep = pp_token ~after:fst ~before:snd sep in
     prefix ~indent:2 ~spaces:1
       fst (group (sep ^/^ snd))
 end
@@ -426,7 +434,7 @@ module Enclosed_separated = struct
              if has_semi then
                acc * elt
              else
-               let semi = token_between acc elt.doc SEMI in
+               let semi = pp_token ~after:acc ~before:elt.doc SEMI in
                group (acc ^^ semi) * elt)
           (fmt x)
           xs
@@ -435,8 +443,8 @@ module Enclosed_separated = struct
 
     let pp ~loc ~left ~right x xs =
       let fields = pp_fields x xs in
-      let left = token_before ~start:loc.loc_start fields left in
-      let right = token_after ~stop:loc.loc_end fields right in
+      let left = pp_token ~inside:loc ~before:fields left in
+      let right = pp_token ~inside:loc ~after:fields right in
       left ^^ fields ^^ group (break_before right)
   end
 
@@ -464,7 +472,7 @@ module Enclosed_separated = struct
           elt.doc ^^ break_before (pp_fields_aux rest)
         else
           let rest = pp_fields_aux rest in
-          let semi = token_between elt.doc rest SEMI in
+          let semi = pp_token ~after:elt.doc ~before:rest SEMI in
           group (elt.doc ^^ semi) ^^ break_before rest
 
     let pp_fields x xs =
@@ -473,8 +481,8 @@ module Enclosed_separated = struct
 
     let pp ~loc ~left ~right x xs  =
       let fields = pp_fields x xs in
-      let left = token_before ~start:loc.loc_start fields left in
-      let right = token_after ~stop:loc.loc_end fields right in
+      let left = pp_token ~inside:loc ~before:fields left in
+      let right = pp_token ~inside:loc ~after:fields right in
       left ^^ fields ^/^ right
   end
 
@@ -482,8 +490,8 @@ module Enclosed_separated = struct
     | [] ->
       let start = { txt = (); loc = { loc with loc_end = loc.loc_start }} in
       let stop = { txt = (); loc = { loc with loc_start = loc.loc_end }} in
-      let fst = token_between start stop left in
-      let snd = token_between start stop right in
+      let fst = pp_token ~after:start ~before:stop left in
+      let snd = pp_token ~after:start ~before:stop right in
       group (fst ^/^ snd)
     | x :: xs ->
       match (formatting : Options.Wrappable.t) with

@@ -34,7 +34,7 @@ let join_with_colon lbl doc =
     let pos_cnum = l.loc.loc_end.pos_cnum - 1 in
     { l.loc with loc_end = { l.loc.loc_end with pos_cnum } }
   in
-  let colon = token_between { l with loc = just_before } doc COLON in
+  let colon = pp_token ~after:{ l with loc = just_before } ~before:doc COLON in
   prefix ~indent:2 ~spaces:0 (group (l ^^ colon)) doc
 
 module Longident : sig
@@ -57,10 +57,10 @@ end = struct
          *)
 
   let pp_empty ~(loc:Location.t) left right =
-    let start = { txt = (); loc = { loc with loc_end = loc.loc_start }} in
-    let stop = { txt = (); loc = { loc with loc_start = loc.loc_end }} in
-    let fst = token_between start stop left in
-    let snd = token_between start stop right in
+    let after = { txt = (); loc = { loc with loc_end = loc.loc_start }} in
+    let before = { txt = (); loc = { loc with loc_start = loc.loc_end }} in
+    let fst = pp_token ~after ~before left in
+    let snd = pp_token ~after ~before right in
     group (fst ^^ snd)
 
   let rec pp lid =
@@ -308,7 +308,7 @@ end = struct
       match extension with
       | None -> token
       | Some ext ->
-        let percent = token_between token later PERCENT in
+        let percent = pp_token ~after:token ~before:later PERCENT in
         token ^^ percent ^^ str ext
     in
     Attribute.attach_to_item ~spaces:0 kw attrs
@@ -319,10 +319,10 @@ and Empty_delimited : sig
     Parser.token -> Parser.token -> document
 end = struct
   let pp ~(loc:Location.t) ?extension attrs start_tok end_tok =
-    let start = { txt = (); loc = { loc with loc_end = loc.loc_start }} in
-    let stop = { txt = (); loc = { loc with loc_start = loc.loc_end }} in
-    let fst = token_between start stop start_tok in
-    let snd = token_between start stop end_tok in
+    let after = { txt = (); loc = { loc with loc_end = loc.loc_start }} in
+    let before = { txt = (); loc = { loc with loc_start = loc.loc_end }} in
+    let fst = pp_token ~after ~before start_tok in
+    let snd = pp_token ~after ~before end_tok in
     let fst = Keyword.decorate fst ~extension attrs ~later:snd in
     group (fst ^/^ snd)
 end
@@ -344,7 +344,7 @@ end = struct
     | si :: sg as items ->
       let sg = Signature.pp_nonempty si sg in
       let res =
-        match token_between tag sg COLON with
+        match pp_token ~after:tag ~before:sg COLON with
         | colon -> tag ^^ nest 2 (colon ^/^ sg)
         | exception Assert_failure _ ->
           (* Can disappear when we properly handle exts and attrs on kw *)
@@ -361,19 +361,19 @@ end = struct
       else (fun x -> x)
     in
     let ct = break_after (Core_type.pp ct) in
-    let colon = token_between tag ct COLON in
+    let colon = pp_token ~after:tag ~before:ct COLON in
     tag ^^ nest 2 (colon ^/^ ct)
 
   let ppat tag p =
     let p = Pattern.pp p in
-    let qmark = token_between tag p QUESTION in
+    let qmark = pp_token ~after:tag ~before:p QUESTION in
     tag ^^ nest 2 (qmark ^/^ p)
 
   let ppat_guard tag p e =
     let p = Pattern.pp p in
     let e = Expression.pp e in
-    let qmark = token_between tag p QUESTION in
-    let when_ = token_between p e WHEN in
+    let qmark = pp_token ~after:tag ~before:p QUESTION in
+    let when_ = pp_token ~after:p ~before:e WHEN in
     tag ^^ nest 2 (
       qmark ^/^ p ^/^
       group (when_ ^/^ e)
@@ -472,12 +472,12 @@ end = struct
       let fmt elt = hang 0 (pp_param elt) in
       List.fold_left (fun acc elt ->
         let elt = fmt elt in
-        let sep = token_between acc elt MINUSGREATER in
+        let sep = pp_token ~after:acc ~before:elt MINUSGREATER in
         acc ^/^ group (sep ^^ space ++ hang 0 elt)
       ) (fmt @@ List.hd params) (List.tl params)
     in
     let res = pp res in
-    let arrow = token_between params res MINUSGREATER in
+    let arrow = pp_token ~after:params ~before:res MINUSGREATER in
     let doc = params ^/^ group (arrow ^^ space ++ hang 0 res) in
     doc
 
@@ -517,7 +517,7 @@ end = struct
   and pp_alias ct alias =
     let ct = pp ct in
     let alias = pp_var ~loc:alias.loc alias.txt in
-    let as_ = token_between ct alias AS in
+    let as_ = pp_token ~after:ct ~before:alias AS in
     (* TODO: hang & ident one linebreak *)
     let doc = ct ^/^ as_ ^/^ alias in
     doc
@@ -529,7 +529,7 @@ end = struct
     | [] -> ct
     | v :: vs ->
       let vars= separate_map space ~f:(fun v -> pp_var ~loc:v.loc v.txt) v vs in
-      let dot = token_between vars ct DOT in
+      let dot = pp_token ~after:vars ~before:ct DOT in
       prefix ~indent:2 ~spaces:1
         (group (vars ^^ dot))
         ct
@@ -540,9 +540,9 @@ end = struct
     match vars with
     | [] -> ct
     | v :: vs ->
-      let type_ = token_before ~start:loc.loc_start v TYPE in
+      let type_ = pp_token ~inside:loc ~before:v TYPE in
       let vars = separate_map space ~f:str v vs in
-      let dot = token_between vars ct DOT in
+      let dot = pp_token ~after:vars ~before:ct DOT in
       prefix ~indent:2 ~spaces:1
         (group (type_ ^/^ vars ^^ dot))
         ct
@@ -550,7 +550,7 @@ end = struct
   and pp_package ~loc (extension, attrs) pkg =
     let pkg = Package_type.pp pkg in
     let module_ =
-      let tok = token_before ~start:loc.loc_start pkg MODULE in
+      let tok = pp_token ~inside:loc ~before:pkg MODULE in
       Keyword.decorate tok ~extension attrs ~later:pkg
     in
     parens (module_ ^/^ pkg)
@@ -565,7 +565,7 @@ end = struct
   let pp_otag name ct =
     let name = str name in
     let ct = Core_type.pp ct in
-    let colon = token_between name ct COLON in
+    let colon = pp_token ~after:name ~before:ct COLON in
     group (name ^^ colon) ^/^ ct
 
   let pp_desc = function
@@ -583,7 +583,7 @@ end = struct
   let pp_constr (lid, ct) =
     let lid = Longident.pp lid in
     let ct = Core_type.pp ct in
-    let colon = token_between lid ct EQUAL in
+    let colon = pp_token ~after:lid ~before:ct EQUAL in
     lid ^/^ colon ^/^ ct
 
   let pp (lid, constrs) =
@@ -613,14 +613,14 @@ end = struct
   and pp_alias pat alias =
     let pat = pp pat in
     let alias = str alias in
-    let as_ = token_between pat alias AS in
+    let as_ = pp_token ~after:pat ~before:alias AS in
     let doc = pat ^^ group (nest 2 (break_before ~spaces:1 as_ ^/^ alias)) in
     doc
 
   and pp_interval c1 c2 =
     let c1 = Constant.pp ~loc:c1.loc c1.txt in
     let c2 = Constant.pp ~loc:c2.loc c2.txt in
-    let dotdot = token_between c1 c2 DOTDOT in
+    let dotdot = pp_token ~after:c1 ~before:c2 DOTDOT in
     c1 ^/^ dotdot ^/^ c2
 
   (* FIXME? nest on the outside, not in each of them. *)
@@ -643,7 +643,7 @@ end = struct
   and pp_cons hd tl =
     let hd = pp hd in
     let tl = pp tl in
-    let cons = token_between hd tl COLONCOLON in
+    let cons = pp_token ~after:hd ~before:tl COLONCOLON in
     let doc = infix ~indent:2 ~spaces:1 cons hd tl in
     doc
 
@@ -699,14 +699,14 @@ end = struct
   and pp_or ~indent p1 p2 =
     let p1 = pp ~indent p1 in
     let p2 = pp ~indent p2 in
-    let pipe = token_between p1 p2 BAR in
+    let pipe = pp_token ~after:p1 ~before:p2 BAR in
     let or_ = p1 ^/^ group (pipe ^/^ p2) in
     or_
 
   and pp_constraint p ct =
     let p = pp p in
     let ct = Core_type.pp ct in
-    let colon = token_between p ct COLON in
+    let colon = pp_token ~after:p ~before:ct COLON in
     parens (p ^/^ colon ^/^ ct)
 
   and pp_type typ =
@@ -715,7 +715,7 @@ end = struct
   and pp_lazy ~loc ~ext_attrs:(extension, attrs) p =
     let p = pp p in
     let kw =
-      let tok = token_before ~start:loc.Location.loc_start p LAZY in
+      let tok = pp_token ~inside:loc ~before:p LAZY in
       Keyword.decorate tok ~extension attrs ~later:p
     in
     kw ^/^ p
@@ -727,18 +727,18 @@ end = struct
       | None -> mod_name
       | Some pkg ->
         let constr = Package_type.pp pkg in
-        let colon = token_between mod_name constr COLON in
+        let colon = pp_token ~after:mod_name ~before:constr COLON in
         mod_name ^/^ colon ^/^ constr
     in
     let module_ =
       let lpar =
-        token_before ~start:loc.Location.loc_start with_constraint LPAREN
+        pp_token ~inside:loc ~before:with_constraint LPAREN
       in
-      let mod_ = token_between lpar with_constraint MODULE in
+      let mod_ = pp_token ~after:lpar ~before:with_constraint MODULE in
       Keyword.decorate (lpar ^^ mod_) ~extension attrs ~later:with_constraint
     in
     let rparen =
-      token_after ~stop:loc.Location.loc_end with_constraint RPAREN
+      pp_token ~inside:loc ~after:with_constraint RPAREN
     in
     prefix ~indent:2 ~spaces:1 module_ with_constraint
       ^/^ rparen
@@ -746,7 +746,7 @@ end = struct
   and pp_exception ~loc ~ext_attrs:(extension, attrs) p =
     let p = pp p in
     let kw =
-      let tok = token_before ~start:loc.Location.loc_start p EXCEPTION in
+      let tok = pp_token ~inside:loc ~before:p EXCEPTION in
       Keyword.decorate tok ~extension attrs ~later:p
     in
     kw ^/^ p
@@ -754,7 +754,7 @@ end = struct
   and pp_open lid p =
     let lid = Longident.pp lid in
     let pat = pp p in
-    let dot = token_between lid pat DOT in
+    let dot = pp_token ~after:lid ~before:pat DOT in
     lid ^^ dot ^^ break_before ~spaces:0 pat
 
   and pp_var v = Longident.pp_ident v
@@ -1081,10 +1081,10 @@ end = struct
     ) else (
       let fake_e = { txt = (); loc = e.pexp_loc } in
       let begin_ =
-        let tok = token_before ~start:loc.Location.loc_start fake_e BEGIN in
+        let tok = pp_token ~inside:loc ~before:fake_e BEGIN in
         Keyword.decorate tok ~extension attrs ~later:fake_e
       in
-      let end_ = token_after ~stop:loc.Location.loc_end fake_e END in
+      let end_ = pp_token ~inside:loc ~after:fake_e END in
       match e.pexp_desc with
       | Pexp_match (arg, cases) when e.pexp_attributes = [] ->
         group (
@@ -1119,17 +1119,17 @@ end = struct
           let token, extension, modifier =
             match !previous_vb with
             | None ->
-              token_before ~start:loc.Location.loc_start lhs LET,
+              pp_token ~inside:loc ~before:lhs LET,
               extension,
               rec_token ~recursive_by_default:false rf
             | Some prev_vb ->
-              token_between prev_vb lhs AND, None, None
+              pp_token ~after:prev_vb ~before:lhs AND, None, None
           in
           let kw = Keyword.decorate token ~extension attrs ~later:lhs in
           match modifier with
           | None -> kw
           | Some tok ->
-            let modif = token_between kw lhs tok in
+            let modif = pp_token ~after:kw ~before:lhs tok in
             kw ^/^ modif
         in
         let binding = Binding.pp ~keyword binding in
@@ -1139,7 +1139,7 @@ end = struct
     in
     let vbs = separate hardline (List.hd vbs) (List.tl vbs) in
     let body = pp body in
-    let in_ = token_between vbs body IN in
+    let in_ = pp_token ~after:vbs ~before:body IN in
     concat ~sep:hardline (group (vbs ^/^ in_)) body
 
   and case { pc_lhs; pc_guard; pc_rhs } =
@@ -1148,16 +1148,16 @@ end = struct
     let lhs =
       match pc_guard with
       | None ->
-        let arrow = token_between lhs rhs MINUSGREATER in
+        let arrow = pp_token ~after:lhs ~before:rhs MINUSGREATER in
         prefix ~indent:2 ~spaces:1 lhs arrow
       | Some guard ->
         let guarded =
           let guard = pp guard in
-          let when_ = token_between lhs guard WHEN in
+          let when_ = pp_token ~after:lhs ~before:guard WHEN in
           group (prefix ~indent:2 ~spaces:1 when_ guard)
         in
         let with_arrow =
-          let arrow = token_between guarded rhs MINUSGREATER in
+          let arrow = pp_token ~after:guarded ~before:rhs MINUSGREATER in
           group (guarded ^/^ arrow)
         in
         prefix ~spaces:1 ~indent:2 lhs with_arrow
@@ -1169,7 +1169,7 @@ end = struct
   and cases ~compact:compact_layout c cs =
     let fmt acc elt =
       let elt = case elt in
-      let bar = token_between acc elt BAR in
+      let bar = pp_token ~after:acc ~before:elt BAR in
       acc ^/^ group (bar ^^ space ++ elt)
     in
     let rec iterator acc = function
@@ -1188,7 +1188,7 @@ end = struct
   and function_chunks ~compact ~loc ~ext_attrs:(extension, attrs) c cs =
     let cases = cases ~compact c cs in
     let keyword =
-      let kw = token_before ~start:loc.Location.loc_start cases FUNCTION in
+      let kw = pp_token ~inside:loc ~before:cases FUNCTION in
       Keyword.decorate kw ~extension attrs ~later:cases
     in
     keyword, cases
@@ -1206,9 +1206,9 @@ end = struct
       (keyword ^^ cases)
 
   and fun_syntactic_elts ~loc ~ext_attrs:(extension, attrs) ~lhs ~rhs =
-    let kw = token_before ~start:loc.Location.loc_start lhs FUN in
+    let kw = pp_token ~inside:loc ~before:lhs FUN in
     let kw = Keyword.decorate kw ~extension attrs ~later:lhs in
-    let arrow = token_between lhs rhs MINUSGREATER in
+    let arrow = pp_token ~after:lhs ~before:rhs MINUSGREATER in
     kw, arrow
 
   and fun_chunks ~loc ~ext_attrs params tycstr exp =
@@ -1222,7 +1222,7 @@ end = struct
         | None -> args
         | Some cty ->
           let ty = Core_type.pp cty in
-          let colon = token_between args ty COLON in
+          let colon = pp_token ~after:args ~before:ty COLON in
           args ^/^ group (colon ^/^ ty)
       in
       let kw, arrow =
@@ -1251,10 +1251,10 @@ end = struct
       in
       let cases = cases ~compact c cs in
       let match_ =
-        let token = token_before ~start:loc.Location.loc_start arg MATCH in
+        let token = pp_token ~inside:loc ~before:arg MATCH in
         Keyword.decorate token ~extension attrs ~later:arg
       in
-      let with_ = token_between arg cases WITH in
+      let with_ = pp_token ~after:arg ~before:cases WITH in
       match parens with
       | None ->
         group (
@@ -1282,10 +1282,10 @@ end = struct
       in
       let cases = cases ~compact c cs in
       let try_ =
-        let token = token_before ~start:loc.Location.loc_start arg TRY in
+        let token = pp_token ~inside:loc ~before:arg TRY in
         Keyword.decorate token ~extension attrs ~later:arg
       in
-      let with_ = token_between arg cases WITH in
+      let with_ = pp_token ~after:arg ~before:cases WITH in
       let doc =
         group (
           try_ ^^
@@ -1313,7 +1313,7 @@ end = struct
   and pp_cons hd tl =
     let hd = pp hd in
     let tl = pp tl in
-    let cons = token_between hd tl COLONCOLON in
+    let cons = pp_token ~after:hd ~before:tl COLONCOLON in
     let doc = infix ~indent:2 ~spaces:1 cons hd tl in
     doc
 
@@ -1363,21 +1363,21 @@ end = struct
         List_like.pp_fields ~formatting:!Options.Record.expression
           (List.hd fields) (List.tl fields)
       in
-      let with_ = token_between update fields WITH in
+      let with_ = pp_token ~after:update ~before:fields WITH in
       enclose ~before:lbrace ~after:PPrint.(break 1 ^^ rbrace)
         (group (group (break_before update) ^/^ with_) ^/^ fields)
 
   and pp_field re fld =
     let record = pp re in
     let field = Longident.pp fld in
-    let dot = token_between record field DOT in
+    let dot = pp_token ~after:record ~before:field DOT in
     let doc = flow (break 0) record [ dot; field ] in
     doc
 
   and pp_setfield re fld val_ =
     let field = pp_field re fld in
     let value = pp val_ in
-    let larrow = token_between field value LESSMINUS in
+    let larrow = pp_token ~after:field ~before:value LESSMINUS in
     let doc =
       prefix ~indent:2 ~spaces:1
         (group (field ^/^ larrow))
@@ -1396,9 +1396,9 @@ end = struct
     let arr = pp arr in
     let dot =
       match prefix, dot with
-      | None, None -> token_between arr idx DOT
+      | None, None -> pp_token ~after:arr ~before:idx DOT
       | Some path, Some dotop ->
-        let fstdot = token_between arr path DOT in
+        let fstdot = pp_token ~after:arr ~before:path DOT in
         group (fstdot ^^ path ^^ break_before ~spaces:0 dotop)
       | None, Some dotop -> dotop
       | Some _, None -> assert false
@@ -1409,7 +1409,7 @@ end = struct
   and pp_gen_set ?prefix:p ?dot enclosing arr idx val_ =
     let access = pp_gen_get ?prefix:p ?dot enclosing arr idx in
     let value = pp val_ in
-    let larrow = token_between access value LESSMINUS in
+    let larrow = pp_token ~after:access ~before:value LESSMINUS in
     let doc =
       prefix ~indent:2 ~spaces:1
         (group (access ^/^ larrow))
@@ -1488,18 +1488,18 @@ end = struct
     let cond = pp ib.if_cond in
     let keyword =
       let if_kw =
-        let if_ = token_before ~start:ib.if_loc.loc_start cond IF in
+        let if_ = pp_token ~inside:ib.if_loc ~before:cond IF in
         if first_branch then
           if_
         else
-          let else_ = token_before ~start:ib.if_loc.loc_start if_ ELSE in
+          let else_ = pp_token ~inside:ib.if_loc ~before:if_ ELSE in
           else_ ^/^ if_
       in
       Keyword.decorate if_kw ~extension:ib.if_ext ib.if_attrs ~later:cond
     in
     match fmt_if_branch ib.if_body with
     | [then_branch] ->
-      let then_kw = token_between cond then_branch THEN in
+      let then_kw = pp_token ~after:cond ~before:then_branch THEN in
       let if_and_cond =
         group (
           keyword ^^
@@ -1509,7 +1509,7 @@ end = struct
       in
       concat ~indent:2 ~sep:(break 1) if_and_cond then_branch
     | [opening; then_branch; closing] ->
-      let then_kw = token_between cond then_branch THEN in
+      let then_kw = pp_token ~after:cond ~before:then_branch THEN in
       let if_and_cond =
         group (
           keyword ^^
@@ -1546,7 +1546,7 @@ end = struct
     let if_ = iterator if_branches in
     let else_ =
       let else_branch = pp else_branch in
-      let else_ = token_between if_ else_branch ELSE in
+      let else_ = pp_token ~after:if_ ~before:else_branch ELSE in
       break_before else_ ^^
       nest 2 (break_before else_branch)
     in
@@ -1562,7 +1562,7 @@ end = struct
     in
     let e1 = pp e1 in
     let e2 = pp e2 in
-    let semi = token_between e1 e2 SEMI in
+    let semi = pp_token ~after:e1 ~before:e2 SEMI in
     let doc =
       if compact
       then e1 ^^ semi ^/^ e2
@@ -1573,10 +1573,10 @@ end = struct
   and pp_while ~(loc:Location.t) ~ext_attrs:(extension, attrs) cond body =
     let cond = pp cond in
     let body = pp body in
-    let do_ = token_between cond body DO in
-    let while_ = token_before ~start:loc.loc_start cond WHILE in
+    let do_ = pp_token ~after:cond ~before:body DO in
+    let while_ = pp_token ~inside:loc ~before:cond WHILE in
     let while_ = Keyword.decorate while_ ~extension attrs ~later:cond in
-    let done_ = token_after body ~stop:loc.loc_end DONE in
+    let done_ = pp_token ~inside:loc ~after:body DONE in
     let doc =
       group (
         group (
@@ -1594,19 +1594,19 @@ end = struct
       dir body =
     let it = Pattern.pp it in
     let start = pp start in
-    let equals = token_between it start EQUAL in
+    let equals = pp_token ~after:it ~before:start EQUAL in
     let stop = pp stop in
     let dir =
-      token_between start stop
+      pp_token ~after:start ~before:stop
         (match dir with
          | Upto -> TO
          | Downto -> DOWNTO)
     in
     let body = pp body in
-    let do_ = token_between stop body DO in
-    let for_ = token_before ~start:loc.loc_start it FOR in
+    let do_ = pp_token ~after:stop ~before:body DO in
+    let for_ = pp_token ~inside:loc ~before:it FOR in
     let for_ = Keyword.decorate for_ ~extension attrs ~later:it in
-    let done_ = token_after ~stop:loc.loc_end body DONE in
+    let done_ = pp_token ~inside:loc ~after:body DONE in
     let doc =
       group (
         group (
@@ -1627,7 +1627,7 @@ end = struct
   and pp_constraint exp ct =
     let exp = pp exp in
     let ct = Core_type.pp ct in
-    let colon = token_between exp ct COLON in
+    let colon = pp_token ~after:exp ~before:ct COLON in
     group (parens (exp ^/^ colon ^/^ ct))
 
   and pp_coerce exp ct_start ct =
@@ -1637,30 +1637,30 @@ end = struct
       let loc = { exp.loc with loc_start = exp.loc.loc_end } in
       optional ~loc (fun ct ->
         let ct = Core_type.pp ct in
-        let colon = token_between exp ct COLON in
+        let colon = pp_token ~after:exp ~before:ct COLON in
         break_before colon ^/^ ct
       ) ct_start
     in
-    let coerce = token_between ct_start ct COLONGREATER in
+    let coerce = pp_token ~after:ct_start ~before:ct COLONGREATER in
     group (parens (group (exp ^^ ct_start) ^/^ coerce ^/^  ct))
 
   and pp_send exp met =
     let exp = pp exp in
     let met = str met in
-    let sharp = token_between exp met HASH in
+    let sharp = pp_token ~after:exp ~before:met HASH in
     let doc = flow (break 0) exp [ sharp; met ] in
     doc
 
   and pp_new ~loc ~ext_attrs:(extension, attrs) lid =
     let lid = Longident.pp lid in
-    let new_ = token_before ~start:loc.loc_start lid NEW in
+    let new_ = pp_token ~inside:loc ~before:lid NEW in
     let new_ = Keyword.decorate new_ ~extension attrs ~later:lid in
     (group (new_ ^/^ lid))
 
   and pp_setinstvar lbl exp =
     let lbl = str lbl in
     let exp = pp exp in
-    let larrow = token_between lbl exp LESSMINUS in
+    let larrow = pp_token ~after:lbl ~before:exp LESSMINUS in
     let doc = lbl ^/^ larrow ^/^ exp in
     doc
 
@@ -1670,7 +1670,7 @@ end = struct
     | Pexp_ident Lident s when s.txt = lbl.txt -> fld
     | _ ->
       let exp = pp exp in
-      let equals = token_between fld exp EQUAL in
+      let equals = pp_token ~after:fld ~before:exp EQUAL in
       fld ^/^ equals ^/^ exp
 
   and pp_override ~loc fields =
@@ -1685,14 +1685,14 @@ end = struct
     let binding = Module_binding.pp_raw name params typ mexp [] in
     let bind =
       let keyword =
-        let let_ = token_before ~start:loc.loc_start binding.name LET in
-        let mod_ = token_between let_ binding.name MODULE in
+        let let_ = pp_token ~inside:loc ~before:binding.name LET in
+        let mod_ = pp_token ~after:let_ ~before:binding.name MODULE in
         Keyword.decorate (let_ ^/^ mod_) ~extension attrs ~later:binding.name
       in
       Binding.Module.pp ~keyword ~context:Struct binding
     in
     let expr = pp expr in
-    let in_ = token_between bind expr IN in
+    let in_ = pp_token ~after:bind ~before:expr IN in
     let doc = bind ^/^ in_ ^/^ expr in
     doc
 
@@ -1700,11 +1700,11 @@ end = struct
     let exn = Constructor_decl.pp_extension exn in
     let exp = pp exp in
     let keyword =
-      let let_ = token_before ~start:loc.loc_start exn LET in
-      let exc = token_between let_ exn EXCEPTION in
+      let let_ = pp_token ~inside:loc ~before:exn LET in
+      let exc = pp_token ~after:let_ ~before:exn EXCEPTION in
       Keyword.decorate (let_ ^/^ exc) ~extension attrs ~later:exn
     in
-    let in_ = token_between exn exp IN in
+    let in_ = pp_token ~after:exn ~before:exp IN in
     let doc =
       group (prefix ~indent:2 ~spaces:1 keyword
                (group (exn ^/^ in_)))
@@ -1715,7 +1715,7 @@ end = struct
   and pp_assert ~(loc:Location.t) ~ext_attrs:(extension, attrs) exp =
     let exp = pp exp in
     let assert_ =
-      let kw = token_before ~start:loc.loc_start exp ASSERT in
+      let kw = pp_token ~inside:loc ~before:exp ASSERT in
       Keyword.decorate kw ~extension attrs ~later:exp
     in
     let doc = prefix ~indent:2 ~spaces:1 assert_ exp in
@@ -1724,7 +1724,7 @@ end = struct
   and pp_lazy ~(loc:Location.t) ~ext_attrs:(extension, attrs) exp =
     let exp = pp exp in
     let lazy_ =
-      let kw = token_before ~start:loc.loc_start exp LAZY in
+      let kw = pp_token ~inside:loc ~before:exp LAZY in
       Keyword.decorate kw ~extension attrs ~later:exp
     in
     let doc = prefix ~indent:2 ~spaces:1 lazy_ exp in
@@ -1740,11 +1740,11 @@ end = struct
       | None -> me
       | Some pkg ->
         let constr = Package_type.pp pkg in
-        let colon = token_between me constr COLON in
+        let colon = pp_token ~after:me ~before:constr COLON in
         me ^/^ colon ^/^ constr
     in
     let mod_ =
-      token_before ~start:loc.Location.loc_start with_constraint MODULE
+      pp_token ~inside:loc ~before:with_constraint MODULE
     in
     let mod_ = Keyword.decorate mod_ ~extension attrs ~later:with_constraint in
     (* FIXME: comments between "(" and "module" are going to be moved ... *)
@@ -1753,7 +1753,7 @@ end = struct
   and pp_open lid exp =
     let lid = Longident.pp lid in
     let exp = pp exp in
-    let dot = token_between lid exp DOT in
+    let dot = pp_token ~after:lid ~before:exp DOT in
     let exp =
       enclose (nest 2 @@ break_before ~spaces:0 exp)
         ~before:PPrint.lparen
@@ -1764,8 +1764,8 @@ end = struct
   and pp_letopen ~(loc:Location.t) ~ext_attrs od exp =
     let od = Open_declaration.pp ~ext_attrs Attached_to_item od in
     let exp = pp exp in
-    let in_ = token_between od exp IN in
-    let let_ = token_before ~start:loc.loc_start od LET in
+    let in_ = pp_token ~after:od ~before:exp IN in
+    let let_ = pp_token ~inside:loc ~before:od LET in
     let doc = group (let_ ^/^ od ^/^ in_) ^/^ exp in
     doc
 
@@ -1779,7 +1779,7 @@ end = struct
     let ands = List.map pp_binding_op ands in
     let bindings = separate hardline let_ ands in
     let body = pp body in
-    let in_ = token_between bindings body IN in
+    let in_ = pp_token ~after:bindings ~before:body IN in
     (group (bindings ^/^ in_) ^^ hardline ++ body)
 end
 
@@ -1789,7 +1789,7 @@ end = struct
   let punned_label_with_annot prefix_token lbl ct =
     let lbl = str lbl in
     let ct = Core_type.pp ct in
-    let colon = token_between lbl ct COLON in
+    let colon = pp_token ~after:lbl ~before:ct COLON in
     prefix_token ++ parens (lbl ^^ colon ^^ break_before ~spaces:0 ct)
 
   let build_simple_label ~optional ~parentheses lbl (pat_opt, cty_opt) =
@@ -1810,7 +1810,7 @@ end = struct
       let pat = Pattern.pp pat in
       let ct = Core_type.pp ct in
       let rhs =
-        let colon = token_between pat ct COLON in
+        let colon = pp_token ~after:pat ~before:ct COLON in
         parens (pat ^^ colon ^^ ct)
       in
       prefix_token ++ join_with_colon lbl rhs
@@ -1826,22 +1826,22 @@ end = struct
     let def = Expression.pp def in
     qmark ++ match pat_opt, ct_opt with
     | None, None ->
-      let eq = token_between lbl def EQUAL in
+      let eq = pp_token ~after:lbl ~before:def EQUAL in
       parens (lbl ^^ eq ^^ break_before ~spaces def)
     | None, Some ct ->
       let ct = Core_type.pp ct in
-      let colon = token_between lbl def COLON in
-      let eq = token_between ct def EQUAL in
+      let colon = pp_token ~after:lbl ~before:def COLON in
+      let eq = pp_token ~after:ct ~before:def EQUAL in
       parens (lbl ^^ colon ^^ ct ^^ eq ^^ break_before ~spaces def)
     | Some pat, None ->
       let pat = Pattern.pp pat in
-      let eq = token_between pat def EQUAL in
+      let eq = pp_token ~after:pat ~before:def EQUAL in
       lbl_colon ^^ (parens (group (pat ^^ eq ^^ break_before ~spaces def)))
     | Some pat, Some ct ->
       let pat = Pattern.pp pat in
       let ct = Core_type.pp ct in
-      let eq = token_between ct def EQUAL in
-      let col = token_between pat ct COLON in
+      let eq = pp_token ~after:ct ~before:def EQUAL in
+      let col = pp_token ~after:pat ~before:ct COLON in
       lbl_colon ^^
       (parens (group (pat ^^ col ^^ ct ^^ eq ^^ break_before ~spaces def)))
 
@@ -1910,12 +1910,12 @@ end = struct
     | Named (name, mty) ->
       let mty = Module_type.pp mty in
       let pp name =
-        let colon = token_between name mty COLON in
+        let colon = pp_token ~after:name ~before:mty COLON in
         parens (group (name ^/^ colon) ^/^ mty)
       in
       match name.txt with
       | None ->
-        let name = token_before ~start:loc.loc_start mty UNDERSCORE in
+        let name = pp_token ~inside:loc ~before:mty UNDERSCORE in
         pp name
       | Some s ->
         let name = string ~loc:name.loc s in
@@ -1949,10 +1949,10 @@ end = struct
     | si :: st ->
       let str = Structure.pp_nonempty si st in
       let struct_ =
-        let token = token_before ~start:loc.loc_start str STRUCT in
+        let token = pp_token ~inside:loc ~before:str STRUCT in
         Keyword.decorate token ~extension:None attrs ~later:str
       in
-      let end_ = token_after ~stop:loc.Location.loc_end str END in
+      let end_ = pp_token ~inside:loc ~after:str END in
       group (
         (prefix ~indent:2 ~spaces:1 struct_ str) ^/^ end_
       )
@@ -1964,35 +1964,35 @@ end = struct
     in
     let me = pp me in
     let functor_ =
-      let token = token_before ~start:loc.loc_start params FUNCTOR in
+      let token = pp_token ~inside:loc ~before:params FUNCTOR in
       Keyword.decorate token ~extension:None attrs ~later:params
     in
-    let arrow = token_between params me MINUSGREATER in
+    let arrow = pp_token ~after:params ~before:me MINUSGREATER in
     functor_ ^/^ params ^/^ arrow ^/^ me
 
   and pp_apply ~loc me1 me2 =
     let me1 = pp ~lhs_of_apply:true me1 in
     let me2 = pp me2 in
-    let rparen = token_after ~stop:loc.loc_end me2 RPAREN in
-    let lparen = token_between me1 me2 LPAREN in
+    let rparen = pp_token ~inside:loc ~after:me2 RPAREN in
+    let lparen = pp_token ~after:me1 ~before:me2 LPAREN in
     me1 ^^ break_before ~spaces:0 (lparen ^^ me2 ^^ rparen)
 
   and pp_gen_apply ~loc me =
     let me = pp ~lhs_of_apply:true me in
-    let rparen = token_after ~stop:loc.loc_end me RPAREN in
-    let lparen = token_between me rparen LPAREN in
+    let rparen = pp_token ~inside:loc ~after:me RPAREN in
+    let lparen = pp_token ~after:me ~before:rparen LPAREN in
     me ^^ break_before ~spaces:0 (lparen ^^  rparen)
 
   and pp_constraint me mty =
     let me = pp me in
     let mty = Module_type.pp mty in
-    let colon = token_between me mty COLON in
+    let colon = pp_token ~after:me ~before:mty COLON in
     parens (me ^/^ colon ^/^ mty)
 
   and pp_unpack ~(loc:Location.t) ~attrs exp pkg1 pkg2 =
     let exp = Expression.pp exp in
     let val_exp =
-      let tok = token_before ~start:loc.loc_start exp VAL in
+      let tok = pp_token ~inside:loc ~before:exp VAL in
       prefix ~spaces:1 ~indent:2
         (Keyword.decorate tok ~extension:None attrs ~later:exp)
         exp
@@ -2002,7 +2002,7 @@ end = struct
       | None -> val_exp
       | Some pkg ->
         let pkg = Package_type.pp pkg in
-        let colon = token_between val_exp pkg COLON in
+        let colon = pp_token ~after:val_exp ~before:pkg COLON in
         prefix ~spaces:1 ~indent:2 val_exp
           (group (colon ^/^ pkg))
     in
@@ -2010,7 +2010,7 @@ end = struct
     | None -> with_annot
     | Some pkg ->
       let pkg = Package_type.pp pkg in
-      let coerce = token_between val_exp pkg COLONGREATER in
+      let coerce = pp_token ~after:val_exp ~before:pkg COLONGREATER in
       prefix ~spaces:1 ~indent:2 with_annot
         (group (coerce ^/^ pkg))
 
@@ -2039,14 +2039,14 @@ end = struct
     | [] -> Empty_delimited.pp ~loc [] SIG END
     | si :: sg ->
       let sg = Signature.pp_nonempty si sg in
-      let sig_ = token_before ~start:loc.loc_start sg SIG in
-      let end_ = token_after ~stop:loc.loc_end sg END in
+      let sig_ = pp_token ~inside:loc ~before:sg SIG in
+      let end_ = pp_token ~inside:loc ~after:sg END in
       (prefix ~indent:2 ~spaces:1 sig_ sg) ^/^ end_
 
   and pp_short_functor param_mty res_mty =
     let param_mty = Module_type.pp param_mty in
     let res_mty = Module_type.pp res_mty in
-    let arrow = token_between param_mty res_mty MINUSGREATER in
+    let arrow = pp_token ~after:param_mty ~before:res_mty MINUSGREATER in
     param_mty ^/^ arrow ^/^ res_mty
 
   and pp_regular_functor ~(loc:Location.t) ~attrs params mty =
@@ -2056,10 +2056,10 @@ end = struct
     in
     let mty = pp mty in
     let functor_ =
-      let tok = token_before ~start:loc.loc_start params FUNCTOR in
+      let tok = pp_token ~inside:loc ~before:params FUNCTOR in
       Keyword.decorate tok ~extension:None attrs ~later:params
     in
-    let arrow = token_between params mty MINUSGREATER in
+    let arrow = pp_token ~after:params ~before:mty MINUSGREATER in
     functor_ ^/^ params ^/^ arrow ^/^ mty
 
   and pp_functor ~loc ~attrs params mty =
@@ -2078,26 +2078,22 @@ end = struct
     let cstr =
       match cstr with
       | Pwith_type (lid, td) ->
-        let type_ = token_after keyword ~stop:td.ptype_loc.loc_start TYPE in
-        let kw = keyword ^/^ type_ in
         Type_declaration.pp_with_constraint ~override_name:(Longident.pp lid)
-          ~keyword:(Formatted kw) td
+          ~keyword:(With_type keyword) td
       | Pwith_typesubst (lid, td) ->
-        let type_ = token_after keyword ~stop:td.ptype_loc.loc_start TYPE in
-        let kw = keyword ^/^ type_ in
         Type_declaration.pp_with_constraint ~binder:COLONEQUAL
           ~override_name:(Longident.pp lid)
-          ~keyword:(Formatted kw) td
+          ~keyword:(With_type keyword) td
       | Pwith_module (lid1, lid2) ->
         let d1 = Longident.pp lid1 in
         let d2 = Longident.pp lid2 in
-        let module_ = token_between keyword d1 MODULE in
+        let module_ = pp_token ~after:keyword ~before:d1 MODULE in
         let keyword = keyword ^/^ module_ in
         Binding.pp_simple  ~keyword d1 d2
       | Pwith_modsubst (lid1, lid2) ->
         let d1 = Longident.pp lid1 in
         let d2 = Longident.pp lid2 in
-        let module_ = token_between keyword d1 MODULE in
+        let module_ = pp_token ~after:keyword ~before:d1 MODULE in
         let keyword = keyword ^/^ module_ in
         Binding.pp_simple ~binder:COLONEQUAL ~keyword d1 d2
     in
@@ -2123,10 +2119,10 @@ end = struct
 
   and pp_typeof ~loc ~attrs exp =
     let me = Module_expr.pp exp in
-    let module_ = token_before ~start:loc.loc_start me MODULE in
-    let type_ = token_between module_ me TYPE in
+    let module_ = pp_token ~inside:loc ~before:me MODULE in
+    let type_ = pp_token ~after:module_ ~before:me TYPE in
     let of_ =
-      let tok = token_between type_ me OF in
+      let tok = pp_token ~after:type_ ~before:me OF in
       Keyword.decorate tok ~extension:None attrs ~later:me
     in
     flow (break 1) module_ [type_; of_; me]
@@ -2152,7 +2148,7 @@ end = struct
     | Named (name, mty) ->
       let name = module_name name in
       let mty = Module_type.pp mty in
-      let colon = token_between name mty COLON in
+      let colon = pp_token ~after:name ~before:mty COLON in
       group (
         parens (
           prefix ~indent:2 ~spaces:1 (group (name ^/^ colon)) mty
@@ -2241,7 +2237,7 @@ end = struct
   let pp ~ext_attrs:(extension, attrs) pmd =
     let kw =
       Keyword.decorate
-        (token_before ~start:pmd.pmd_loc.loc_start pmd.pmd_name MODULE)
+        (pp_token ~inside:pmd.pmd_loc ~before:pmd.pmd_name MODULE)
         ~extension attrs ~later:pmd.pmd_name
     in
     let text, pmd =
@@ -2266,7 +2262,7 @@ end = struct
       { pms_name; pms_manifest; pms_attributes; pms_loc } =
     let kw =
       Keyword.decorate
-        (token_before ~start:pms_loc.loc_start pms_name MODULE)
+        (pp_token ~inside:pms_loc ~before:pms_name MODULE)
         ~extension attrs ~later:pms_name
     in
     let name = str pms_name in
@@ -2286,8 +2282,8 @@ end = struct
     in
     let name = str pmtd_name in
     let kw =
-      let module_ = token_before ~start:pmtd_loc.loc_start pmtd_name MODULE in
-      let type_ = token_between module_ pmtd_name TYPE in
+      let module_ = pp_token ~inside:pmtd_loc ~before:pmtd_name MODULE in
+      let type_ = pp_token ~after:module_ ~before:pmtd_name TYPE in
       group
         (module_ ^/^ (Keyword.decorate type_ ~extension attrs ~later:pmtd_name))
     in
@@ -2361,17 +2357,17 @@ end = struct
             match !previous_vb with
             | None ->
               Keyword.decorate
-                (token_before ~start:loc.Location.loc_start lhs LET)
+                (pp_token ~inside:loc ~before:lhs LET)
                 ~extension [] ~later:lhs,
               rec_token ~recursive_by_default:false rf
             | Some prev_vb ->
-              token_between prev_vb lhs AND, None
+              pp_token ~after:prev_vb ~before:lhs AND, None
           in
           let kw = Keyword.decorate token ~extension:None attrs ~later:lhs in
           match modifier with
           | None -> kw
           | Some tok ->
-            let modif = token_between kw lhs tok in
+            let modif = pp_token ~after:kw ~before:lhs tok in
             kw ^/^ modif
         in
         let binding = Binding.pp ~keyword binding in
@@ -2399,16 +2395,16 @@ end = struct
             match !previous_mb with
             | None ->
               Keyword.decorate
-                (token_before ~start:loc.Location.loc_start lhs MODULE)
+                (pp_token ~inside:loc ~before:lhs MODULE)
                 ~extension attrs ~later:lhs,
               rec_token ~recursive_by_default:false rf
             | Some prev_mb ->
-              token_between prev_mb lhs AND, None
+              pp_token ~after:prev_mb ~before:lhs AND, None
           in
           match modifier with
           | None -> kw
           | Some tok ->
-            let modif = token_between kw lhs tok in
+            let modif = pp_token ~after:kw ~before:lhs tok in
             kw ^/^ modif
         in
         let binding = Binding.Module.pp ~context:Struct ~keyword binding in
@@ -2427,7 +2423,7 @@ end = struct
       { pincl_mod; pincl_attributes; pincl_loc } =
     let incl = Module_expr.pp pincl_mod in
     let kw =
-      Keyword.decorate (token_before ~start:pincl_loc.loc_start incl INCLUDE)
+      Keyword.decorate (pp_token ~inside:pincl_loc ~before:incl INCLUDE)
         ~extension attrs ~later:incl
     in
     Attribute.attach_to_top_item
@@ -2538,7 +2534,7 @@ end = struct
       { pincl_mod; pincl_attributes; pincl_loc } =
     let incl = Module_type.pp pincl_mod in
     let kw =
-      Keyword.decorate (token_before ~start:pincl_loc.loc_start incl INCLUDE)
+      Keyword.decorate (pp_token ~inside:pincl_loc ~before:incl INCLUDE)
         ~extension attrs ~later:incl
     in
     Attribute.attach_to_top_item
@@ -2559,12 +2555,12 @@ end = struct
         let keyword =
           let decorate ?extension tok =
             Keyword.decorate
-              (token_before ~start:md.pmd_loc.loc_start md.pmd_name tok)
+              (pp_token ~inside:md.pmd_loc ~before:md.pmd_name tok)
               ~extension attrs ~later:md.pmd_name
           in
           if !i = 0 then 
             let module_ = decorate ?extension MODULE in
-            group (module_ ^/^ token_between module_ md.pmd_name REC)
+            group (module_ ^/^ pp_token ~after:module_ ~before:md.pmd_name REC)
           else
             decorate AND
         in
@@ -2648,15 +2644,15 @@ end = struct
           separate_map (break 1) ~f:(fun {loc; txt} ->
             dquotes (Constant.pp_string_lit ~loc txt)) p ps
         in
-        let equals = token_between ctyp prims EQUAL in
+        let equals = pp_token ~after:ctyp ~before:prims EQUAL in
         Parser.EXTERNAL, ctyp ^^ break_before (group (equals ^/^ prims))
     in
     let kw =
       Keyword.decorate
-        (token_before ~start:vd.pval_loc.loc_start name tok)
+        (pp_token ~inside:vd.pval_loc ~before:name tok)
         ~extension attrs ~later:name
     in
-    let colon = token_between name with_prim COLON in
+    let colon = pp_token ~after:name ~before:with_prim COLON in
     let doc =
       prefix ~indent:2 ~spaces:1
         (prefix ~indent:2 ~spaces:1 kw name)
@@ -2698,7 +2694,7 @@ end = struct
     in
     let rhs = Attribute.attach_to_top_item rhs ptyext_attributes in
     let keyword =
-      Keyword.decorate (token_before ~start:ptyext_loc.loc_start lhs TYPE)
+      Keyword.decorate (pp_token ~inside:ptyext_loc ~before:lhs TYPE)
         ~extension attrs ~later:lhs
     in
     Binding.pp_simple ~keyword ~binder:PLUSEQ lhs rhs
@@ -2729,7 +2725,7 @@ end = struct
       { ptyexn_constructor; ptyexn_attributes; ptyexn_loc } =
     let cstr = Constructor_decl.pp_extension ptyexn_constructor in
     let kw =
-      Keyword.decorate (token_before ~start:ptyexn_loc.loc_start cstr EXCEPTION)
+      Keyword.decorate (pp_token ~inside:ptyexn_loc ~before:cstr EXCEPTION)
         ~extension attrs ~later:cstr
     in
     let doc = group (prefix ~spaces:1 ~indent:2 kw cstr) in
@@ -2764,7 +2760,7 @@ and Type_declaration : sig
     -> document
 
   type keyword =
-    | Formatted of document
+    | With_type of document
     | Type of string loc option * rec_flag
     | And
 
@@ -2822,7 +2818,7 @@ end = struct
   let label_declaration { pld_name; pld_mutable; pld_type; pld_attributes; _ } =
     let name = str pld_name in
     let typ  = Core_type.pp pld_type in
-    let colon = token_between name typ COLON in
+    let colon = pp_token ~after:name ~before:typ COLON in
     let lhs = group (name ^/^ colon) in
     let with_mutable_ =
       match pld_mutable with
@@ -2868,7 +2864,7 @@ end = struct
   let pp_constraint (ct1, ct2, _) =
     let ct1 = Core_type.pp ct1 in
     let ct2 = Core_type.pp ct2 in
-    let equals = token_between ct1 ct2 EQUAL in
+    let equals = pp_token ~after:ct1 ~before:ct2 EQUAL in
     ct1 ^/^ equals ^/^ ct2
 
   let add_constraints decl = function
@@ -2877,12 +2873,12 @@ end = struct
       let cstrs =
         separate_map (PPrint.break 1) ~f:pp_constraint cstr cstrs
       in
-      let kw = token_between decl cstrs CONSTRAINT in
+      let kw = pp_token ~after:decl ~before:cstrs CONSTRAINT in
       prefix ~indent:2 ~spaces:1 decl
         (kw ^/^ hang 2 (break_before ~spaces:0 cstrs))
 
   type keyword =
-    | Formatted of document
+    | With_type of document
     | Type of string loc option * rec_flag
     | And
 
@@ -2903,11 +2899,11 @@ end = struct
           Some (group (string ~loc "private" ^/^ manifest))
       | Some manifest, None, kind ->
           let kind = non_abstract_kind kind in
-          let equals = token_between manifest kind EQUAL in
+          let equals = pp_token ~after:manifest ~before:kind EQUAL in
           Some (manifest ^/^ equals ^/^ kind)
       | Some manifest, Some loc, kind ->
           let private_ = string ~loc "private" in
-          let equals = token_between manifest private_ EQUAL in
+          let equals = pp_token ~after:manifest ~before:private_ EQUAL in
           Some (manifest ^/^ equals ^/^ private_ ^/^ non_abstract_kind kind)
       | None, Some loc, kind ->
           assert (kind <> Ptype_abstract);
@@ -2918,17 +2914,16 @@ end = struct
           Some (non_abstract_kind kind)
     in
     let keyword =
+      let pp_tok tok = pp_token ~inside:ptype_loc ~before:lhs tok in
       match keyword with
-      | Formatted doc ->
-        doc
+      | With_type previous_tok ->
+        group (previous_tok ^/^ pp_token ~after:previous_tok ~before:lhs TYPE)
+      | And -> pp_tok AND
       | Type (extension, rf) ->
-        let tok = token_before ~start:ptype_loc.loc_start lhs TYPE in
-        let tok = Keyword.decorate tok ~extension [] ~later:lhs in
-        begin match rf with
+        let tok = Keyword.decorate (pp_tok TYPE) ~extension [] ~later:lhs in
+        match rf with
         | Recursive -> tok
-        | Nonrecursive -> group (tok ^/^ token_between tok lhs NONREC)
-        end
-      | And -> token_before ~start:ptype_loc.loc_start lhs AND
+        | Nonrecursive -> group (tok ^/^ pp_token ~after:tok ~before:lhs NONREC)
     in
     match rhs with
     | Some rhs ->
@@ -3030,14 +3025,14 @@ end = struct
   and pp_open ~loc od ct attrs =
     let od = Open_description.pp ~ext_attrs:(None, []) ~extra_attrs:attrs od in
     let ct = pp ct in
-    let in_ = token_between od ct IN in
-    let let_ = token_before ~start:loc.Location.loc_start od LET in
+    let in_ = pp_token ~after:od ~before:ct IN in
+    let let_ = pp_token ~inside:loc ~before:od LET in
     group (let_ ^/^ od ^/^ in_) ^/^ ct
 
   and pp_arrow lbl ct cty =
     let param = Core_type.pp_param (lbl, ct) in
     let cty = pp cty in
-    let arrow = token_between param cty MINUSGREATER in
+    let arrow = pp_token ~after:param ~before:cty MINUSGREATER in
     param ^/^ group (arrow ^/^ cty)
 
   and pp_desc loc desc attrs =
@@ -3066,10 +3061,10 @@ end = struct
     let body = pp ce in
     (* FIXME: copied from expressions. factorize. *)
     let fun_ =
-      let token = token_before ~start:loc.Location.loc_start params FUN in
+      let token = pp_token ~inside:loc ~before:params FUN in
       Keyword.decorate token ~extension:None attrs ~later:params
     in
-    let arrow = token_between params body MINUSGREATER in
+    let arrow = pp_token ~after:params ~before:body MINUSGREATER in
     prefix ~indent:2 ~spaces:1
       (group ((prefix ~indent:2 ~spaces:1 fun_ params) ^/^ arrow))
       body
@@ -3102,16 +3097,16 @@ end = struct
           let token, modifier =
             match !previous_vb with
             | None ->
-              token_before ~start:loc.Location.loc_start lhs LET,
+              pp_token ~inside:loc ~before:lhs LET,
               rec_token ~recursive_by_default:false rf
             | Some prev_vb ->
-              token_between prev_vb lhs AND, None
+              pp_token ~after:prev_vb ~before:lhs AND, None
           in
           let kw = Keyword.decorate token ~extension:None attrs ~later:lhs in
           match modifier with
           | None -> kw
           | Some tok ->
-            let modif = token_between kw lhs tok in
+            let modif = pp_token ~after:kw ~before:lhs tok in
             kw ^/^ modif
         in
         let binding = Binding.pp ~keyword binding in
@@ -3121,19 +3116,19 @@ end = struct
     in
     let vbs = separate hardline (List.hd vbs) (List.tl vbs) in
     let ce = pp ce in
-    let in_ = token_between vbs ce IN in
+    let in_ = pp_token ~after:vbs ~before:ce IN in
     group (vbs ^/^ in_) ^^ hardline ++ ce
 
   and pp_constraint ce ct =
     let ce = pp ce in
     let ct = Class_type.pp ct in
-    let colon = token_between ce ct COLON in
+    let colon = pp_token ~after:ce ~before:ct COLON in
     group (parens (ce ^/^ colon ^/^ ct))
 
   and pp_open ~loc od ce attrs =
     let od = Open_description.pp ~ext_attrs:(None, []) ~extra_attrs:attrs od in
     let ce = pp ce in
-    let in_ = token_between od ce IN in
+    let in_ = pp_token ~after:od ~before:ce IN in
     let let_ =
       let loc = { loc with Location.loc_end = od.loc.loc_start } in
       string ~loc "let"
@@ -3165,11 +3160,11 @@ end = struct
   let pp_inherit ~loc override ce alias =
     let pre =
       let ce = Class_expr.pp ce in
-      let inh_kw = token_before ~start:loc.Location.loc_start ce INHERIT in
+      let inh_kw = pp_token ~inside:loc ~before:ce INHERIT in
       group (
         match override with
         | Override ->
-          let bang = token_between inh_kw ce BANG in
+          let bang = pp_token ~after:inh_kw ~before:ce BANG in
           inh_kw ^^ bang ^/^ ce
         | _ -> inh_kw ^/^ ce
       )
@@ -3178,39 +3173,39 @@ end = struct
     | None -> pre
     | Some name ->
       let name = str name in
-      let as_ = token_between pre name AS in
+      let as_ = pp_token ~after:pre ~before:name AS in
       group (pre ^/^ as_ ^/^ name)
 
-  let pp_virtual ~start kind name mod_tok ct =
+  let pp_virtual ~loc kind name mod_tok ct =
     let name = str name in
     let ct = Core_type.pp ct in
     let keyword =
-      let kw = token_before ~start name kind in
-      let virt = token_between kw name VIRTUAL in
+      let kw = pp_token ~inside:loc ~before:name kind in
+      let virt = pp_token ~after:kw ~before:name VIRTUAL in
       group (
         match mod_tok with
         | None -> kw ^/^ virt
         | Some tok ->
-          let tok = token_between kw name tok in
+          let tok = pp_token ~after:kw ~before:name tok in
           kw ^/^ merge_possibly_swapped ~sep:(PPrint.break 1) tok virt
       )
     in
     Binding.pp_simple ~binder:COLON ~keyword name ct
 
-  let pp_concrete ~start kind name mod_tok override params
+  let pp_concrete ~loc kind name mod_tok override params
       (constr, coerce) expr =
     let name = str name in
     let keyword =
-      let kw = token_before ~start name kind in
+      let kw = pp_token ~inside:loc ~before:name kind in
       let with_bang =
         match override with
-        | Override -> kw ^^ token_between kw name BANG
+        | Override -> kw ^^ pp_token ~after:kw ~before:name BANG
         | _ -> kw
       in
       group (
         match mod_tok with
         | None -> with_bang
-        | Some tok -> with_bang ^/^ token_between with_bang name tok
+        | Some tok -> with_bang ^/^ pp_token ~after:with_bang ~before:name tok
       )
     in
     let params = List.map Fun_param.pp params in
@@ -3223,10 +3218,10 @@ end = struct
     in
     Binding.pp ~keyword { lhs = name; params; constr; coerce; rhs }
 
-  let pp_field_kind ~loc:{ Location.loc_start; _ } kind name mod_tok = function
-    | Cfk_virtual ct -> pp_virtual ~start:loc_start kind name mod_tok ct
+  let pp_field_kind ~loc kind name mod_tok = function
+    | Cfk_virtual ct -> pp_virtual ~loc kind name mod_tok ct
     | Cfk_concrete (override, params, cts, expr) ->
-      pp_concrete ~start:loc_start kind name mod_tok override params cts expr
+      pp_concrete ~loc kind name mod_tok override params cts expr
 
   let pp_val ~loc name mut cfk =
     let modifier_token =
@@ -3244,15 +3239,15 @@ end = struct
     in
     pp_field_kind ~loc METHOD name modifier_token cfk
 
-  let pp_constraint ~loc:{ Location.loc_start; _ } ct1 ct2 =
+  let pp_constraint ~loc ct1 ct2 =
     let ct1 = Core_type.pp ct1 in
     let ct2 = Core_type.pp ct2 in
-    let keyword = token_before ~start:loc_start ct1 CONSTRAINT in
+    let keyword = pp_token ~inside:loc ~before:ct1 CONSTRAINT in
     Binding.pp_simple ~keyword ct1 ct2
 
-  let pp_init ~loc:{ Location.loc_start; _ } expr =
+  let pp_init ~loc expr =
     let expr = Expression.pp expr in
-    let init = token_before ~start:loc_start expr INITIALIZER in
+    let init = pp_token ~inside:loc ~before:expr INITIALIZER in
     group (init ^/^ expr)
 
   let pp_field_desc ~loc = function
@@ -3274,23 +3269,23 @@ end = struct
       match pcstr_self with
       | None -> (* no self: we don't know what comes next yet! *)
         let later = { txt = (); loc = { loc with loc_start = loc.loc_end } } in
-        let kw = token_before ~start:loc.loc_start later OBJECT in
+        let kw = pp_token ~inside:loc ~before:later OBJECT in
         Keyword.decorate kw ~extension attrs ~later
       | Some pcstr_self ->
         let self = Pattern.pp pcstr_self in
         let obj =
-          Keyword.decorate (token_before ~start:loc.loc_start self OBJECT)
+          Keyword.decorate (pp_token ~inside:loc ~before:self OBJECT)
             ~extension attrs ~later:self
         in
         group (obj ^/^ parens self)
     in
     match pcstr_fields with
     | [] ->
-      let end_ = token_after ~stop:loc.loc_end obj_with_self END in
+      let end_ = pp_token ~inside:loc ~after:obj_with_self END in
       obj_with_self ^/^ end_
     | f :: fs ->
       let fields = separate_map PPrint.(twice hardline) ~f:pp_field f fs in
-      let end_ = token_after ~stop:loc.loc_end fields END in
+      let end_ = pp_token ~inside:loc ~after:fields END in
       group (
         obj_with_self ^^ (nest 2 (break_before fields)) ^/^ end_
       )
@@ -3301,46 +3296,46 @@ and Class_signature : sig
 end = struct
   let pp_inherit ~loc ct =
     let ct = Class_type.pp ct in
-    let inh_kw = token_before ~start:loc.Location.loc_start ct INHERIT in
+    let inh_kw = pp_token ~inside:loc ~before:ct INHERIT in
     group (inh_kw ^/^ ct)
 
-  let pp_maybe_virtual ~start kind name mod_tok vf ct =
+  let pp_maybe_virtual ~loc kind name mod_tok vf ct =
     let name = str name in
     let ct = Core_type.pp ct in
     let keyword =
-      let kw = token_before ~start name kind in
+      let kw = pp_token ~inside:loc ~before:name kind in
       group (
         match mod_tok, vf with
         | None, Concrete -> kw
         | Some tok, Concrete ->
-          let tok = token_between kw name tok in
+          let tok = pp_token ~after:kw ~before:name tok in
           kw ^/^ tok
         | None, Virtual ->
-          let virt = token_between kw name VIRTUAL in
+          let virt = pp_token ~after:kw ~before:name VIRTUAL in
           kw ^/^ virt
         | Some tok, Virtual ->
-          let virt = token_between kw name VIRTUAL in
-          let tok = token_between kw name tok in
+          let virt = pp_token ~after:kw ~before:name VIRTUAL in
+          let tok = pp_token ~after:kw ~before:name tok in
           kw ^/^ merge_possibly_swapped ~sep:(PPrint.break 1) tok virt
       )
     in
     Binding.pp_simple ~binder:COLON ~keyword name ct
 
-  let pp_val ~loc:{ Location.loc_start; _ } (name, mut, vf, ct) =
+  let pp_val ~loc (name, mut, vf, ct) =
     let mod_tok =
       match mut with
       | Immutable -> None
       | Mutable _ -> Some Source_parsing.Parser.MUTABLE
     in
-    pp_maybe_virtual ~start:loc_start VAL name mod_tok vf ct
+    pp_maybe_virtual ~loc VAL name mod_tok vf ct
 
-  let pp_method ~loc:{ Location.loc_start; _ } (name, priv, vf, ct) =
+  let pp_method ~loc (name, priv, vf, ct) =
     let mod_tok =
       match priv with
       | Public -> None
       | Private -> Some Source_parsing.Parser.PRIVATE
     in
-    pp_maybe_virtual ~start:loc_start METHOD name mod_tok vf ct
+    pp_maybe_virtual ~loc METHOD name mod_tok vf ct
 
   let pp_field_desc ~loc = function
     | Pctf_inherit ct -> pp_inherit ~loc ct
@@ -3361,21 +3356,21 @@ end = struct
       | None -> Empty_delimited.pp ~loc [] OBJECT END
       | Some pcsig_self ->
         let self = parens (Core_type.pp pcsig_self) in
-        let obj_ = token_before ~start:loc.loc_start self OBJECT in
-        let end_ = token_after ~stop:loc.loc_end self END in
+        let obj_ = pp_token ~inside:loc ~before:self OBJECT in
+        let end_ = pp_token ~inside:loc ~after:self END in
         prefix ~indent:2 ~spaces:1 (group (obj_ ^/^ self)) end_
       end
     | f :: fs ->
       let fields = separate_map PPrint.(twice hardline) ~f:pp_field f fs in
       let obj_ =
-        let obj = token_before ~start:loc.loc_start fields OBJECT in
+        let obj = pp_token ~inside:loc ~before:fields OBJECT in
         match pcsig_self with
         | None -> obj
         | Some pcsig_self ->
           let self = parens (Core_type.pp pcsig_self) in
           group (obj ^/^ self)
       in
-      let end_ = token_after ~stop:loc.loc_end fields END in
+      let end_ = pp_token ~inside:loc ~after:fields END in
       group (prefix ~indent:2 ~spaces:1 obj_ fields ^/^ end_)
 end
 
@@ -3409,15 +3404,15 @@ end = struct
         let keyword =
           match !previous_cd with
           | None ->
-            Keyword.decorate (token_before ~start:pci_loc.loc_start lhs CLASS)
+            Keyword.decorate (pp_token ~inside:pci_loc ~before:lhs CLASS)
               ~extension attrs ~later:lhs
-          | Some cd -> token_between cd lhs AND
+          | Some cd -> pp_token ~after:cd ~before:lhs AND
         in
         let keyword =
           match pci_virt with
           | Concrete -> keyword
           | Virtual ->
-            let virt = token_between keyword lhs VIRTUAL in
+            let virt = pp_token ~after:keyword ~before:lhs VIRTUAL in
             group (keyword ^/^ virt)
         in
         let doc = Binding.pp binding ~keyword in
@@ -3460,15 +3455,15 @@ end = struct
         in
         let keyword =
           match !previous_cd with
-          | None -> token_before ~start:pci_loc.loc_start lhs CLASS
-          | Some cd -> token_between cd lhs AND
+          | None -> pp_token ~inside:pci_loc ~before:lhs CLASS
+          | Some cd -> pp_token ~after:cd ~before:lhs AND
         in
         let keyword = Keyword.decorate keyword ~extension attrs ~later:lhs in
         let keyword =
           match pci_virt with
           | Concrete -> keyword
           | Virtual ->
-            let virt = token_between keyword lhs VIRTUAL in
+            let virt = pp_token ~after:keyword ~before:lhs VIRTUAL in
             group (keyword ^/^ virt)
         in
         let doc = Binding.pp binding ~binder:COLON ~keyword in
@@ -3510,11 +3505,11 @@ end = struct
         in
         let keyword =
           match !previous_cd with
-          | Some cd -> token_between cd lhs AND
+          | Some cd -> pp_token ~after:cd ~before:lhs AND
           | None ->
-            let class_ = token_before ~start:pci_loc.loc_start lhs CLASS in
+            let class_ = pp_token ~inside:pci_loc ~before:lhs CLASS in
             let type_ =
-              Keyword.decorate (token_between class_ lhs TYPE)
+              Keyword.decorate (pp_token ~after:class_ ~before:lhs TYPE)
                 ~extension attrs ~later:lhs
             in
             group (class_ ^/^ type_)
@@ -3523,7 +3518,7 @@ end = struct
           match pci_virt with
           | Concrete -> keyword
           | Virtual ->
-            let virt = token_between keyword lhs VIRTUAL in
+            let virt = pp_token ~after:keyword ~before:lhs VIRTUAL in
             group (keyword ^/^ virt)
         in
         let doc = Binding.pp binding ~keyword in
@@ -3544,10 +3539,10 @@ end = struct
       { popen_expr; popen_override; popen_attributes; popen_loc } =
     let expr = Longident.pp popen_expr in
     let kw =
-      let tok = token_before ~start:popen_loc.loc_start expr OPEN in
+      let tok = pp_token ~inside:popen_loc ~before:expr OPEN in
       match popen_override with
       | Override ->
-        let over = token_between tok expr BANG in
+        let over = pp_token ~after:tok ~before:expr BANG in
         tok ^^ over
       | _ -> tok
     in
@@ -3564,10 +3559,10 @@ end = struct
       { popen_expr; popen_override; popen_attributes; popen_loc } =
     let expr = Module_expr.pp popen_expr in
     let kw =
-      let tok = token_before ~start:popen_loc.loc_start expr OPEN in
+      let tok = pp_token ~inside:popen_loc ~before:expr OPEN in
       match popen_override with
       | Override ->
-        let over = token_between tok expr BANG in
+        let over = pp_token ~after:tok ~before:expr BANG in
         tok ^^ over
       | _ -> tok
     in

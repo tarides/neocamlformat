@@ -38,8 +38,8 @@ let gadt_constructor name args res_ty attributes =
     if has_args args then
       let args = constructor_arguments args in
       let res  = !pp_core_type (Option.get res_ty) in
-      let colon = token_between name args COLON in
-      let arrow = token_between args res MINUSGREATER in
+      let colon = pp_token ~after:name ~before:args COLON in
+      let arrow = pp_token ~after:args ~before:res MINUSGREATER in
       group (
         name ^^
         nest 2 (

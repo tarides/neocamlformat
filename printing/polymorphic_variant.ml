@@ -49,7 +49,7 @@ let dock_fields ~opening_token x xs =
   List.fold_left
     (fun acc elt ->
         let elt = fmt elt in
-        let pipe = token_between acc elt BAR in
+        let pipe = pp_token ~after:acc ~before:elt BAR in
         acc ^/^ group (pipe ^^ elt))
     (group (opening_token ^^ fmt x))
     xs
@@ -61,12 +61,12 @@ let pp_row_prefix ~prefix_if_necessary ~loc ~opening_token x xs =
   in
   let x = Row_field.pp x in
   let xs = List.map Row_field.pp xs in
-  let opening_token = token_before ~start:loc.loc_start x opening_token in
+  let opening_token = pp_token ~inside:loc ~before:x opening_token in
   let opening_token =
     if not needs_prefix then
       opening_token
     else
-      let pipe = token_between opening_token x BAR in
+      let pipe = pp_token ~after:opening_token ~before:x BAR in
       opening_token ^/^ pipe
   in
   dock_fields ~opening_token x xs
@@ -74,13 +74,13 @@ let pp_row_prefix ~prefix_if_necessary ~loc ~opening_token x xs =
 let pp_simple_row ~loc ~opening_token ~hang_indent = function
   | [] -> 
     let lbracket = token_between_locs loc.loc_start loc.loc_end opening_token in
-    let rbracket = token_after ~stop:loc.loc_end lbracket RBRACKET in
+    let rbracket = pp_token ~inside:loc ~after:lbracket RBRACKET in
     group (lbracket ^/^ rbracket)
   | x :: xs ->
     let fields =
       pp_row_prefix ~prefix_if_necessary:true ~loc ~opening_token x xs
     in
-    let rbracket = token_after ~stop:loc.loc_end fields RBRACKET in
+    let rbracket = pp_token ~inside:loc ~after:fields RBRACKET in
     hang hang_indent (fields ^/^ rbracket)
 
 let pp_mixed_row ~loc ~labels:(l, ls) = function
@@ -91,8 +91,8 @@ let pp_mixed_row ~loc ~labels:(l, ls) = function
         ~opening_token:LBRACKETLESS x xs
     in
     let labels = flow_map (PPrint.break 1) Tag.pp l ls in
-    let sep = token_between fields labels GREATER in
-    let rbracket = token_after ~stop:loc.loc_end labels RBRACKET in
+    let sep = pp_token ~after:fields ~before:labels GREATER in
+    let rbracket = pp_token ~inside:loc ~after:labels RBRACKET in
     hang 1 (fields ^/^ sep ^/^ labels ^/^ rbracket)
 
 let pp_row ~loc fields closed present =

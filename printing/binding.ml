@@ -19,7 +19,7 @@ let attach_annot doc ~sep annot =
   match annot with
   | None -> doc
   | Some annot ->
-    let sep = token_between doc annot sep in
+    let sep = pp_token ~after:doc ~before:annot sep in
     (prefix ~indent:2 ~spaces:1 doc sep) ^^ nest 2 (break_before annot)
 
 let pp ?(binder=Source_parsing.Parser.EQUAL) ?keyword
@@ -35,7 +35,7 @@ let pp ?(binder=Source_parsing.Parser.EQUAL) ?keyword
   match rhs with
   | None -> pre ^^ with_coercion
   | Some rhs ->
-    let binder = token_between with_coercion rhs binder in
+    let binder = pp_token ~after:with_coercion ~before:rhs binder in
     let lhs = pre ^^ group (with_coercion ^/^ binder) in
     prefix ~indent:2 ~spaces:1 lhs rhs
 
@@ -71,37 +71,37 @@ module Module = struct
     let with_constraint, binder =
       let body = located_body body in
       match constr, context with
-      | None, Struct -> params, token_between params body EQUAL
-      | None, Sig    -> params, token_between params body COLON
+      | None, Struct -> params, pp_token ~after:params ~before:body EQUAL
+      | None, Sig    -> params, pp_token ~after:params ~before:body COLON
       | Sig sg, Struct ->
         let sep =
-          let colon = token_between params sg COLON in
-          let sig_ = token_between colon sg SIG in
+          let colon = pp_token ~after:params ~before:sg COLON in
+          let sig_ = pp_token ~after:colon ~before:sg SIG in
           prefix ~indent:2 ~spaces:1 (group (break_before colon)) sig_
         in
         let doc =
           group (params ^^ nest 2 sep)
           ^^ nest 2 (PPrint.hardline ++ sg)
         in
-        let end_ = token_between doc body END in
-        let eq = token_between end_ body EQUAL in
+        let end_ = pp_token ~after:doc ~before:body END in
+        let eq = pp_token ~after:end_ ~before:body EQUAL in
         doc, end_ ^/^ eq
       | Mty constraint_, Struct ->
         let doc = attach_annot params ~sep:COLON (Some constraint_) in
-        doc, token_between doc body EQUAL
+        doc, pp_token ~after:doc ~before:body EQUAL
       | _ , Sig -> assert false
     in
     let binder, rhs =
       match body with
       | Items items ->
         let doc =
-          let end_ = token_between items attributes END in
+          let end_ = pp_token ~after:items ~before:attributes END in
           concat ~sep:hardline
             (nest 2 (hardline ++ items))
             end_
         in
         let open_ =
-          token_between binder doc
+          pp_token ~after:binder ~before:doc
             (match context with Struct -> STRUCT | Sig -> SIG)
         in
         binder ^/^ open_, doc
