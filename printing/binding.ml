@@ -37,7 +37,7 @@ let pp ?(binder=Source_parsing.Parser.EQUAL) ?keyword
   | Some rhs ->
     let binder = pp_token ~after:with_coercion ~before:rhs binder in
     let lhs = pre ^^ group (with_coercion ^/^ binder) in
-    prefix ~indent:2 ~spaces:1 lhs rhs
+    concat ~indent:2 ~sep:(break 1) lhs rhs (* Not prefix: no grouping *)
 
 let pp_simple ?binder ~keyword lhs rhs =
   let loc = { lhs.loc with loc_start = lhs.loc.loc_end } in

@@ -1156,7 +1156,7 @@ end = struct
         let guarded =
           let guard = pp guard in
           let when_ = pp_token ~after:lhs ~before:guard WHEN in
-          group (prefix ~indent:2 ~spaces:1 when_ guard)
+          prefix ~indent:2 ~spaces:1 when_ guard
         in
         let with_arrow =
           let arrow = pp_token ~after:guarded ~before:rhs MINUSGREATER in

@@ -119,4 +119,4 @@ let knr_if_then_else if_branches else_branch =
       group (mk_else opening ^/^ opening) ^^
       nest 2 (break_before else_branch) ^/^ closing
   in
-  group (ifs ^^ group (break_before else_))
+  ifs ^/^ else_
