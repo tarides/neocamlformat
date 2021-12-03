@@ -121,6 +121,7 @@ let cmd =
            output_string oc fmted;
            output_string oc "\n";
            flush oc;
+           close_out oc;
            ignore (Sys.command ("mv " ^ tmpfile ^ " " ^ fn))
          )
     ) files;
