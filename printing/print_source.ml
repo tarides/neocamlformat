@@ -312,6 +312,8 @@ end = struct
         token ^^ percent ^^ str ext
     in
     Attribute.attach_to_item ~spaces:0 kw attrs
+
+  let () = If_then_else.imported_decorate := decorate
 end
 
 and Empty_delimited : sig
@@ -1466,96 +1468,9 @@ end = struct
     pp_gen_set ?prefix ~dot:(!^"." ++ op) enclose accessed indices
       val_
 
-  and fmt_if_branch exp =
-    let style = !Options.If_branch.parens_style in
-    match !Options.If_branch.parenthesing_situations with
-    | Always ->
-      let opening =
-        string ~loc:(Location.start_point exp.pexp_loc)
-          (match style with
-           | Parens -> "("
-           | Begin_end -> "begin")
-      in
-      let closing =
-        string ~loc:(Location.end_point exp.pexp_loc)
-          (match style with
-           | Parens -> ")"
-           | Begin_end -> "end")
-      in
-      [ opening; pp exp; closing ]
-    | When_needed ->
-      [pp exp]
-    | When_nontrivial ->
-      assert false
-
-  and fmt_if_chunk ~first_branch ib =
-    let cond = pp ib.if_cond in
-    let keyword =
-      let if_kw =
-        let if_ = pp_token ~inside:ib.if_loc ~before:cond IF in
-        if first_branch then
-          if_
-        else
-          let else_ = pp_token ~inside:ib.if_loc ~before:if_ ELSE in
-          else_ ^/^ if_
-      in
-      Keyword.decorate if_kw ~extension:ib.if_ext ib.if_attrs ~later:cond
-    in
-    match fmt_if_branch ib.if_body with
-    | [then_branch] ->
-      let then_kw = pp_token ~after:cond ~before:then_branch THEN in
-      let if_and_cond =
-        group (
-          keyword ^^
-          nest 2 (break_before cond) ^/^
-          then_kw
-        )
-      in
-      concat ~indent:2 ~sep:(break 1) if_and_cond then_branch
-    | [opening; then_branch; closing] ->
-      let then_kw = pp_token ~after:cond ~before:then_branch THEN in
-      let if_and_cond =
-        group (
-          keyword ^^
-          nest 2 (break_before cond) ^/^
-          group (then_kw ^/^ opening)
-        )
-      in
-      concat ~sep:(break 0)
-        (concat ~indent:2 ~sep:(break 0) if_and_cond then_branch)
-        closing
-    | _ ->
-      assert false
-
-  and pp_if_then if_branches =
-    let rec iterator ?(first_branch=true) = function
-      | [] -> assert false
-      | [ x ] ->
-        fmt_if_chunk ~first_branch x
-      | x :: xs ->
-        fmt_if_chunk ~first_branch x
-          ^/^ iterator ~first_branch:false xs
-    in
-    iterator if_branches
-
-  and pp_if_then_else if_branches else_branch =
-    let rec iterator ?(first_branch=true) = function
-      | [] -> assert false
-      | [ x ] ->
-        fmt_if_chunk ~first_branch x
-      | x :: xs ->
-        fmt_if_chunk ~first_branch x
-          ^/^ iterator ~first_branch:false xs
-    in
-    let if_ = iterator if_branches in
-    let else_ =
-      let else_branch = pp else_branch in
-      let else_ = pp_token ~after:if_ ~before:else_branch ELSE in
-      break_before else_ ^^
-      nest 2 (break_before else_branch)
-    in
-    let doc = group (if_ ^^ else_) in
-    doc
+  (* TODO: add formating options *)
+  and pp_if_then = If_then_else.knr_if_then
+  and pp_if_then_else = If_then_else.knr_if_then_else
 
   and pp_sequence e1 e2 =
     let compact =
@@ -1785,6 +1700,8 @@ end = struct
     let body = pp body in
     let in_ = pp_token ~after:bindings ~before:body IN in
     (group (bindings ^/^ in_) ^^ hardline ++ body)
+
+  let () = If_then_else.imported_pp_exp := pp
 end
 
 and Fun_param : sig
