@@ -220,9 +220,16 @@ end = struct
           with_attrs
           (pp_doc attr_payload ~loc:attr_loc)
       in
-      if kind = Attached_to_structure_item && requirement doc.txt < 80 (* Ugly! *)
-      then
-        break_after ~spaces:0 doc
+      if kind = Attached_to_structure_item then
+        (* This is a ugly hack: we want a blank like to follow the document, so
+           the post item docstring is not deemed ambiguous.
+           However, if we add a hardline here, then there will be two blank
+           lines: yirk!
+           By adding enough space to go over 80c, we ensure that a blank line
+           will follow. But also, we know that PPrint doesn't print trailing
+           whitespaces. So the these, while being counted towards the document
+           {!requirement} will never actually get printed. *)
+        break_after ~spaces:81 doc
       else
         doc
 
