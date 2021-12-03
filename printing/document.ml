@@ -251,7 +251,7 @@ let merge_possibly_swapped ?(sep=PPrint.empty) d1 d2 =
   { txt; loc = merge_locs t1.loc t2.loc }
 
 (* FIXME: sep is shit, remove. *)
-let concat ?(sep=PPrint.empty) ?(indent=0) t1 t2 =
+let concat' ~before_snd ~indent t1 t2 =
   let attach_fst, attach_snd = comments_between t1 t2 in
   let fst_chunk =
     List.fold_left (fun t elt ->
@@ -275,8 +275,11 @@ let concat ?(sep=PPrint.empty) ?(indent=0) t1 t2 =
       { txt; loc = merge_locs elt.loc t.loc }
     ) attach_snd t2
   in
-  let txt = fst_chunk.txt ^^ nest indent (sep ^^ snd_chunk.txt) in
+  let txt = fst_chunk.txt ^^ nest indent (before_snd snd_chunk.txt) in
   { txt; loc = merge_locs fst_chunk.loc snd_chunk.loc }
+
+let concat ?(sep=PPrint.empty) ?(indent=0) =
+  concat' ~before_snd:((^^) sep) ~indent
 
 let collate_toplevel_items lst =
   let rec insert_blanks = function
@@ -445,7 +448,8 @@ module Enclosed_separated = struct
       let fields = pp_fields x xs in
       let left = pp_token ~inside:loc ~before:fields left in
       let right = pp_token ~inside:loc ~after:fields right in
-      left ^^ fields ^^ group (break_before right)
+      let before_snd snd = PPrint.(group (break 1 ^^ snd)) in
+      concat' ~indent:0 ~before_snd (left ^^ fields) right
   end
 
   module Fit_or_vertical : sig
