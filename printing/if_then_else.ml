@@ -20,7 +20,7 @@ end
 
 type branch =
   | Expr of t
-  | Delimited of { opening: t; expr: t; closing: t }
+  | Delimited of { spacing: int; opening: t; expr: t; closing: t }
 
 let fmt_branch = function
   | { pexp_desc = Pexp_parens { begin_end; exp };
@@ -30,20 +30,23 @@ let fmt_branch = function
     | Pexp_tuple _ -> (* dubious *) Expr (pp e)
     | _ ->
       let expr = pp exp in
-      let opening =
-        pp_token ~inside:loc ~before:expr (if begin_end then BEGIN else LPAREN)
+      let spacing, opening, closing =
+        let open Parser in
+        if begin_end then
+          1, BEGIN, END
+        else
+          0, LPAREN, RPAREN
       in
-      let closing =
-        pp_token ~inside:loc ~after:expr (if begin_end then END else RPAREN)
-      in
-      Delimited {opening; expr; closing}
+      let opening = pp_token ~inside:loc ~before:expr opening in
+      let closing = pp_token ~inside:loc ~after:expr closing in
+      Delimited {spacing; opening; expr; closing}
     end
   | e -> Expr (pp e)
 
 type previous_chunk = [
   | `None
   | `Terminated
-  | `Requires_closing of t
+  | `Requires_closing of int * t
 ]
 
 let fmt_if_chunk ~(previous_chunk:previous_chunk) ib =
@@ -58,7 +61,8 @@ let fmt_if_chunk ~(previous_chunk:previous_chunk) ib =
         let else_if = else_ ^/^ if_ in
         match otherwise with
         | `Terminated -> else_if
-        | `Requires_closing closing -> group (closing ^/^ else_if)
+        | `Requires_closing (_, closing) ->
+          group (closing ^/^ else_if)
     in
     Keyword.decorate if_kw ~extension:ib.if_ext ib.if_attrs ~later:cond
   in
@@ -73,7 +77,7 @@ let fmt_if_chunk ~(previous_chunk:previous_chunk) ib =
       )
     in
     concat ~indent:2 ~sep:(break 1) if_and_cond then_branch, `Terminated
-  | Delimited {opening; expr = then_branch; closing} ->
+  | Delimited {spacing; opening; expr = then_branch; closing} ->
     let then_kw = pp_token ~after:cond ~before:then_branch THEN in
     let if_and_cond =
       group (
@@ -82,8 +86,8 @@ let fmt_if_chunk ~(previous_chunk:previous_chunk) ib =
         group (then_kw ^/^ opening)
       )
     in
-    concat ~indent:2 ~sep:(break 0) if_and_cond then_branch,
-    `Requires_closing closing
+    concat ~indent:2 ~sep:(break spacing) if_and_cond then_branch,
+    `Requires_closing (spacing, closing)
 
 let rec iterate_branches ?(previous_chunk=`None) = function
   | [] -> assert false
@@ -93,21 +97,25 @@ let rec iterate_branches ?(previous_chunk=`None) = function
     let other_branches, last_chunk_type =
       iterate_branches ~previous_chunk:chunk_type xs
     in
-    branch ^/^ other_branches, last_chunk_type
+    begin match chunk_type with
+    | `Terminated -> branch ^/^ other_branches
+    | `Requires_closing (spacing, _) ->
+      concat ~sep:(break spacing) branch other_branches
+    end, last_chunk_type
 
 let knr_if_then if_branches =
   let branches, last_chunk_type = iterate_branches if_branches in
   match last_chunk_type with
   | `Terminated -> branches
-  | `Requires_closing t -> concat ~sep:(break 0) branches t
+  | `Requires_closing (spacing, t) -> concat ~sep:(break spacing) branches t
 
 let knr_if_then_else if_branches else_branch =
   let ifs, last_chunk = iterate_branches if_branches in
   let else_ =
-    let mk_else before = 
+    let mk_else before =
       match last_chunk with
       | `Terminated -> pp_token ~after:ifs ~before ELSE
-      | `Requires_closing closing ->
+      | `Requires_closing (_, closing) ->
         let else_ = pp_token ~after:closing ~before ELSE in
         group (closing ^/^ else_)
     in
@@ -115,8 +123,13 @@ let knr_if_then_else if_branches else_branch =
     | Expr else_branch ->
       mk_else else_branch ^^
       nest 2 (break_before else_branch)
-    | Delimited {opening; expr = else_branch; closing} ->
-      group (mk_else opening ^/^ opening) ^^
-      nest 2 (break_before else_branch) ^/^ closing
+    | Delimited {spacing; opening; expr = else_branch; closing} ->
+      let kw_line =
+      group (mk_else opening ^/^ opening)
+      in
+      let body = nest 2 (break_before ~spaces:spacing else_branch) in
+      concat ~sep:(break spacing) (kw_line ^^ body) closing
   in
-  ifs ^/^ else_
+  match last_chunk with
+  | `Terminated -> ifs ^/^ else_
+  | `Requires_closing (spacing, _) -> concat ~sep:(break spacing) ifs else_
