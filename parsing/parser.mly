@@ -770,25 +770,6 @@ reversed_separated_nonempty_llist(separator, X):
   xs = rev(reversed_separated_nonempty_llist(separator, X))
     { xs }
 
-%inline inline_reversed_separated_nonempty_llist_located(separator, X):
-  x = X
-    { [ Location.none, x ] }
-| xs = reversed_separated_nonempty_llist_located(separator, X)
-  separator
-  x = X
-    { (make_loc $loc($2), x) :: xs }
-
-reversed_separated_nonempty_llist_located(separator, X):
-  xs = inline_reversed_separated_nonempty_llist_located(separator, X)
-    { xs }
-
-(* [separated_nonempty_llist(separator, X)] recognizes a nonempty list of [X]s,
-   separated with [separator]s, and produces an OCaml list in direct order --
-   that is, the first element in the input text appears first in this list. *)
-
-%inline separated_nonempty_llist_located(separator, X):
-  xs = rev(reversed_separated_nonempty_llist_located(separator, X))
-    { xs }
 
 %inline inline_separated_nonempty_llist(separator, X):
   xs = rev(inline_reversed_separated_nonempty_llist(separator, X))
@@ -1364,14 +1345,11 @@ module_type:
         %prec below_WITH
         { let param = mkrhs (Named (mknoloc None, $1)) $loc($1) in
           Pmty_functor([], [ param ], $3) }
-    | module_type WITH separated_nonempty_llist_located(AND, with_constraint)
+    | module_type WITH separated_nonempty_llist(AND, with_constraint)
         { (* Flattening. *)
           let hd = List.hd $3 in
           let tl = List.tl $3 in
-          let cstrs =
-            (With (make_loc $loc($2)), snd hd) ::
-            List.map (function loc, wc -> And loc, wc) tl
-          in
+          let cstrs = (With, hd) :: List.map (fun wc -> And, wc) tl in
           let mty = $1 in
           let mty, cstrs =
             match mty.pmty_desc with

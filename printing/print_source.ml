@@ -2010,42 +2010,63 @@ end = struct
       pp_regular_functor ~loc ~attrs params mty
 
   and attach_constraint mty is_first_cstr (kw, cstr) =
-    let keyword =
-      match kw with
-      | With loc -> string ~loc "with"
-      | And  loc -> string ~loc "and"
-    in
     let cstr =
       match cstr with
       | Pwith_type (lid, td) ->
-        Type_declaration.pp_with_constraint ~override_name:(Longident.pp lid)
+        let lid = Longident.pp lid in
+        let keyword =
+          pp_token ~after:mty ~before:lid
+            (match kw with With -> WITH | And -> AND)
+        in
+        Type_declaration.pp_with_constraint ~override_name:lid
           ~keyword:(With_type keyword) td
       | Pwith_typesubst (lid, td) ->
+        let lid = Longident.pp lid in
+        let keyword =
+          pp_token ~after:mty ~before:lid
+            (match kw with With -> WITH | And -> AND)
+        in
         Type_declaration.pp_with_constraint ~binder:COLONEQUAL
-          ~override_name:(Longident.pp lid)
+          ~override_name:lid
           ~keyword:(With_type keyword) td
       | Pwith_module (lid1, lid2) ->
         let d1 = Longident.pp lid1 in
         let d2 = Longident.pp lid2 in
+        let keyword =
+          pp_token ~after:mty ~before:d1
+            (match kw with With -> WITH | And -> AND)
+        in
         let module_ = pp_token ~after:keyword ~before:d1 MODULE in
         let keyword = keyword ^/^ module_ in
         Binding.pp_simple  ~keyword d1 d2
       | Pwith_modsubst (lid1, lid2) ->
         let d1 = Longident.pp lid1 in
         let d2 = Longident.pp lid2 in
+        let keyword =
+          pp_token ~after:mty ~before:d1
+            (match kw with With -> WITH | And -> AND)
+        in
         let module_ = pp_token ~after:keyword ~before:d1 MODULE in
         let keyword = keyword ^/^ module_ in
         Binding.pp_simple ~binder:COLONEQUAL ~keyword d1 d2
-      | Pwith_modtype (lid, mty) ->
+      | Pwith_modtype (lid, mty') ->
         let d1 = Longident.pp lid in
-        let d2 = Module_type.pp mty in
+        let d2 = Module_type.pp mty' in
+        let keyword =
+          pp_token ~after:mty ~before:d1
+            (match kw with With -> WITH | And -> AND)
+        in
         let module_ = pp_token ~after:keyword ~before:d1 MODULE in
         let type_ = pp_token ~after:module_ ~before:d1 TYPE in
         let keyword = keyword ^/^ module_ ^/^ type_ in
         Binding.pp_simple ~keyword d1 d2
-      | Pwith_modtypesubst (lid, mty) ->
+      | Pwith_modtypesubst (lid, mty') ->
         let d1 = Longident.pp lid in
-        let d2 = Module_type.pp mty in
+        let d2 = Module_type.pp mty' in
+        let keyword =
+          pp_token ~after:mty ~before:d1
+            (match kw with With -> WITH | And -> AND)
+        in
         let module_ = pp_token ~after:keyword ~before:d1 MODULE in
         let type_ = pp_token ~after:module_ ~before:d1 TYPE in
         let keyword = keyword ^/^ module_ ^/^ type_ in
@@ -2056,8 +2077,8 @@ end = struct
     else
       let indent =
         match kw with
-        | With _ -> 2
-        | And _ -> 3
+        | With -> 2
+        | And -> 3
       in
       mty ^^ nest indent (break_before cstr)
 
