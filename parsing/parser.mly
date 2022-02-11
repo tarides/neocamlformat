@@ -2724,7 +2724,7 @@ primitive_declaration:
   attrs1 = attributes
   id = val_ident
   COLON
-  ty = core_type
+  ty = possibly_poly(core_type)
   EQUAL
   prim = raw_string+
   attrs2 = post_item_attributes
@@ -3354,8 +3354,7 @@ ident:
     UIDENT                    { $1 }
   | LIDENT                    { $1 }
 ;
-val_ident:
-    LIDENT                    { mkrhs $1 $sloc }
+val_extra_ident:
   | LPAREN operator RPAREN
       { let op = $2 in
         let str =
@@ -3367,6 +3366,10 @@ val_ident:
   | LPAREN operator error     { unclosed "(" $loc($1) ")" $loc($3) }
   | LPAREN error              { expecting $loc($2) "operator" }
   | LPAREN MODULE error       { expecting $loc($3) "module-expr" }
+;
+val_ident:
+    LIDENT                    { mkrhs $1 $sloc }
+  | val_extra_ident           { $1 }
 ;
 operator:
     PREFIXOP                                    { $1 }
