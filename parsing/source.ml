@@ -96,6 +96,8 @@ let print_tok : Parser.token -> string = function
   | PRIVATE -> "private"
   | QUESTION -> "?"
   | QUOTE -> "'"
+  | QUOTED_STRING_EXPR _ -> "QUOTED_STRING_EXPR"
+  | QUOTED_STRING_ITEM _ -> "QUOTED_STRING_ITEM"
   | RBRACE -> "}"
   | RBRACKET -> "]"
   | REC -> "rec"

@@ -245,6 +245,11 @@ let wrap_sig_ext ~loc:_ body psig_ext_attributes =
 let wrap_mksig_ext ~loc (item, ext) =
   wrap_sig_ext ~loc (mksig ~loc item) ext
 
+let mk_quotedext ~loc (id, idloc, str, _strloc, delim) =
+  let exp_id = mkloc id idloc in
+  let e = ghexp ~loc (Pexp_constant (Pconst_string (str, delim))) in
+  (exp_id, PStr [mkstrexp e []])
+
 let text_str pos = Str.text (rhs_text pos)
 let text_sig pos = Sig.text (rhs_text pos)
 let text_cstr pos = Cf.text (rhs_text pos)
@@ -513,7 +518,12 @@ let mk_directive ~loc name arg =
 %token <string> HASHOP        "##" (* just an example *)
 %token SIG                    "sig"
 %token STAR                   "*"
-%token <string * string option> STRING "\"hello\"" (* just an example *)
+%token <string * string option>
+       STRING "\"hello\"" (* just an example *)
+%token <string * Location.t * string * Location.t * string option>
+       QUOTED_STRING_EXPR     "{%hello|world|}"  (* just an example *)
+%token <string * Location.t * string * Location.t * string option>
+       QUOTED_STRING_ITEM     "{%%hello|world|}" (* just an example *)
 %token STRUCT                 "struct"
 %token THEN                   "then"
 %token TILDE                  "~"
@@ -595,7 +605,7 @@ The precedences must be listed from low to high.
 %nonassoc BACKQUOTE BANG BEGIN CHAR FALSE FLOAT INT OBJECT
           LBRACE LBRACELESS LBRACKET LBRACKETBAR LIDENT LPAREN
           NEW PREFIXOP STRING TRUE UIDENT
-          LBRACKETPERCENT
+          LBRACKETPERCENT QUOTED_STRING_EXPR
 
 
 /* Entry points */
@@ -3667,10 +3677,14 @@ ext:
   ext attributes    { $1, $2 }
 ;
 extension:
-  LBRACKETPERCENT attr_id payload RBRACKET { ($2, $3) }
+  | LBRACKETPERCENT attr_id payload RBRACKET { ($2, $3) }
+  | QUOTED_STRING_EXPR
+    { mk_quotedext ~loc:$sloc $1 }
 ;
 item_extension:
-  LBRACKETPERCENTPERCENT attr_id payload RBRACKET { ($2, $3) }
+  | LBRACKETPERCENTPERCENT attr_id payload RBRACKET { ($2, $3) }
+  | QUOTED_STRING_ITEM
+    { mk_quotedext ~loc:$sloc $1 }
 ;
 payload:
     structure { PStr $1 }
