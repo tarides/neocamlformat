@@ -62,4 +62,11 @@ type 'a loc = 'a Location.loc = {
 type variance =
   | Covariant
   | Contravariant
-  | Invariant
+  | NoVariance
+
+type injectivity =
+  | Injective
+  | NoInjectivity
+
+(* For Pexp_dotop_[gs]et *)
+type paren_kind = Paren | Brace | Bracket

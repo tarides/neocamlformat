@@ -1081,16 +1081,10 @@ end = struct
     | Pexp_letop letop -> pp_letop letop
     | Pexp_extension ext -> Extension.pp Item ext
     | Pexp_unreachable -> string ~loc "."
-    | Pexp_array_get (arr, idx) -> pp_array_get arr idx
-    | Pexp_array_set (arr, idx, e) -> pp_array_set arr idx e
-    | Pexp_string_get (str, idx) -> pp_string_get str idx
-    | Pexp_string_set (str, idx, c) -> pp_string_set str idx c
-    | Pexp_bigarray_get (ba, idx) -> pp_bigarray_get ba idx
-    | Pexp_bigarray_set (ba, idx, c) -> pp_bigarray_set ba idx c
-    | Pexp_dotop_get { accessed; op; left; right; indices } ->
-      pp_dotop_get accessed op left right indices
-    | Pexp_dotop_set { accessed; op; left; right; indices; value } ->
-      pp_dotop_set accessed op left right indices value
+    | Pexp_access { accessed; paren; indices; set_expr } ->
+      pp_access ~loc accessed paren indices set_expr
+    | Pexp_dotop_access { accessed; path; op; paren; indices; set_expr } ->
+      pp_dotop_access ~loc accessed path op paren indices set_expr
 
   and pp_ident = Longident.pp
 
@@ -1417,10 +1411,10 @@ end = struct
       ~left:LBRACKETBAR
       ~right:BARRBRACKET elts
 
-  and pp_gen_get ?prefix ?dot enclosing arr idx =
+  and pp_gen_access ~loc ?path ?dot paren_kind arr idx val_ =
     let arr = pp arr in
     let dot =
-      match prefix, dot with
+      match path, dot with
       | None, None -> pp_token ~after:arr ~before:idx DOT
       | Some path, Some dotop ->
         let fstdot = pp_token ~after:arr ~before:path DOT in
@@ -1428,63 +1422,37 @@ end = struct
       | None, Some dotop -> dotop
       | Some _, None -> assert false
     in
-    let doc = flow (break 0) arr [ dot; enclosing idx ] in
-    doc
-
-  and pp_gen_set ?prefix:p ?dot enclosing arr idx val_ =
-    let access = pp_gen_get ?prefix:p ?dot enclosing arr idx in
-    let value = pp val_ in
-    let larrow = pp_token ~after:access ~before:value LESSMINUS in
-    let doc =
+    let (left_tok, right_tok) : (Source_parsing.Parser.token as 't) * 't =
+      match paren_kind with
+      | Paren -> LPAREN, RPAREN
+      | Brace -> LBRACE, RBRACE
+      | Bracket -> LBRACKET, RBRACKET
+    in
+    let left = pp_token ~after:dot ~before:idx left_tok in
+    match val_ with
+    | None ->
+      let right = pp_token ~inside:loc ~after:idx right_tok in
+      flow (break 0) arr [ dot; left ^^ idx ^^ right ]
+    | Some val_ ->
+      let value = pp val_ in
+      let right = pp_token ~after:idx ~before:value right_tok in
+      let larrow = pp_token ~after:right ~before:value LESSMINUS in
+      let access = flow (break 0) arr [ dot; left ^^ idx ^^ right ] in
       prefix ~indent:2 ~spaces:1
         (group (access ^/^ larrow))
         value
-    in
-    doc
 
-  and pp_array_get arr idx = pp_gen_get parens arr (pp idx)
-  and pp_array_set arr idx val_ = pp_gen_set parens arr (pp idx) val_
+  and pp_access ~loc arr paren idx val_ =
+    pp_gen_access ~loc paren arr (pp idx) val_
 
-  and pp_string_get arr idx = pp_gen_get brackets arr (pp idx)
-  and pp_string_set arr idx val_ = pp_gen_set brackets arr (pp idx) val_
-
-  and pp_bigarray_get arr idx =
-    let idx = pp_tuple idx in
-    pp_gen_get braces arr idx
-
-  and pp_bigarray_set arr idx val_ =
-    let idx = pp_tuple idx in
-    pp_gen_set braces arr idx val_
-
-  and pp_dotop_get accessed op left right indices =
-    let enclose doc = str left ^^ doc ^^ str right in
+  and pp_dotop_access ~loc accessed path op paren indices val_ =
     let indices =
       match indices with
       | [] -> assert false (* I think *)
       | idx :: ids -> separate_map semi ~f:pp idx ids
     in
-    let prefix, op =
-      match op with
-      | Lident s -> None, str s
-      | Ldot (lid, s) -> Some (Longident.pp lid), str s
-      | Lapply _ -> assert false
-    in
-    pp_gen_get ?prefix ~dot:(!^"." ++ op) enclose accessed indices
-
-  and pp_dotop_set accessed op left right indices val_ =
-    let enclose doc = str left ^^ doc ^^ str right in
-    let indices =
-      match indices with
-      | [] -> assert false (* I think *)
-      | idx :: ids -> separate_map semi ~f:pp idx ids
-    in
-    let prefix, op =
-      match op with
-      | Lident s -> None, str s
-      | Ldot (lid, s) -> Some (Longident.pp lid), str s
-      | Lapply _ -> assert false
-    in
-    pp_gen_set ?prefix ~dot:(!^"." ++ op) enclose accessed indices
+    let path = Option.map Longident.pp path in
+    pp_gen_access ~loc ?path ~dot:(!^"." ++ str op) paren accessed indices
       val_
 
   (* TODO: add formating options *)
@@ -2735,7 +2703,7 @@ and Type_declaration : sig
   val with_params
     :  ?always_enclosed:bool
     -> ?enclosing:(document -> document)
-    -> (core_type * variance) list
+    -> (core_type * (variance * injectivity)) list
     -> document
     -> document
 
@@ -2779,12 +2747,19 @@ end = struct
       end
     | _ -> false
 
-  let pp_param (ct, var) =
+  let pp_param (ct, (var, inject)) =
     let ct = Core_type.pp ct in
-    match var with
-    | Invariant -> ct
-    | Covariant -> plus ++ ct
-    | Contravariant -> minus ++ ct
+    (* FIXME: there could be comments between variance and injectivity
+       annotations. *)
+    let doc =
+      match var with
+      | NoVariance -> ct
+      | Covariant -> plus ++ ct
+      | Contravariant -> minus ++ ct
+    in
+    match inject with
+    | Injective -> bang ++ doc
+    | NoInjectivity -> ct
 
   let with_params ?(always_enclosed=false) ?(enclosing=parens) lst name =
     match lst with

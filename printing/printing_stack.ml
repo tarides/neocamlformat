@@ -156,12 +156,8 @@ let needs_parens elt parents =
         | Class_expr Pcl_apply _
         | Expression ( Pexp_field _
                      | Pexp_setfield _
-                     | Pexp_array_get _
-                     | Pexp_array_set _
-                     | Pexp_bigarray_get _
-                     | Pexp_bigarray_set _
-                     | Pexp_string_get _
-                     | Pexp_string_set _
+                     | Pexp_access _
+                     | Pexp_dotop_access _
                      | Pexp_apply _
                      | Pexp_construct _
                      | Pexp_variant _
@@ -217,9 +213,8 @@ let needs_parens elt parents =
         | _ -> false) parents
 
   | Expression Pexp_field _
-  | Expression Pexp_array_get _
-  | Expression Pexp_bigarray_get _
-  | Expression Pexp_string_get _ ->
+  | Expression Pexp_access { set_expr = None; _ }
+  | Expression Pexp_dotop_access { set_expr = None; _ } ->
     List.exists (function
         | Prefix_op -> true
         | _ -> false) parents
@@ -230,9 +225,8 @@ let needs_parens elt parents =
     List.exists (function
       | Prefix_op
       | Expression ( Pexp_field _
-                    | Pexp_array_get _
-                    | Pexp_bigarray_get _
-                    | Pexp_string_get _)
+                   | Pexp_access _
+                   | Pexp_dotop_access _)
       | Infix_op { level = 9; on_left = false } ->
         true
       | Expression Pexp_record _
@@ -249,9 +243,8 @@ let needs_parens elt parents =
     List.exists (function
         | Prefix_op
         | Expression ( Pexp_field _
-                     | Pexp_array_get _
-                     | Pexp_bigarray_get _
-                     | Pexp_string_get _)
+                     | Pexp_access _
+                     | Pexp_dotop_access _)
         | Infix_op { level = 9; _ }
         | Class_expr Pcl_apply _
         | Expression ( Pexp_apply _
@@ -271,9 +264,8 @@ let needs_parens elt parents =
     List.exists (function
         | Prefix_op
         | Expression ( Pexp_field _
-                     | Pexp_array_get _
-                     | Pexp_bigarray_get _
-                     | Pexp_string_get _)
+                     | Pexp_access _
+                     | Pexp_dotop_access _)
         | Infix_op { level = 9; _ }
         | Class_expr Pcl_apply _
         | Expression ( Pexp_apply _
@@ -302,9 +294,8 @@ let needs_parens elt parents =
       | Attribute
       | Prefix_op
       | Expression ( Pexp_field _
-                    | Pexp_array_get _
-                    | Pexp_bigarray_get _
-                    | Pexp_string_get _)
+                   | Pexp_access _
+                   | Pexp_dotop_access _)
       | Infix_op { level = 9; _ }
       | Infix_op { level = 8; on_left = true }
       | Class_expr Pcl_apply _
@@ -327,9 +318,8 @@ let needs_parens elt parents =
         | Attribute
         | Prefix_op
         | Expression ( Pexp_field _
-                     | Pexp_array_get _
-                     | Pexp_bigarray_get _
-                     | Pexp_string_get _) -> true
+                     | Pexp_access _
+                     | Pexp_dotop_access _) -> true
         | Infix_op { level = (8 | 9); _ }
         | Infix_op { level = 7; on_left = false }
         | Class_expr Pcl_apply _
@@ -352,9 +342,8 @@ let needs_parens elt parents =
         | Attribute
         | Prefix_op
         | Expression ( Pexp_field _
-                     | Pexp_array_get _
-                     | Pexp_bigarray_get _
-                     | Pexp_string_get _) -> true
+                     | Pexp_access _
+                     | Pexp_dotop_access _) -> true
         | Infix_op { level = (7 | 8 | 9); _ }
         | Infix_op { level = 6; on_left = false }
         | Class_expr Pcl_apply _
@@ -377,9 +366,8 @@ let needs_parens elt parents =
         | Attribute
         | Prefix_op
         | Expression ( Pexp_field _
-                     | Pexp_array_get _
-                     | Pexp_bigarray_get _
-                     | Pexp_string_get _) -> true
+                     | Pexp_access _
+                     | Pexp_dotop_access _) -> true
         | Infix_op { level = (6 | 7 | 8 | 9); _ }
         | Infix_op { level = 5; on_left = true }
         | Class_expr Pcl_apply _
@@ -403,9 +391,8 @@ let needs_parens elt parents =
         | Attribute
         | Prefix_op
         | Expression ( Pexp_field _
-                     | Pexp_array_get _
-                     | Pexp_bigarray_get _
-                     | Pexp_string_get _) -> true
+                     | Pexp_access _
+                     | Pexp_dotop_access _) -> true
         | Infix_op { level = (5 | 6 | 7 | 8 | 9); _ }
         | Infix_op { level = 4; on_left = false }
         | Class_expr Pcl_apply _
@@ -430,9 +417,8 @@ let needs_parens elt parents =
         | Attribute
         | Prefix_op
         | Expression ( Pexp_field _
-                     | Pexp_array_get _
-                     | Pexp_bigarray_get _
-                     | Pexp_string_get _) -> true
+                     | Pexp_access _
+                     | Pexp_dotop_access _) -> true
         | Infix_op { level = (4 | 5 | 6 | 7 | 8 | 9); _ }
         | Infix_op { level = 3; on_left = true }
         | Class_expr Pcl_apply _
@@ -456,9 +442,8 @@ let needs_parens elt parents =
         | Attribute
         | Prefix_op
         | Expression ( Pexp_field _
-                     | Pexp_array_get _
-                     | Pexp_bigarray_get _
-                     | Pexp_string_get _) -> true
+                     | Pexp_access _
+                     | Pexp_dotop_access _) -> true
         | Infix_op { level = (3 | 4 | 5 | 6 | 7 | 8 | 9); _ }
         | Infix_op { level = 2; on_left = true }
         | Class_expr Pcl_apply _
@@ -482,9 +467,8 @@ let needs_parens elt parents =
         | Attribute
         | Prefix_op
         | Expression ( Pexp_field _
-                     | Pexp_array_get _
-                     | Pexp_bigarray_get _
-                     | Pexp_string_get _) -> true
+                     | Pexp_access _
+                     | Pexp_dotop_access _) -> true
         | Infix_op { level = (2 | 3 | 4 | 5 | 6 | 7 | 8 | 9); _ }
         | Class_expr Pcl_apply _
         | Expression ( Pexp_apply _
@@ -499,17 +483,15 @@ let needs_parens elt parents =
         | _ -> false) parents
 
   | Expression Pexp_setfield _
-  | Expression Pexp_array_set _
-  | Expression Pexp_string_set _
-  | Expression Pexp_bigarray_set _
+  | Expression Pexp_access { set_expr = Some _; _ }
+  | Expression Pexp_dotop_access { set_expr = Some _; _ }
   | Infix_op { level = 1; _ } ->
     List.exists (function
         | Attribute
         | Prefix_op
         | Expression ( Pexp_field _
-                     | Pexp_array_get _
-                     | Pexp_bigarray_get _
-                     | Pexp_string_get _) -> true
+                     | Pexp_access _
+                     | Pexp_dotop_access _) -> true
         | Infix_op { level = (2 | 3 | 4 | 5 | 6 | 7 | 8 | 9); _ }
         | Infix_op { level = 1; on_left = true }
         | Class_expr Pcl_apply _
@@ -659,9 +641,8 @@ let needs_parens elt parents =
                     | Pexp_record _
                     | Pexp_tuple _
                     | Pexp_field _
-                    | Pexp_array_get _
-                    | Pexp_bigarray_get _
-                    | Pexp_string_get _
+                    | Pexp_access _
+                    | Pexp_dotop_access _
                     | Pexp_setfield _
                     | Pexp_sequence _) -> true
       | Prefix_op

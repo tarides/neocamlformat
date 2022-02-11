@@ -205,7 +205,7 @@ module Val:
 module Type:
   sig
     val mk: ?loc:loc -> ?attrs:attrs -> ?docs:docs -> ?text:text ->
-      ?params:(core_type * variance) list ->
+      ?params:(core_type * (variance * injectivity)) list ->
       ?cstrs:(core_type * core_type * loc) list ->
       ?kind:type_kind -> ?priv:Location.t -> ?manifest:core_type -> str ->
       type_declaration
@@ -221,7 +221,7 @@ module Type:
 module Te:
   sig
     val mk: ?loc:loc -> ?attrs:attrs -> ?docs:docs ->
-      ?params:(core_type * variance) list -> ?priv:Location.t ->
+      ?params:(core_type * (variance * injectivity)) list -> ?priv:Location.t ->
       lid -> extension_constructor list -> type_extension
 
     val mk_exception: ?loc:loc -> ?attrs:attrs -> ?docs:docs ->
@@ -459,7 +459,7 @@ module Cf:
 module Ci:
   sig
     val mk: ?loc:loc -> ?attrs:attrs -> ?docs:docs -> ?text:text ->
-      ?virt:virtual_flag -> ?params:(core_type * variance) list ->
+      ?virt:virtual_flag -> ?params:(core_type * (variance * injectivity)) list ->
       str -> fun_param list -> class_type option -> 'a -> 'a class_infos
   end
 

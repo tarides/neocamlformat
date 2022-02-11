@@ -423,28 +423,27 @@ and expression_desc =
         (* [%id] *)
   | Pexp_unreachable
         (* . *)
-    (* FIXME: factorize? *)
-  | Pexp_array_get of expression * expression
-  | Pexp_array_set of expression * expression * expression
-  | Pexp_string_get of expression * expression
-  | Pexp_string_set of expression * expression * expression
-  | Pexp_bigarray_get of expression * expression list
-  | Pexp_bigarray_set of expression * expression list * expression
-  | Pexp_dotop_get of {
+  | Pexp_access of {
       accessed: expression;
-      op: Longident.t;
-      left: string loc;
-      right: string loc;
-      indices: expression list;
+      paren: paren_kind;
+      indices: expression;
+      set_expr: expression option;
     }
-  | Pexp_dotop_set of {
+        (* arr.(i)
+           arr.(i) <- e
+           str.[i]
+           str.[i] <- c
+           bar.{i1; i2; ..}
+           bar.{i1; i2; ..} <- e *)
+  | Pexp_dotop_access of {
       accessed: expression;
-      op: Longident.t;
-      left: string loc;
-      right: string loc;
+      paren: paren_kind;
+      path: Longident.t option;
+      op: string loc;
       indices: expression list;
-      value: expression;
+      set_expr: expression option;
     }
+        (* foo.Path.%{i1, i2, ..} <- e *)
 
 and if_branch =
   { 
@@ -500,7 +499,7 @@ and value_description =
 and type_declaration =
     {
      ptype_name: string loc;
-     ptype_params: (core_type * variance) list;
+     ptype_params: (core_type * (variance * injectivity)) list;
            (* ('a1,...'an) t; None represents  _*)
      ptype_cstrs: (core_type * core_type * Location.t) list;
            (* ... constraint T1=T1'  ... constraint Tn=Tn' *)
@@ -569,7 +568,7 @@ and constructor_arguments =
 and type_extension =
     {
      ptyext_path: Longident.t;
-     ptyext_params: (core_type * variance) list;
+     ptyext_params: (core_type * (variance * injectivity)) list;
      ptyext_constructors: extension_constructor list;
      ptyext_private: Location.t option;
      ptyext_loc: Location.t;
@@ -672,7 +671,7 @@ and class_type_field_desc =
 and 'a class_infos =
     {
      pci_virt: virtual_flag;
-     pci_params: (core_type * variance) list;
+     pci_params: (core_type * (variance * injectivity)) list;
      pci_name: string loc;
      pci_term_params: fun_param list;
      pci_type: class_type option;
