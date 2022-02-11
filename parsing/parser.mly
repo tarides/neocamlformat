@@ -770,6 +770,26 @@ reversed_separated_nonempty_llist(separator, X):
   xs = rev(reversed_separated_nonempty_llist(separator, X))
     { xs }
 
+%inline inline_reversed_separated_nonempty_llist_located(separator, X):
+  x = X
+    { [ Location.none, x ] }
+| xs = reversed_separated_nonempty_llist_located(separator, X)
+  separator
+  x = X
+    { (make_loc $loc($2), x) :: xs }
+
+reversed_separated_nonempty_llist_located(separator, X):
+  xs = inline_reversed_separated_nonempty_llist_located(separator, X)
+    { xs }
+
+(* [separated_nonempty_llist(separator, X)] recognizes a nonempty list of [X]s,
+   separated with [separator]s, and produces an OCaml list in direct order --
+   that is, the first element in the input text appears first in this list. *)
+
+%inline separated_nonempty_llist_located(separator, X):
+  xs = rev(reversed_separated_nonempty_llist_located(separator, X))
+    { xs }
+
 %inline inline_separated_nonempty_llist(separator, X):
   xs = rev(inline_reversed_separated_nonempty_llist(separator, X))
     { xs }
@@ -1321,26 +1341,14 @@ open_description:
 /* Module types */
 
 module_type:
-  | module_type_no_with { $1 }
-  | FUNCTOR attrs = attributes args = functor_args
-    MINUSGREATER mty = module_type
-      %prec below_WITH
-      { mkmty ~loc:$sloc (Pmty_functor (attrs, args, mty)) }
-  | mkmty(
-      module_type MINUSGREATER module_type
-        %prec below_WITH
-        { let param = mkrhs (Named (mknoloc None, $1)) $loc($1) in
-          Pmty_functor([], [ param ], $3) }
-    | module_type_no_with with_constraints
-        { Pmty_with($1, $2) }
-    )
-    { $1 }
-
-module_type_no_with:
   | SIG attrs = attributes s = signature END
       { mkmty ~loc:$sloc ~attrs (Pmty_signature s) }
   | SIG attributes signature error
       { unclosed "sig" $loc($1) "end" $loc($4) }
+  | FUNCTOR attrs = attributes args = functor_args
+    MINUSGREATER mty = module_type
+      %prec below_WITH
+      { mkmty ~loc:$sloc (Pmty_functor (attrs, args, mty)) }
   | MODULE TYPE OF attributes module_expr %prec below_LBRACKETAT
       { mkmty ~loc:$sloc (Pmty_typeof ($4, $5)) }
   | LPAREN module_type RPAREN
@@ -1352,7 +1360,26 @@ module_type_no_with:
   | mkmty(
       mty_longident
         { Pmty_ident $1 }
-/*  | LPAREN MODULE mod_longident RPAREN
+    | module_type MINUSGREATER module_type
+        %prec below_WITH
+        { let param = mkrhs (Named (mknoloc None, $1)) $loc($1) in
+          Pmty_functor([], [ param ], $3) }
+    | module_type WITH separated_nonempty_llist_located(AND, with_constraint)
+        { (* Flattening. *)
+          let hd = List.hd $3 in
+          let tl = List.tl $3 in
+          let cstrs =
+            (With (make_loc $loc($2)), snd hd) ::
+            List.map (function loc, wc -> And loc, wc) tl
+          in
+          let mty = $1 in
+          let mty, cstrs =
+            match mty.pmty_desc with
+            | Pmty_with (mty, cstrs') -> mty, cstrs' @ cstrs
+            | _ -> mty, cstrs
+          in
+          Pmty_with(mty, cstrs) }
+/*  | LPAREN MODULE mkrhs(mod_longident) RPAREN
         { Pmty_alias $3 } */
     | extension
         { Pmty_extension $1 }
@@ -3020,19 +3047,6 @@ extension_constructor_rebind(opening):
 
 /* "with" constraints (additional type equations over signature components) */
 
-and_or_with:
-    AND  { And  (make_loc $sloc) }
-  | WITH { With (make_loc $sloc) }
-;
-
-with_constraints:
-    WITH with_constraint llist(located_with_constraint)
-      { (With (make_loc $loc($1)), $2) :: $3 }
-;
-
-located_with_constraint:
-    and_or_with with_constraint { $1, $2 }
-;
 
 with_constraint:
     TYPE type_parameters label_longident with_type_binder
@@ -3061,9 +3075,9 @@ with_constraint:
       { Pwith_module ($2, $4) }
   | MODULE mod_longident COLONEQUAL mod_ext_longident
       { Pwith_modsubst ($2, $4) }
-  | MODULE TYPE l=mty_longident EQUAL rhs=module_type_no_with
+  | MODULE TYPE l=mty_longident EQUAL rhs=module_type
       { Pwith_modtype (l, rhs) }
-  | MODULE TYPE l=mty_longident COLONEQUAL rhs=module_type_no_with
+  | MODULE TYPE l=mty_longident COLONEQUAL rhs=module_type
       { Pwith_modtypesubst (l, rhs) }
 ;
 with_type_binder:
