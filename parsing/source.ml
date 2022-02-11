@@ -151,7 +151,12 @@ let loc_of_token_between ~start ~stop token =
   lexbuf_set_pos lexbuf start;
   let rec loop () =
     match Lexer.token lexbuf with
-    | Parser.EOF -> raise Not_found
+    | Parser.EOF -> 
+      Format.eprintf "loc_of_token_between %d:%d -- %d:%d: %s@."
+        start.pos_lnum (start.pos_cnum - start.pos_bol)
+        stop.pos_lnum (stop.pos_cnum - stop.pos_bol)
+        (print_tok token) ;
+      raise Not_found
     | tok when tok = token -> Location.curr lexbuf
     | _ -> loop ()
   in

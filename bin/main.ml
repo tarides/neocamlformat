@@ -41,7 +41,10 @@ let fmt_file ~width fn =
              raise (Fmt_file_error (Internal_error ("comments-init", e)))
          in
          try print sg with
-         | e -> raise (Fmt_file_error (Internal_error ("printing", e)))
+         | e ->
+           let bt = Printexc.get_backtrace () in
+           Printf.eprintf "BACKTRACE: %s\n%!" bt;
+           raise (Fmt_file_error (Internal_error ("printing", e)))
     in
     let doc =
       if intf

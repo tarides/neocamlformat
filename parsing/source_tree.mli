@@ -228,10 +228,11 @@ and pattern_desc =
 
            Invariant: n >= 2
         *)
-  | Ppat_construct of Longident.t * pattern option
+  | Ppat_construct of Longident.t * (string loc list * pattern) option
         (* C                None
-           C P              Some P
-           C (P1, ..., Pn)  Some (Ppat_tuple [P1; ...; Pn])
+           C P              Some ([], P)
+           C (P1, ..., Pn)  Some ([], Ppat_tuple [P1; ...; Pn])
+           C (type a b) P   Some ([a;b], P)
          *)
   | Ppat_list_lit of pattern list
         (* [ p1 ; p2 ; ... ] *)
@@ -414,7 +415,7 @@ and expression_desc =
         (* M.(E) *)
   | Pexp_letopen of open_declaration * expression
         (* let open M in E
-           let! open M in E *)
+           let open! M in E *)
   | Pexp_letop of letop
         (* let* P = E in E
            let* P = E and* P = E in E *)
@@ -545,6 +546,7 @@ and label_declaration =
 and constructor_declaration =
     {
      pcd_name: string loc;
+     pcd_vars: string loc list;
      pcd_args: constructor_arguments;
      pcd_res: core_type option;
      pcd_loc: Location.t;
@@ -594,11 +596,12 @@ and type_exception =
   }
 
 and extension_constructor_kind =
-    Pext_decl of constructor_arguments * core_type option
+    Pext_decl of string loc list * constructor_arguments * core_type option
       (*
-         | C of T1 * ... * Tn     ([T1; ...; Tn], None)
-         | C: T0                  ([], Some T0)
-         | C: T1 * ... * Tn -> T0 ([T1; ...; Tn], Some T0)
+         | C of T1 * ... * Tn             ([], [T1; ...; Tn], None)
+         | C: T0                          ([], [], Some T0)
+         | C: T1 * ... * Tn -> T0         ([], [T1; ...; Tn], Some T0)
+         | C: 'a... . T1 * ... * Tn -> T0 (['a;...], [T1; ...; Tn], Some T0)
        *)
   | Pext_rebind of Longident.t
       (*
@@ -845,6 +848,8 @@ and signature_item_desc =
   | Psig_modtype of module_type_declaration
         (* module type S = MT
            module type S *)
+  | Psig_modtypesubst of module_type_declaration
+        (* module type S := ... *)
   | Psig_open of open_description
         (* open X *)
   | Psig_include of include_description
@@ -931,6 +936,10 @@ and with_constraint =
            the name of the type_declaration. *)
   | Pwith_module of Longident.t * Longident.t
         (* with module X.Y = Z *)
+  | Pwith_modtype of Longident.t * module_type
+        (* with module type X.Y = Z *)
+  | Pwith_modtypesubst of Longident.t * module_type
+        (* with module type X.Y := sig end *)
   | Pwith_typesubst of Longident.t * type_declaration
         (* with type X.t := ..., same format as [Pwith_type] *)
   | Pwith_modsubst of Longident.t * Longident.t

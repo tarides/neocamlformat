@@ -105,7 +105,8 @@ module Pat:
     val interval: ?loc:loc -> ?attrs:attrs -> constant with_loc ->
       constant with_loc -> pattern
     val tuple: ?loc:loc -> ?attrs:attrs -> pattern list -> pattern
-    val construct: ?loc:loc -> ?attrs:attrs -> lid -> pattern option -> pattern
+    val construct: ?loc:loc -> ?attrs:attrs ->
+      lid -> (str list * pattern) option -> pattern
     val variant: ?loc:loc -> ?attrs:attrs -> label with_loc -> pattern option -> pattern
     val record: ?loc:loc -> ?attrs:attrs ->
       (lid * core_type option * pattern option) list -> obj_closed_flag ->
@@ -210,7 +211,7 @@ module Type:
       type_declaration
 
     val constructor: ?loc:loc -> ?attrs:attrs -> ?info:info ->
-      ?args:constructor_arguments -> ?res:core_type -> str ->
+      ?vars:str list -> ?args:constructor_arguments -> ?res:core_type -> str ->
       constructor_declaration
     val field: ?loc:loc -> ?attrs:attrs -> ?info:info ->
       ?mut:mutable_flag -> str -> core_type -> label_declaration
@@ -230,7 +231,7 @@ module Te:
       str -> extension_constructor_kind -> extension_constructor
 
     val decl: ?loc:loc -> ?attrs:attrs -> ?docs:docs -> ?info:info ->
-      ?args:constructor_arguments -> ?res:core_type -> str ->
+      ?vars:str list -> ?args:constructor_arguments -> ?res:core_type -> str ->
       extension_constructor
     val rebind: ?loc:loc -> ?attrs:attrs -> ?docs:docs -> ?info:info ->
       str -> lid -> extension_constructor

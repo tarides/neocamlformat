@@ -278,6 +278,7 @@ type let_binding =
     lb_params: fun_param list;
     lb_type: core_type option * core_type option;
     lb_expression: expression;
+    lb_is_pun: bool;
     lb_attributes: attributes;
     lb_post_attrs: attributes;
     lb_docs: docs Lazy.t;
@@ -287,15 +288,15 @@ type let_binding =
 type let_bindings =
   { lbs_bindings: let_binding list;
     lbs_rec: rec_flag;
-    lbs_extension: string Asttypes.loc option;
-    lbs_loc: Location.t }
+    lbs_extension: string Asttypes.loc option }
 
-let mklb first ~loc (p, (params, typ, e)) attrs post_attrs =
+let mklb first ~loc (p, (params, typ, e), is_pun) attrs post_attrs =
   {
     lb_pattern = p;
     lb_params = params;
     lb_type = typ;
     lb_expression = e;
+    lb_is_pun = is_pun;
     lb_attributes = attrs;
     lb_post_attrs = post_attrs;
     lb_docs = symbol_docs_lazy loc;
@@ -304,16 +305,17 @@ let mklb first ~loc (p, (params, typ, e)) attrs post_attrs =
     lb_loc = make_loc loc;
   }
 
-let mklbs ~loc ext rf lb =
-  {
-    lbs_bindings = [lb];
+let addlb lbs lb =
+  if lb.lb_is_pun && lbs.lbs_extension = None then syntax_error ();
+  { lbs with lbs_bindings = lb :: lbs.lbs_bindings }
+
+let mklbs ext rf lb =
+  let lbs = {
+    lbs_bindings = [];
     lbs_rec = rf;
     lbs_extension = ext ;
-    lbs_loc = make_loc loc;
-  }
-
-let addlb lbs lb =
-  { lbs with lbs_bindings = lb :: lbs.lbs_bindings }
+  } in
+  addlb lbs lb
 
 let val_of_let_bindings ~loc lbs =
   let bindings =
@@ -407,129 +409,129 @@ let mk_directive ~loc name arg =
 
 /* Tokens */
 
-%token AMPERAMPER
-%token AMPERSAND
-%token AND
-%token AS
-%token ASSERT
-%token BACKQUOTE
-%token BANG
-%token BAR
-%token BARBAR
-%token BARRBRACKET
-%token BEGIN
-%token <char> CHAR
-%token CLASS
-%token COLON
-%token COLONCOLON
-%token COLONEQUAL
-%token COLONGREATER
-%token COMMA
-%token CONSTRAINT
-%token DO
-%token DONE
-%token DOT
-%token DOTDOT
-%token DOWNTO
-%token ELSE
-%token END
-%token EOF
-%token EQUAL
-%token EXCEPTION
-%token EXTERNAL
-%token FALSE
-%token <string * char option> FLOAT
-%token FOR
-%token FUN
-%token FUNCTION
-%token FUNCTOR
-%token GREATER
-%token GREATERRBRACE
-%token GREATERRBRACKET
-%token IF
-%token IN
-%token INCLUDE
-%token <string> INFIXOP0
-%token <string> INFIXOP1
-%token <string> INFIXOP2
-%token <string> INFIXOP3
-%token <string> INFIXOP4
-%token <string> DOTOP
-%token <string> LETOP
-%token <string> ANDOP
-%token INHERIT
-%token INITIALIZER
-%token <string * char option> INT
-%token <string> LABEL
-%token LAZY
-%token LBRACE
-%token LBRACELESS
-%token LBRACKET
-%token LBRACKETBAR
-%token LBRACKETLESS
-%token LBRACKETGREATER
-%token LBRACKETPERCENT
-%token LBRACKETPERCENTPERCENT
-%token LESS
-%token LESSMINUS
-%token LET
-%token <string> LIDENT
-%token LPAREN
-%token LBRACKETAT
-%token LBRACKETATAT
-%token LBRACKETATATAT
-%token MATCH
-%token METHOD
-%token MINUS
-%token MINUSDOT
-%token MINUSGREATER
-%token MODULE
-%token MUTABLE
-%token NEW
-%token NONREC
-%token OBJECT
-%token OF
-%token OPEN
-%token <string> OPTLABEL
-%token OR
-/* %token PARSER */
-%token PERCENT
-%token PLUS
-%token PLUSDOT
-%token PLUSEQ
-%token <string> PREFIXOP
-%token PRIVATE
-%token QUESTION
-%token QUOTE
-%token RBRACE
-%token RBRACKET
-%token REC
-%token RPAREN
-%token SEMI
-%token SEMISEMI
-%token HASH
-%token <string> HASHOP
-%token SIG
-%token STAR
-%token <string * string option> STRING
-%token STRUCT
-%token THEN
-%token TILDE
-%token TO
-%token TRUE
-%token TRY
-%token TYPE
-%token <string> UIDENT
-%token UNDERSCORE
-%token VAL
-%token VIRTUAL
-%token WHEN
-%token WHILE
-%token WITH
-%token <string * Location.t> COMMENT
-%token <Docstrings.docstring> DOCSTRING
+%token AMPERAMPER             "&&"
+%token AMPERSAND              "&"
+%token AND                    "and"
+%token AS                     "as"
+%token ASSERT                 "assert"
+%token BACKQUOTE              "`"
+%token BANG                   "!"
+%token BAR                    "|"
+%token BARBAR                 "||"
+%token BARRBRACKET            "|]"
+%token BEGIN                  "begin"
+%token <char> CHAR            "'a'" (* just an example *)
+%token CLASS                  "class"
+%token COLON                  ":"
+%token COLONCOLON             "::"
+%token COLONEQUAL             ":="
+%token COLONGREATER           ":>"
+%token COMMA                  ","
+%token CONSTRAINT             "constraint"
+%token DO                     "do"
+%token DONE                   "done"
+%token DOT                    "."
+%token DOTDOT                 ".."
+%token DOWNTO                 "downto"
+%token ELSE                   "else"
+%token END                    "end"
+%token EOF                    ""
+%token EQUAL                  "="
+%token EXCEPTION              "exception"
+%token EXTERNAL               "external"
+%token FALSE                  "float"
+%token <string * char option> FLOAT "42.0" (* just an example *)
+%token FOR                    "for"
+%token FUN                    "fun"
+%token FUNCTION               "function"
+%token FUNCTOR                "functor"
+%token GREATER                ">"
+%token GREATERRBRACE          ">}"
+%token GREATERRBRACKET        ">]"
+%token IF                     "if"
+%token IN                     "in"
+%token INCLUDE                "include"
+%token <string> INFIXOP0      "!="   (* just an example *)
+%token <string> INFIXOP1      "@"    (* just an example *)
+%token <string> INFIXOP2      "+!"   (* just an example *)
+%token <string> INFIXOP3      "land" (* just an example *)
+%token <string> INFIXOP4      "**"   (* just an example *)
+%token <string> DOTOP         ".+"
+%token <string> LETOP         "let*" (* just an example *)
+%token <string> ANDOP         "and*" (* just an example *)
+%token INHERIT                "inherit"
+%token INITIALIZER            "initializer"
+%token <string * char option> INT "42"  (* just an example *)
+%token <string> LABEL         "~label:" (* just an example *)
+%token LAZY                   "lazy"
+%token LBRACE                 "{"
+%token LBRACELESS             "{<"
+%token LBRACKET               "["
+%token LBRACKETBAR            "[|"
+%token LBRACKETLESS           "[<"
+%token LBRACKETGREATER        "[>"
+%token LBRACKETPERCENT        "[%"
+%token LBRACKETPERCENTPERCENT "[%%"
+%token LESS                   "<"
+%token LESSMINUS              "<-"
+%token LET                    "let"
+%token <string> LIDENT        "lident" (* just an example *)
+%token LPAREN                 "("
+%token LBRACKETAT             "[@"
+%token LBRACKETATAT           "[@@"
+%token LBRACKETATATAT         "[@@@"
+%token MATCH                  "match"
+%token METHOD                 "method"
+%token MINUS                  "-"
+%token MINUSDOT               "-."
+%token MINUSGREATER           "->"
+%token MODULE                 "module"
+%token MUTABLE                "mutable"
+%token NEW                    "new"
+%token NONREC                 "nonrec"
+%token OBJECT                 "object"
+%token OF                     "of"
+%token OPEN                   "open"
+%token <string> OPTLABEL      "?label:" (* just an example *)
+%token OR                     "or"
+/* %token PARSER              "parser" */
+%token PERCENT                "%"
+%token PLUS                   "+"
+%token PLUSDOT                "+."
+%token PLUSEQ                 "+="
+%token <string> PREFIXOP      "!+" (* chosen with care; see above *)
+%token PRIVATE                "private"
+%token QUESTION               "?"
+%token QUOTE                  "'"
+%token RBRACE                 "}"
+%token RBRACKET               "]"
+%token REC                    "rec"
+%token RPAREN                 ")"
+%token SEMI                   ";"
+%token SEMISEMI               ";;"
+%token HASH                   "#"
+%token <string> HASHOP        "##" (* just an example *)
+%token SIG                    "sig"
+%token STAR                   "*"
+%token <string * string option> STRING "\"hello\"" (* just an example *)
+%token STRUCT                 "struct"
+%token THEN                   "then"
+%token TILDE                  "~"
+%token TO                     "to"
+%token TRUE                   "true"
+%token TRY                    "try"
+%token TYPE                   "type"
+%token <string> UIDENT        "UIdent" (* just an example *)
+%token UNDERSCORE             "_"
+%token VAL                    "val"
+%token VIRTUAL                "virtual"
+%token WHEN                   "when"
+%token WHILE                  "while"
+%token WITH                   "with"
+%token <string * Location.t> COMMENT    "(* comment *)"
+%token <Docstrings.docstring> DOCSTRING "(** documentation *)"
 
-%token EOL
+%token EOL                    "\\n"      (* not great, but EOL is unused *)
 
 /* Precedences and associativities.
 
@@ -590,7 +592,7 @@ The precedences must be listed from low to high.
 %nonassoc below_DOT
 %nonassoc DOT DOTOP
 /* Finally, the first tokens of simple_expr are above everything else. */
-%nonassoc BACKQUOTE BANG BEGIN CHAR FALSE FLOAT INT
+%nonassoc BACKQUOTE BANG BEGIN CHAR FALSE FLOAT INT OBJECT
           LBRACE LBRACELESS LBRACKET LBRACKETBAR LIDENT LPAREN
           NEW PREFIXOP STRING TRUE UIDENT
           LBRACKETPERCENT
@@ -600,18 +602,27 @@ The precedences must be listed from low to high.
 
 %start implementation                   /* for implementation files */
 %type <Source_tree.structure> implementation
+/* BEGIN AVOID */
 %start interface                        /* for interface files */
 %type <Source_tree.signature> interface
+/* END AVOID */
 %start toplevel_phrase                  /* for interactive use */
 %type <Source_tree.toplevel_phrase> toplevel_phrase
 %start use_file                         /* for the #use directive */
 %type <Source_tree.toplevel_phrase list> use_file
+/* BEGIN AVOID */
+%start parse_module_type
+%type <Source_tree.module_type> parse_module_type
+%start parse_module_expr
+%type <Source_tree.module_expr> parse_module_expr
 %start parse_core_type
 %type <Source_tree.core_type> parse_core_type
 %start parse_expression
 %type <Source_tree.expression> parse_expression
 %start parse_pattern
 %type <Source_tree.pattern> parse_pattern
+/* END AVOID */
+
 %%
 
 /* macros */
@@ -881,11 +892,13 @@ implementation:
     { $1 }
 ;
 
+/* BEGIN AVOID */
 (* An .mli file. *)
 interface:
   signature EOF
     { $1 }
 ;
+/* END AVOID */
 
 (* A toplevel phrase. *)
 toplevel_phrase:
@@ -938,6 +951,17 @@ use_file:
       { $1 }
 ;
 
+/* BEGIN AVOID */
+parse_module_type:
+  module_type EOF
+    { $1 }
+;
+
+parse_module_expr:
+  module_expr EOF
+    { $1 }
+;
+
 parse_core_type:
   core_type EOF
     { $1 }
@@ -952,6 +976,7 @@ parse_pattern:
   pattern EOF
     { $1 }
 ;
+/* END AVOID */
 
 (* -------------------------------------------------------------------------- *)
 
@@ -1383,6 +1408,8 @@ signature_item:
         { let (ext, l) = $1 in (Psig_recmodule l, (ext, [])) }
     | module_type_declaration
         { let (body, ext) = $1 in (Psig_modtype body, ext) }
+    | module_type_subst
+        { let (body, ext) = $1 in (Psig_modtypesubst body, (ext, [])) }
     | open_description
         { let (body, ext) = $1 in (Psig_open body, ext) }
     | include_statement(module_type)
@@ -1492,6 +1519,21 @@ module_subst:
   }
 ;
 
+(* A module type substitution *)
+module_type_subst:
+  MODULE TYPE
+  ext = ext
+  attrs1 = attributes
+  id = mkrhs(ident)
+  COLONEQUAL
+  typ=module_type
+  attrs2 = post_item_attributes
+  {
+    let attrs = attrs1 @ attrs2 in
+    let loc = make_loc $sloc in
+    let docs = symbol_docs $sloc in
+    Mtd.mk id ~typ ~attrs ~loc ~docs, ext
+  }
 (* -------------------------------------------------------------------------- *)
 
 (* Class declarations. *)
@@ -2029,10 +2071,6 @@ expr:
       { Pexp_assert $3, $2 }
   | LAZY ext_attributes simple_expr %prec below_HASH
       { Pexp_lazy $3, $2 }
-  | OBJECT ext_attributes class_structure END
-      { Pexp_object $3, $2 }
-  | OBJECT ext_attributes class_structure error
-      { unclosed "object" $loc($1) "end" $loc($4) }
 ;
 %inline expr_:
   | simple_expr nonempty_llist(labeled_simple_expr)
@@ -2157,6 +2195,10 @@ simple_expr:
         Pexp_pack ($4, Some pkg), $3 }
   | LPAREN MODULE ext_attributes module_expr COLON error
       { unclosed "(" $loc($1) ")" $loc($6) }
+  | OBJECT ext_attributes class_structure END
+      { Pexp_object $3, $2 }
+  | OBJECT ext_attributes class_structure error
+      { unclosed "object" $loc($1) "end" $loc($4) }
 ;
 %inline simple_expr_:
   | val_longident
@@ -2261,6 +2303,11 @@ labeled_simple_expr:
   | TILDE label = LIDENT
       { let loc = $loc(label) in
         (Labelled (mkrhs label loc), mkexpvar ~loc label) }
+/* FIXME: ~(foo:x) for ~foo:(foo:x)
+  | TILDE LPAREN label = LIDENT ty = type_constraint RPAREN
+      { let loc = $loc(label) in
+        (Labelled (mkrhs label loc), mkexpvar ~loc label) }
+*/
   | QUESTION label = LIDENT
       { let loc = $loc(label) in
         (Optional (mkrhs label loc), mkexpvar ~loc label) }
@@ -2274,18 +2321,13 @@ labeled_simple_expr:
 %inline let_ident:
     val_ident { mkpatvar ~loc:$sloc $1 }
 ;
-let_binding_body:
+let_binding_body_no_punning:
     let_ident strict_binding
       { ($1, $2) }
   | let_ident type_constraint EQUAL seq_expr
       { $1, ([], $2, $4) }
-  | let_ident COLON typevar_list DOT core_type EQUAL seq_expr
-      (* TODO: could replace [typevar_list DOT core_type]
-               with [mktyp(poly(core_type))]
-               and simplify the semantic action? *)
-      { let typloc = ($startpos($3), $endpos($5)) in
-        let typ = ghtyp ~loc:typloc (Ptyp_poly($3,$5)) in
-        $1, ([], (Some typ, None), $7) }
+  | let_ident COLON poly(core_type) EQUAL seq_expr
+      { $1, ([], (Some (ghtyp ~loc:($loc($3)) $3), None), $5) }
   | let_ident COLON TYPE lident_list DOT core_type EQUAL seq_expr
       { let typ =
           ghtyp ~loc:($startpos($3), $endpos($6))
@@ -2297,6 +2339,15 @@ let_binding_body:
   | simple_pattern_not_ident COLON core_type EQUAL seq_expr
       { ($1, ([], (Some $3, None), $5)) }
 ;
+let_binding_body:
+  | let_binding_body_no_punning
+      { let p, e = $1 in (p,e,false) }
+/* BEGIN AVOID */
+  | id = val_ident %prec below_HASH
+      { (mkpatvar ~loc:$loc id,
+         ([], (None, None), mkexpvar ~loc:$loc id.txt),
+         true) }
+/* END AVOID */
 (* The formal parameter EXT can be instantiated with ext or no_ext
    so as to indicate whether an extension is allowed or disallowed. *)
 let_bindings(EXT):
@@ -2311,7 +2362,7 @@ let_bindings(EXT):
   body = let_binding_body
   attrs2 = post_item_attributes
     {
-      mklbs ~loc:$sloc ext rec_flag (mklb ~loc:$sloc true body attrs1 attrs2)
+      mklbs ext rec_flag (mklb ~loc:$sloc true body attrs1 attrs2)
     }
 ;
 and_let_binding:
@@ -2326,6 +2377,9 @@ and_let_binding:
 letop_binding_body:
     pat = let_ident exp = strict_binding
       { (pat, exp) }
+  | id = val_ident
+      (* Let-punning *) (* FIXME *)
+      { (mkpatvar ~loc:$loc id, ([], (None, None), mkexpvar ~loc:$loc id.txt)) }
   | pat = simple_pattern COLON typ = core_type EQUAL exp = seq_expr
       { pat, ([], (Some typ, None), exp) }
   | pat = pattern_no_exn EQUAL exp = seq_expr
@@ -2335,7 +2389,7 @@ letop_bindings:
     body = letop_binding_body
       { let let_pat, let_exp = body in
         let_pat, let_exp, [] }
-  | bindings = letop_bindings pbop_op = mkrhs(ANDOP) body = let_binding_body
+  | bindings = letop_bindings pbop_op = mkrhs(ANDOP) body = letop_binding_body
       { let let_pat, let_exp, rev_ands = bindings in
         let pbop_pat, (pbop_params, pbop_type, pbop_exp) = body in
         let pbop_loc = make_loc $sloc in
@@ -2507,7 +2561,10 @@ pattern_gen:
       { $1 }
   | mkpat(
       constr_longident pattern %prec prec_constr_appl
-        { Ppat_construct($1, Some $2) }
+        { Ppat_construct($1, Some ([], $2)) }
+    | constr=constr_longident LPAREN TYPE newtypes=lident_list RPAREN
+        pat=simple_pattern
+        { Ppat_construct(constr, Some (newtypes, pat)) }
     | name_tag pattern %prec prec_constr_appl
         { Ppat_variant($1, Some $2) }
     ) { $1 }
@@ -2635,7 +2692,7 @@ value_description:
   attrs1 = attributes
   id = val_ident
   COLON
-  ty = core_type
+  ty = possibly_poly(core_type)
   attrs2 = post_item_attributes
     { let attrs = attrs2 in
       let loc = make_loc $sloc in
@@ -2818,20 +2875,20 @@ constructor_declarations:
 generic_constructor_declaration(opening):
   opening
   cid = mkrhs(constr_ident)
-  args_res = generalized_constructor_arguments
+  vars_args_res = generalized_constructor_arguments
   attrs = attributes
     {
-      let args, res = args_res in
+      let vars, args, res = vars_args_res in
       let info = symbol_info $endpos in
       let loc = make_loc $sloc in
-      cid, args, res, attrs, loc, info
+      cid, vars, args, res, attrs, loc, info
     }
 ;
 %inline constructor_declaration(opening):
   d = generic_constructor_declaration(opening)
     {
-      let cid, args, res, attrs, loc, info = d in
-      Type.constructor cid ~args ?res ~attrs ~loc ~info
+      let cid, vars, args, res, attrs, loc, info = d in
+      Type.constructor cid ~vars ~args ?res ~attrs ~loc ~info
     }
 ;
 str_exception_declaration:
@@ -2856,28 +2913,33 @@ sig_exception_declaration:
   ext = ext
   attrs1 = attributes
   id = mkrhs(constr_ident)
-  args_res = generalized_constructor_arguments
+  vars_args_res = generalized_constructor_arguments
   attrs2 = attributes
   attrs = post_item_attributes
-    { let args, res = args_res in
+    { let vars, args, res = vars_args_res in
       let loc = make_loc $sloc in
       let docs = symbol_docs $sloc in
       Te.mk_exception ~loc ~attrs
-        (Te.decl id ~args ?res ~attrs:attrs2 ~loc ~docs)
+        (Te.decl id ~vars ~args ?res ~attrs:attrs2 ~loc ~docs)
       , (ext, attrs1) }
 ;
 %inline let_exception_declaration:
     mkrhs(constr_ident) generalized_constructor_arguments attributes
-      { let args, res = $2 in
-        Te.decl $1 ~args ?res ~attrs:$3 ~loc:(make_loc $sloc) }
+      { let vars, args, res = $2 in
+        Te.decl $1 ~vars ~args ?res ~attrs:$3 ~loc:(make_loc $sloc) }
 ;
 generalized_constructor_arguments:
-    /*empty*/                     { (Pcstr_tuple [],None) }
-  | OF constructor_arguments      { ($2,None) }
+    /*empty*/                     { ([],Pcstr_tuple [],None) }
+  | OF constructor_arguments      { ([],$2,None) }
   | COLON constructor_arguments MINUSGREATER atomic_type %prec below_HASH
-                                  { ($2,Some $4) }
+                                  { ([],$2,Some $4) }
+  | COLON typevar_list DOT constructor_arguments MINUSGREATER atomic_type
+     %prec below_HASH
+                                  { ($2,$4,Some $6) }
   | COLON atomic_type %prec below_HASH
-                                  { (Pcstr_tuple [],Some $2) }
+                                  { ([],Pcstr_tuple [],Some $2) }
+  | COLON typevar_list DOT atomic_type %prec below_HASH
+                                  { ($2,Pcstr_tuple [],Some $4) }
 ;
 
 constructor_arguments:
@@ -2942,8 +3004,8 @@ label_declaration_semi:
 %inline extension_constructor_declaration(opening):
   d = generic_constructor_declaration(opening)
     {
-      let cid, args, res, attrs, loc, info = d in
-      Te.decl cid ~args ?res ~attrs ~loc ~info
+      let cid, vars, args, res, attrs, loc, info = d in
+      Te.decl cid ~vars ~args ?res ~attrs ~loc ~info
     }
 ;
 extension_constructor_rebind(opening):
@@ -2999,6 +3061,10 @@ with_constraint:
       { Pwith_module ($2, $4) }
   | MODULE mod_longident COLONEQUAL mod_ext_longident
       { Pwith_modsubst ($2, $4) }
+  | MODULE TYPE l=mty_longident EQUAL rhs=module_type_no_with
+      { Pwith_modtype (l, rhs) }
+  | MODULE TYPE l=mty_longident COLONEQUAL rhs=module_type_no_with
+      { Pwith_modtypesubst (l, rhs) }
 ;
 with_type_binder:
     EQUAL          { None }
