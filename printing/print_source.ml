@@ -660,8 +660,20 @@ end = struct
     let name = Longident.pp name in
     match arg_opt with
     | None -> name
-    | Some p ->
-      let doc = prefix ~indent:2 ~spaces:1 name (pp p) in
+    | Some (vars, p) ->
+      let p = pp p in
+      let p =
+        match vars with
+        | [] -> p
+        | v :: vs ->
+          let vars = flow (break 1) (str v) (List.map str vs) in
+          let lpar = pp_token ~after:name ~before:vars LPAREN in
+          let typ = pp_token ~after:lpar ~before:vars TYPE in
+          let rpar = pp_token ~after:vars ~before:p TYPE in
+          prefix ~indent:0 ~spaces:1
+            (group (lpar ^^ typ ^/^ vars ^^ rpar)) p
+      in
+      let doc = prefix ~indent:2 ~spaces:1 name p in
       doc
 
   and pp_variant tag arg_opt =
@@ -2024,6 +2036,20 @@ end = struct
         let module_ = pp_token ~after:keyword ~before:d1 MODULE in
         let keyword = keyword ^/^ module_ in
         Binding.pp_simple ~binder:COLONEQUAL ~keyword d1 d2
+      | Pwith_modtype (lid, mty) ->
+        let d1 = Longident.pp lid in
+        let d2 = Module_type.pp mty in
+        let module_ = pp_token ~after:keyword ~before:d1 MODULE in
+        let type_ = pp_token ~after:module_ ~before:d1 TYPE in
+        let keyword = keyword ^/^ module_ ^/^ type_ in
+        Binding.pp_simple ~keyword d1 d2
+      | Pwith_modtypesubst (lid, mty) ->
+        let d1 = Longident.pp lid in
+        let d2 = Module_type.pp mty in
+        let module_ = pp_token ~after:keyword ~before:d1 MODULE in
+        let type_ = pp_token ~after:module_ ~before:d1 TYPE in
+        let keyword = keyword ^/^ module_ ^/^ type_ in
+        Binding.pp_simple ~binder:COLONEQUAL ~keyword d1 d2
     in
     if is_first_cstr then
       prefix ~spaces:1 ~indent:2 mty cstr
@@ -2200,10 +2226,10 @@ end = struct
 end
 
 and Module_type_declaration : sig
-  val pp : ext_attrs:(string loc option * attributes)
+  val pp : ext_attrs:(string loc option * attributes) -> ?subst:bool
     -> module_type_declaration -> document
 end = struct
-  let pp ~ext_attrs:(extension, attrs)
+  let pp ~ext_attrs:(extension, attrs) ?(subst=false)
       { pmtd_name; pmtd_type; pmtd_attributes; pmtd_loc } =
     let text, pmtd_attributes =
       Attribute.extract_text pmtd_attributes ~item_start_pos:pmtd_loc.loc_start
@@ -2221,6 +2247,7 @@ end = struct
       | Some mty ->
         let typ = Module_type.pp mty in
         Binding.pp_simple ~keyword:kw name typ
+          ~binder:(if subst then EQUAL else COLONEQUAL)
     in
     let decl =
       Attribute.attach_to_top_item doc pmtd_attributes
@@ -2443,10 +2470,12 @@ end = struct
       | Psig_typesubst decls -> Type_declaration.ends_in_obj decls
       | Psig_typext te -> Type_extension.ends_in_obj te
       | Psig_exception exn -> Type_exception.ends_in_obj exn
+      (* FIXME: any of these could have a with constraint. *)
       | Psig_module _
       | Psig_recmodule _
       | Psig_modsubst _
       | Psig_modtype _
+      | Psig_modtypesubst _
       | Psig_open _
       | Psig_include _
       | Psig_attribute _
@@ -2513,6 +2542,8 @@ end = struct
     | Psig_recmodule pmds -> pp_recmodules ~ext_attrs pmds
     | Psig_modsubst ms -> Module_substitution.pp ~ext_attrs ms
     | Psig_modtype mtd -> Module_type_declaration.pp ~ext_attrs mtd
+    | Psig_modtypesubst mts ->
+      Module_type_declaration.pp ~ext_attrs ~subst:true mts
     | Psig_open od -> Open_description.pp ~ext_attrs od
     | Psig_include incl -> pp_include ~ext_attrs incl
     | Psig_attribute attr -> Attribute.pp Free_floating attr
@@ -2630,7 +2661,7 @@ end = struct
   let ends_in_obj = function
     | { ptyext_attributes = []; ptyext_constructors; _ } ->
       begin match list_last ptyext_constructors with
-      | Some { pext_attributes = []; pext_kind = Pext_decl (args, cto); _ } ->
+      | Some { pext_attributes = []; pext_kind = Pext_decl (_, args, cto); _ } ->
         begin match cto with
         | Some ct -> Core_type.ends_in_obj ct
         | None ->
@@ -2662,7 +2693,7 @@ end = struct
   let ends_in_obj = function
     | { ptyexn_attributes = []; ptyexn_constructor; _ } ->
       begin match ptyexn_constructor with
-      | { pext_attributes = []; pext_kind = Pext_decl (args, cto); _ } ->
+      | { pext_attributes = []; pext_kind = Pext_decl (_, args, cto); _ } ->
         begin match cto with
         | Some ct -> Core_type.ends_in_obj ct
         | None ->

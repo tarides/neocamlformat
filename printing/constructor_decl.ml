@@ -32,11 +32,18 @@ let constructor_name name =
   | Normal -> str name
   | _ -> Document.parens (str name)
 
-let gadt_constructor name args res_ty attributes =
+let gadt_constructor name vars args res_ty attributes =
   let name = constructor_name name in
   let decl =
     if has_args args then
       let args = constructor_arguments args in
+      let args =
+        match vars with
+        | [] -> args
+        | v :: vs ->
+          let vars = separate_map (break 1) ~f:str v vs in
+          Two_separated_parts.sep_with_first vars args ~sep:DOT
+      in
       let res  = !pp_core_type (Option.get res_ty) in
       let colon = pp_token ~after:name ~before:args COLON in
       let arrow = pp_token ~after:args ~before:res MINUSGREATER in
@@ -48,7 +55,14 @@ let gadt_constructor name args res_ty attributes =
         )
       )
     else
-      let res  = !pp_core_type (Option.get res_ty) in
+      let res = !pp_core_type (Option.get res_ty) in
+      let res =
+        match vars with
+        | [] -> res
+        | v :: vs ->
+          let vars = separate_map (break 1) ~f:str v vs in
+          Two_separated_parts.sep_with_first vars res ~sep:DOT
+      in
       Two_separated_parts.sep_with_second name res ~sep:COLON
   in
   !attach_attributes decl attributes
@@ -64,10 +78,11 @@ let simple_constructor name args attributes =
   in
   !attach_attributes decl attributes
 
-let pp_constructor name args res_ty attributes =
+let pp_constructor name vars args res_ty attributes =
   match res_ty with
   | None -> simple_constructor name args attributes
-  | Some _ -> gadt_constructor name args res_ty attributes
+  | Some _ ->
+    gadt_constructor name vars args res_ty attributes
 
 let pp_rebind name rebound attributes =
   let name = str name in
@@ -75,12 +90,12 @@ let pp_rebind name rebound attributes =
   let decl = Two_separated_parts.sep_with_first name rebound ~sep:EQUAL in
   !attach_attributes decl attributes
 
-let pp_decl { pcd_name; pcd_args; pcd_res; pcd_attributes; _ } =
-  pp_constructor pcd_name pcd_args pcd_res pcd_attributes
+let pp_decl { pcd_name; pcd_vars; pcd_args; pcd_res; pcd_attributes; _ } =
+  pp_constructor pcd_name pcd_vars pcd_args pcd_res pcd_attributes
 
 let pp_extension { pext_name; pext_kind; pext_attributes; _ } =
   match pext_kind with
-  | Pext_decl (args, res_ty) ->
-    pp_constructor pext_name args res_ty pext_attributes
+  | Pext_decl (vars, args, res_ty) ->
+    pp_constructor pext_name vars args res_ty pext_attributes
   | Pext_rebind lid ->
     pp_rebind pext_name lid pext_attributes
