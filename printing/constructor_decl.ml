@@ -1,3 +1,5 @@
+let pp_longident = Longident.pp
+
 open Source_parsing
 open Source_tree
 open Document
@@ -12,8 +14,6 @@ let pp_core_type : (core_type -> t) ref =
   ref (fun _ -> assert false)
 let attach_attributes : (t -> attributes -> t) ref =
   ref (fun _ _ -> assert false)
-let pp_longident : (Longident.t -> t) ref =
-  ref (fun _ -> assert false)
 
 (******************************************************)
 
@@ -86,7 +86,7 @@ let pp_constructor name vars args res_ty attributes =
 
 let pp_rebind name rebound attributes =
   let name = str name in
-  let rebound = !pp_longident rebound in
+  let rebound = pp_longident rebound in
   let decl = Two_separated_parts.sep_with_first name rebound ~sep:EQUAL in
   !attach_attributes decl attributes
 
