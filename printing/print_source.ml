@@ -1579,13 +1579,9 @@ end
 and Module_expr : sig
   val pp : module_expr -> document
 end = struct
-  (* TODO: lhs_of_apply useless now that there is Pmod_parens *)
-  let rec pp ?(lhs_of_apply=false) { pmod_desc; pmod_attributes; pmod_loc } =
+  let rec pp { pmod_desc; pmod_attributes; pmod_loc } =
     let doc = pp_desc ~loc:pmod_loc pmod_desc in
-    let doc = Attribute.attach_to_item doc pmod_attributes in
-    match lhs_of_apply, pmod_desc with
-    | true, Pmod_functor _ -> parens doc
-    | _ -> doc
+    Attribute.attach_to_item doc pmod_attributes
 
   and pp_desc ~loc = function
     | Pmod_ident lid -> Longident.pp lid
@@ -1625,14 +1621,14 @@ end = struct
     functor_ ^/^ params ^/^ arrow ^/^ me
 
   and pp_apply ~loc me1 me2 =
-    let me1 = pp ~lhs_of_apply:true me1 in
+    let me1 = pp me1 in
     let me2 = pp me2 in
     let rparen = pp_token ~inside:loc ~after:me2 RPAREN in
     let lparen = pp_token ~after:me1 ~before:me2 LPAREN in
     me1 ^^ break_before ~spaces:0 (lparen ^^ me2 ^^ rparen)
 
   and pp_gen_apply ~loc me =
-    let me = pp ~lhs_of_apply:true me in
+    let me = pp me in
     let rparen = pp_token ~inside:loc ~after:me RPAREN in
     let lparen = pp_token ~after:me ~before:rparen LPAREN in
     me ^^ break_before ~spaces:0 (lparen ^^  rparen)
@@ -1640,8 +1636,7 @@ end = struct
   and pp_constraint me mty =
     let me = pp me in
     let mty = Module_type.pp mty in
-    let colon = pp_token ~after:me ~before:mty COLON in
-    parens (me ^/^ colon ^/^ mty)
+    Two_separated_parts.sep_with_first me ~sep:COLON mty
 
   and pp_unpack ~(loc:Location.t) ~attrs exp pkg1 pkg2 =
     let exp = Expression.pp exp in
@@ -1667,8 +1662,6 @@ end = struct
       let coerce = pp_token ~after:val_exp ~before:pkg COLONGREATER in
       prefix ~spaces:1 ~indent:2 with_annot
         (group (coerce ^/^ pkg))
-
-  let pp = pp ~lhs_of_apply:false
 end
 
 and Module_type : sig
@@ -2117,7 +2110,7 @@ end = struct
         ~extension attrs ~later:incl
     in
     Attribute.attach_to_top_item
-      (group (kw ^/^ incl))
+      (prefix ~indent:2 ~spaces:1 kw incl)
       pincl_attributes
 
   let pp_extension ext attrs =
