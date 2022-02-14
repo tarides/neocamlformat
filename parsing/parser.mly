@@ -106,7 +106,7 @@ let mkoperator ~loc (name : string) =
   mkrhs name loc (* mkexpvar *)
 
 let mkpatvar ~loc name =
-  mkpat ~loc (Ppat_var name)
+  mkpat ~loc (Ppat_var (mkrhs name loc))
 
 (*
   Ghost expressions and patterns:
@@ -2356,7 +2356,7 @@ let_binding_body:
 /* BEGIN AVOID */
   | id = val_ident %prec below_HASH
       { (mkpatvar ~loc:$loc id,
-         ([], (None, None), mkexpvar ~loc:$loc id.txt),
+         ([], (None, None), mkexpvar ~loc:$loc id),
          true) }
 /* END AVOID */
 (* The formal parameter EXT can be instantiated with ext or no_ext
@@ -2390,7 +2390,7 @@ letop_binding_body:
       { (pat, exp) }
   | id = val_ident
       (* Let-punning *) (* FIXME *)
-      { (mkpatvar ~loc:$loc id, ([], (None, None), mkexpvar ~loc:$loc id.txt)) }
+      { (mkpatvar ~loc:$loc id, ([], (None, None), mkexpvar ~loc:$loc id)) }
   | pat = simple_pattern COLON typ = core_type EQUAL exp = seq_expr
       { pat, ([], (Some typ, None), exp) }
   | pat = pattern_no_exn EQUAL exp = seq_expr
@@ -2553,7 +2553,7 @@ pattern_no_exn:
       { $1 }
   | mkpat(
       self AS val_ident
-        { Ppat_alias($1, $3) }
+        { Ppat_alias($1, mkrhs $3 $loc($3)) }
     | self AS error
         { expecting $loc($3) "identifier" }
     | pattern_comma_list(self) %prec below_COMMA
@@ -2584,7 +2584,7 @@ pattern_gen:
 ;
 simple_pattern:
     mkpat(val_ident %prec below_EQUAL
-      { Ppat_var ($1) })
+      { Ppat_var (mkrhs $1 $sloc) })
       { $1 }
   | simple_pattern_not_ident { $1 }
 ;
@@ -2708,7 +2708,7 @@ value_description:
     { let attrs = attrs2 in
       let loc = make_loc $sloc in
       let docs = symbol_docs $sloc in
-      Val.mk id ty ~attrs ~loc ~docs,
+      Val.mk (mkrhs id $loc(id)) ty ~attrs ~loc ~docs,
       (ext, attrs1) }
 ;
 
@@ -2726,7 +2726,8 @@ primitive_declaration:
   attrs2 = post_item_attributes
     { let loc = make_loc $sloc in
       let docs = symbol_docs $sloc in
-      Val.mk id ty ~prim ~attrs:attrs2 ~loc ~docs, (ext, attrs1) }
+      Val.mk (mkrhs id $loc(id)) ty ~prim ~attrs:attrs2 ~loc ~docs,
+      (ext, attrs1) }
 ;
 
 (* Type declarations and type substitutions. *)
@@ -3375,8 +3376,8 @@ val_extra_ident:
   | LPAREN MODULE error       { expecting $loc($3) "module-expr" }
 ;
 val_ident:
-    LIDENT                    { mkrhs $1 $sloc }
-  | val_extra_ident           { mkrhs $1 $sloc }
+    LIDENT                    { $1 }
+  | val_extra_ident           { $1 }
 ;
 operator:
     PREFIXOP                                    { $1 }
@@ -3441,36 +3442,36 @@ constr_longident:
 ;
 
 mk_longident(prefix,final):
-   | final            { Lident $1 }
-   | prefix DOT final { Ldot($1,$3) }
+   | final            { Lident (mkrhs $1 $sloc) }
+   | prefix DOT final { Ldot($1, mkrhs $3 $loc($3)) }
 ;
 val_longident:
     mk_longident(mod_longident, val_ident) { $1 }
 ;
 label_longident:
-    mk_longident(mod_longident, mkrhs(LIDENT))  { $1 }
+    mk_longident(mod_longident, LIDENT)  { $1 }
 ;
 type_longident:
-    mk_longident(mod_ext_longident, mkrhs(LIDENT))  { $1 }
+    mk_longident(mod_ext_longident, LIDENT)  { $1 }
 ;
 mod_longident:
-    mk_longident(mod_longident, mkrhs(UIDENT))  { $1 }
+    mk_longident(mod_longident, UIDENT)  { $1 }
 ;
 mod_ext_longident:
-    mk_longident(mod_ext_longident, mkrhs(UIDENT)) { $1 }
+    mk_longident(mod_ext_longident, UIDENT) { $1 }
   | mod_ext_longident LPAREN mod_ext_longident RPAREN
       { Lapply($1, $3) }
   | mod_ext_longident LPAREN error
       { expecting $loc($3) "module path" }
 ;
 mty_longident:
-    mk_longident(mod_ext_longident,mkrhs(ident)) { $1 }
+    mk_longident(mod_ext_longident,ident) { $1 }
 ;
 clty_longident:
-    mk_longident(mod_ext_longident,mkrhs(LIDENT)) { $1 }
+    mk_longident(mod_ext_longident,LIDENT) { $1 }
 ;
 class_longident:
-   mk_longident(mod_longident,mkrhs(LIDENT)) { $1 }
+   mk_longident(mod_longident,LIDENT) { $1 }
 ;
 
 /* BEGIN AVOID */
@@ -3479,7 +3480,7 @@ class_longident:
    the path prefix is only valid for types: (e.g. F(X).(::)) */
 any_longident:
   | mk_longident (mod_ext_longident,
-     ident | constr_extra_ident | val_extra_ident { mkrhs $1 $sloc }
+     ident | constr_extra_ident | val_extra_ident { $1 }
     ) { $1 }
   | constr_extra_nonprefix_ident { Lident (mkrhs $1 $sloc) }
 ;
