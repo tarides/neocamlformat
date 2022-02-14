@@ -156,6 +156,8 @@ let mk_info print all =
   let docv = Format.asprintf "%a" (print_all print) all in
   Arg.info ~docs ~docv
 
+let width = ref 0
+
 module Record = struct
   open Wrappable
 

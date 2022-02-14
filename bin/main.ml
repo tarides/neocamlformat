@@ -21,7 +21,7 @@ type fmt_file_error =
 
 exception Fmt_file_error of fmt_file_error
 
-let fmt_file ~width fn =
+let fmt_file fn =
   let source = read_file fn in
   let intf = Filename.check_suffix fn "mli" in
   let fmted =
@@ -53,7 +53,7 @@ let fmt_file ~width fn =
     in
     Comments.report_remaining ();
     let buf = Buffer.create (String.length source) in
-    PPrint.ToBuffer.pretty 10. width buf doc;
+    PPrint.ToBuffer.pretty 10. !Options.width buf doc;
     Buffer.to_bytes buf |> Bytes.to_string
   in
   (try
@@ -87,7 +87,7 @@ let cmd =
   and+ () = If_branch.parens_style_cmd
   and+ () = If_branch.parens_situations_cmd
   and+ () = Applications.layout_cmd
-  and+ width = Arg.(value & opt int 80 & info ["w"; "width"])
+  and+ () = width := Arg.(value & opt int 80 & info ["w"; "width"])
   and+ files = Arg.(value & pos_all file [] & info ~doc:"files to format" [])
   and+ ignore_docstrings = Arg.(value & flag & info ["ignore-docstrings"])
   and+ quiet = Arg.(value & flag & info ["quiet"])
@@ -96,7 +96,7 @@ let cmd =
   Ast_checker.ignore_docstrings.contents <- ignore_docstrings;
   let ok = ref true in
   List.iter (fun fn ->
-      match fmt_file ~width fn with
+      match fmt_file fn with
       | exception (Fmt_file_error e) ->
          begin match e with
          | Invalid_input e ->

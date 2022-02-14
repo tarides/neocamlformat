@@ -287,8 +287,8 @@ let collate_toplevel_items lst =
     | [ x ] -> [ `Doc x ]
     | x1 :: x2 :: rest ->
       `Doc x1
-      :: (if requirement x1.txt > 80 (* TODO: width in config *)
-          || requirement x2.txt > 80 (* TODO: width in config *)
+      :: (if requirement x1.txt > !Options.width
+          || requirement x2.txt > !Options.width
           then `Twice
           else `Once)
       :: insert_blanks (x2 :: rest)
