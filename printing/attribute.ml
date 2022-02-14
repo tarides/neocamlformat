@@ -199,9 +199,6 @@ let has_non_doc =
 let attach_to_item ?spaces doc =
   attach ?spaces Attached_to_item doc
 
-let () = Constructor_decl.attach_attributes := attach_to_item
-let () = Polymorphic_variant.attach_attributes := attach_to_item
-
 let attach_to_top_item doc =
   attach Attached_to_structure_item doc
 
@@ -238,3 +235,17 @@ let prepend_text attrs doc =
         text texts
     in
     [ texts; doc ]
+
+module Extension = struct
+  type kind =
+    | Structure_item
+    | Item
+
+  let percents = function
+    | Structure_item -> "%%"
+    | Item -> "%"
+
+  let pp kind ({ Location.txt = ext_name; loc }, ext_payload) =
+    let tag = string ~loc (percents kind ^ ext_name) in
+    brackets (Payload.pp_after ~tag ext_payload)
+end

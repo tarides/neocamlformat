@@ -1,22 +1,9 @@
 open Source_parsing
-open Asttypes
 open Source_tree
 open Document
 
 let imported_pp_exp : (expression -> t) ref = ref (fun _ -> assert false)
-let imported_decorate :
-  (t -> extension:string loc option -> attributes -> later:t -> t) ref =
-  ref (fun _ ~extension:_ _ ~later:_ -> assert false)
-
 let[@inline] pp exp = !imported_pp_exp exp
-
-module Keyword : sig
-  val decorate :
-    t -> extension:string loc option -> attributes -> later:t -> t
-end = struct
-
-  let[@inline] decorate t = !imported_decorate t
-end
 
 type branch =
   | Expr of t

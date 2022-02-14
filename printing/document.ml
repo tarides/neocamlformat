@@ -521,3 +521,15 @@ module List_like = struct
 end
 
 module Record_like = Enclosed_separated
+
+(* Horrible hack *)
+
+let join_with_colon lbl doc =
+  let l = str lbl in
+  let just_before =
+    (* Shifting so we always get the colon! *)
+    let pos_cnum = l.loc.loc_end.pos_cnum - 1 in
+    { l.loc with loc_end = { l.loc.loc_end with pos_cnum } }
+  in
+  let colon = pp_token ~after:{ l with loc = just_before } ~before:doc COLON in
+  prefix ~indent:2 ~spaces:0 (group (l ^^ colon)) doc

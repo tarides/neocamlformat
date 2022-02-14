@@ -18,9 +18,15 @@ val extract_text
   : item_start_pos:Lexing.position -> attributes -> attributes * attributes
 val prepend_text : attributes -> Document.t -> Document.t list
 
-module Payload : sig
-  val pp_after : tag:Document.t -> payload -> Document.t
+module Extension : sig
+  type kind =
+    | Structure_item
+    | Item
 
+  val pp : kind -> extension -> Document.t
+end
+
+module Payload : sig
   (* To be filled in to close the recursion! *)
   val pp_struct
     : (structure_item -> structure_item list -> Document.t) ref

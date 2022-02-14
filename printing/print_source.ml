@@ -29,16 +29,6 @@ let rec_token ~recursive_by_default rf : Source_parsing.Parser.token option =
   | Nonrecursive, true -> Some NONREC
   | _, _ -> None
 
-let join_with_colon lbl doc =
-  let l = str lbl in
-  let just_before =
-    (* Shifting so we always get the colon! *)
-    let pos_cnum = l.loc.loc_end.pos_cnum - 1 in
-    { l.loc with loc_end = { l.loc.loc_end with pos_cnum } }
-  in
-  let colon = pp_token ~after:{ l with loc = just_before } ~before:doc COLON in
-  prefix ~indent:2 ~spaces:0 (group (l ^^ colon)) doc
-
 module Longident = Li
 
 module Constant : sig
@@ -82,45 +72,7 @@ end = struct
   let pp tag = string ~loc:tag.loc ("`" ^ tag.txt)
 end
 
-module rec Extension : sig
-  type kind =
-    | Structure_item
-    | Item
-
-  val pp : kind -> extension -> document
-end = struct
-  type kind =
-    | Structure_item
-    | Item
-
-  let percents = function
-    | Structure_item -> "%%"
-    | Item -> "%"
-
-  let pp kind ({ Location.txt = ext_name; loc }, ext_payload) =
-    let tag = string ~loc (percents kind ^ ext_name) in
-    brackets (Attribute.Payload.pp_after ~tag ext_payload)
-end
-
-and Keyword : sig
-  val decorate :
-    document -> extension:string loc option -> attributes -> later:_ loc ->
-    document
-end = struct
-  let decorate token ~extension attrs ~later =
-    let kw =
-      match extension with
-      | None -> token
-      | Some ext ->
-        let percent = pp_token ~after:token ~before:later PERCENT in
-        token ^^ percent ^^ str ext
-    in
-    Attribute.attach_to_item ~spaces:0 kw attrs
-
-  let () = If_then_else.imported_decorate := decorate
-end
-
-and Empty_delimited : sig
+module rec Empty_delimited : sig
   val pp : loc:Location.t -> ?extension:string loc -> attributes ->
     Parser.token -> Parser.token -> document
 end = struct
@@ -131,224 +83,6 @@ end = struct
     let snd = pp_token ~after ~before end_tok in
     let fst = Keyword.decorate fst ~extension attrs ~later:snd in
     group (fst ^/^ snd)
-end
-
-and Core_type : sig
-  val ends_in_obj : core_type -> bool
-  val starts_with_obj : core_type -> bool
-
-  val pp : core_type -> document
-  val pp_param : (arg_label * core_type) -> document
-end = struct
-  let rec starts_with_obj core_type =
-    match core_type.ptyp_desc with
-    | Ptyp_alias (lhs, _)
-    | Ptyp_tuple (lhs :: _)
-    | Ptyp_arrow ((_, lhs) :: _, _) -> starts_with_obj lhs
-    | Ptyp_object (_, _) -> true
-    | Ptyp_any
-    | Ptyp_var _
-    | Ptyp_parens _
-    | Ptyp_tuple _
-    | Ptyp_arrow _
-    | Ptyp_constr (_, _)
-    | Ptyp_class (_, _)
-    | Ptyp_variant (_, _, _)
-    | Ptyp_poly _
-    | Ptype_poly _
-    | Ptyp_package _
-    | Ptyp_extension _ -> false
-
-  let rec ends_in_obj core_type =
-    core_type.ptyp_attributes = [] &&
-    match core_type.ptyp_desc with
-    | Ptyp_arrow (_, rhs)
-    | Ptype_poly (_, rhs)
-    | Ptyp_poly (_, rhs) -> ends_in_obj rhs
-    | Ptyp_tuple lst -> ends_in_obj (List.hd (List.rev lst))
-    | Ptyp_object (_, _) -> true
-    | Ptyp_any
-    | Ptyp_var _
-    | Ptyp_parens _
-    | Ptyp_constr (_, _)
-    | Ptyp_class (_, _)
-    | Ptyp_alias (_, _)
-    | Ptyp_variant (_, _, _)
-    | Ptyp_package _
-    | Ptyp_extension _ -> false
-
-  let pp_var ~loc v =
-    match String.index_opt v '\'' with
-    | None -> string ~loc ("'" ^ v)
-    | Some _ -> string ~loc ("' " ^ v)
-
-  let rec pp { ptyp_loc; ptyp_desc; ptyp_attributes; ptyp_ext_attributes;
-               ptyp_loc_stack = _ } =
-    let doc =
-      group (pp_desc ~loc:ptyp_loc ~ext_attrs:ptyp_ext_attributes ptyp_desc)
-    in
-    Attribute.attach_to_item doc ptyp_attributes
-
-  and pp_desc ~loc ~ext_attrs = function
-    | Ptyp_any -> underscore ~loc
-    | Ptyp_var v -> pp_var ~loc v
-    | Ptyp_parens ct -> parens (pp ct)
-    | Ptyp_arrow (params, ct2) -> pp_arrow params ct2
-    | Ptyp_tuple lst -> pp_tuple lst
-    | Ptyp_constr (name, args) -> pp_constr name args
-    | Ptyp_object (fields, closed) -> pp_object ~loc fields closed
-    | Ptyp_class (name, args) -> pp_class name args
-    | Ptyp_alias (ct, alias) -> pp_alias ct alias
-    | Ptyp_variant (fields, closed, present) ->
-      Polymorphic_variant.pp_row ~loc fields closed present
-    | Ptyp_poly (vars, ct) -> pp_poly vars ct
-    | Ptype_poly (vars, ct) -> pp_newtype_poly ~loc vars ct
-    | Ptyp_package pkg -> pp_package ~loc ext_attrs pkg
-    | Ptyp_extension ext -> Extension.pp Item ext
-
-  and pp_param (arg_label, ct) =
-    let ct = hang 0 @@ pp ct in
-    match arg_label with
-    | Nolabel -> ct
-    | Labelled l -> join_with_colon l ct
-    | Optional l -> join_with_colon { l with txt = "?" ^ l.txt } ct
-
-  and pp_arrow params res =
-    let params =
-      let fmt elt = hang 0 (pp_param elt) in
-      List.fold_left (fun acc elt ->
-        let elt = fmt elt in
-        let sep = pp_token ~after:acc ~before:elt MINUSGREATER in
-        acc ^/^ group (sep ^^ space ++ hang 0 elt)
-      ) (fmt @@ List.hd params) (List.tl params)
-    in
-    let res = pp res in
-    let arrow = pp_token ~after:params ~before:res MINUSGREATER in
-    let doc = params ^/^ group (arrow ^^ space ++ hang 0 res) in
-    doc
-
-  and pp_tuple = function
-    | [] -> assert false
-    | x :: xs -> left_assoc_map ~sep:STAR ~f:pp x xs
-
-  and pp_constr name args =
-    let name = Longident.pp name in
-    match args with
-    | [] -> name
-    | x :: xs -> pp_params x xs ^/^ name
-
-  and pp_params first = function
-    | []   -> pp first
-    | rest ->
-      let fmt elt = group (pp elt) in
-      let params = separate_map PPrint.(comma ^^ break 1) ~f:fmt first rest in
-      parens (hang 0 params)
-
-  and pp_object ~loc fields closed =
-    let fields = List.map Object_field.pp fields in
-    let fields =
-      match closed with
-      | OClosed -> fields
-      | OOpen loc -> fields @ [ string ~loc "..", [] ]
-    in
-    Record_like.pp ~loc ~formatting:Fit_or_vertical ~left:LESS ~right:GREATER
-      fields
-
-  and pp_class name args =
-    let name = sharp ++ Longident.pp name in
-    match args with
-    | [] -> name
-    | x :: xs -> pp_params x xs ^/^ name
-
-  and pp_alias ct alias =
-    let ct = pp ct in
-    let alias = pp_var ~loc:alias.loc alias.txt in
-    let as_ = pp_token ~after:ct ~before:alias AS in
-    (* TODO: hang & ident one linebreak *)
-    let doc = ct ^/^ as_ ^/^ alias in
-    doc
-
-  and pp_poly vars ct =
-    (* FIXME: doesn't look right. *)
-    let ct = pp ct in
-    match vars with
-    | [] -> ct
-    | v :: vs ->
-      let vars= separate_map space ~f:(fun v -> pp_var ~loc:v.loc v.txt) v vs in
-      let dot = pp_token ~after:vars ~before:ct DOT in
-      prefix ~indent:2 ~spaces:1
-        (group (vars ^^ dot))
-        ct
-
-  and pp_newtype_poly ~loc vars ct =
-    (* FIXME: doesn't look right. *)
-    let ct = pp ct in
-    match vars with
-    | [] -> ct
-    | v :: vs ->
-      let type_ = pp_token ~inside:loc ~before:v TYPE in
-      let vars = separate_map space ~f:str v vs in
-      let dot = pp_token ~after:vars ~before:ct DOT in
-      prefix ~indent:2 ~spaces:1
-        (group (type_ ^/^ vars ^^ dot))
-        ct
-
-  and pp_package ~loc (extension, attrs) pkg =
-    let pkg = Package_type.pp pkg in
-    let module_ =
-      let tok = pp_token ~inside:loc ~before:pkg MODULE in
-      Keyword.decorate tok ~extension attrs ~later:pkg
-    in
-    parens (module_ ^/^ pkg)
-
-  let () =
-    Constructor_decl.pp_core_type := pp;
-    Polymorphic_variant.pp_core_type := pp;
-    Attribute.Payload.(
-      ct_ends_in_obj := ends_in_obj;
-      pp_core_type := pp
-    )
-end
-
-and Object_field : sig
-  val pp : object_field -> document * document list
-end = struct
-  let pp_otag name ct =
-    let name = str name in
-    let ct = Core_type.pp ct in
-    let colon = pp_token ~after:name ~before:ct COLON in
-    group (name ^^ colon) ^/^ ct
-
-  let pp_desc = function
-    | Otag (name, ct) -> pp_otag name ct
-    | Oinherit ct -> Core_type.pp ct
-
-  let pp { pof_desc; pof_attributes; _ } =
-    let desc = pp_desc pof_desc in
-    desc, List.map (Attribute.pp Attached_to_item) pof_attributes
-end
-
-and Package_type : sig
-  val pp : package_type -> document
-end = struct
-  let pp_constr (lid, ct) =
-    let lid = Longident.pp lid in
-    let ct = Core_type.pp ct in
-    let colon = pp_token ~after:lid ~before:ct EQUAL in
-    lid ^/^ colon ^/^ ct
-
-  let pp (lid, constrs) =
-    let lid = Longident.pp lid in
-    match constrs with
-    | [] -> lid
-    | x :: xs ->
-      let constrs =
-        separate_map
-          PPrint.(break 1 ^^ !^"and" ^^ break 1 ^^ !^"type" ^^ break 1)
-          ~f:pp_constr x xs
-      in
-      let sep = PPrint.(break 1 ^^ !^"with" ^/^ !^"type" ^^ break 1) in
-      group (concat lid constrs ~sep)
 end
 
 and Pattern : sig
@@ -489,7 +223,7 @@ end = struct
       match ct with
       | None -> mod_name
       | Some pkg ->
-        let constr = Package_type.pp pkg in
+        let constr = Core_type.Package_type.pp pkg in
         let colon = pp_token ~after:mod_name ~before:constr COLON in
         mod_name ^/^ colon ^/^ constr
     in
@@ -546,7 +280,7 @@ end = struct
         | Ppat_lazy p -> pp_lazy ~loc ~ext_attrs p
         | Ppat_unpack (name, typ) -> pp_unpack ~loc ~ext_attrs name typ
         | Ppat_exception p -> pp_exception ~loc ~ext_attrs p
-        | Ppat_extension ext -> Extension.pp Item ext
+        | Ppat_extension ext -> Attribute.Extension.pp Item ext
         | Ppat_open (lid, p) -> pp_open lid p
       )
 
@@ -823,7 +557,7 @@ end = struct
     | Pexp_open (lid, exp) -> pp_open lid exp
     | Pexp_letopen (od, exp) -> pp_letopen ~loc ~ext_attrs od exp
     | Pexp_letop letop -> pp_letop letop
-    | Pexp_extension ext -> Extension.pp Item ext
+    | Pexp_extension ext -> Attribute.Extension.pp Item ext
     | Pexp_unreachable -> string ~loc "."
     | Pexp_access { accessed; paren; indices; set_expr } ->
       pp_access ~loc accessed paren indices set_expr
@@ -1389,7 +1123,7 @@ end = struct
       match pkg with
       | None -> me
       | Some pkg ->
-        let constr = Package_type.pp pkg in
+        let constr = Core_type.Package_type.pp pkg in
         let colon = pp_token ~after:me ~before:constr COLON in
         me ^/^ colon ^/^ constr
     in
@@ -1592,7 +1326,7 @@ end = struct
     | Pmod_gen_apply me -> pp_gen_apply ~loc me
     | Pmod_constraint (me, mty) -> pp_constraint me mty
     | Pmod_unpack (attrs, e, pkg1, pkg2) -> pp_unpack ~loc ~attrs e pkg1 pkg2
-    | Pmod_extension ext -> Extension.pp Item ext
+    | Pmod_extension ext -> Attribute.Extension.pp Item ext
 
   and pp_structure ~loc ~attrs = function
     | [] -> Empty_delimited.pp ~loc attrs STRUCT END
@@ -1650,7 +1384,7 @@ end = struct
       match pkg1 with
       | None -> val_exp
       | Some pkg ->
-        let pkg = Package_type.pp pkg in
+        let pkg = Core_type.Package_type.pp pkg in
         let colon = pp_token ~after:val_exp ~before:pkg COLON in
         prefix ~spaces:1 ~indent:2 val_exp
           (group (colon ^/^ pkg))
@@ -1658,7 +1392,7 @@ end = struct
     match pkg2 with
     | None -> with_annot
     | Some pkg ->
-      let pkg = Package_type.pp pkg in
+      let pkg = Core_type.Package_type.pp pkg in
       let coerce = pp_token ~after:val_exp ~before:pkg COLONGREATER in
       prefix ~spaces:1 ~indent:2 with_annot
         (group (coerce ^/^ pkg))
@@ -1679,7 +1413,7 @@ end = struct
     | Pmty_functor (attrs, params, mty) -> pp_functor ~loc ~attrs params mty
     | Pmty_with (mty, cstrs) -> pp_with mty cstrs
     | Pmty_typeof (attrs, me) -> pp_typeof ~loc ~attrs me
-    | Pmty_extension ext -> Extension.pp Item ext
+    | Pmty_extension ext -> Attribute.Extension.pp Item ext
     | Pmty_parens mty -> parens (pp mty)
 
   and pp_signature ~loc = function
@@ -2114,7 +1848,7 @@ end = struct
       pincl_attributes
 
   let pp_extension ext attrs =
-    let ext = Extension.pp Structure_item ext in
+    let ext = Attribute.Extension.pp Structure_item ext in
     Attribute.attach_to_top_item ext attrs
 
   let pp_item ?(first=false) { pstr_desc; pstr_loc = loc;
@@ -2218,7 +1952,7 @@ end = struct
       | Psig_class_type _ -> false
 
   let pp_extension ext attrs =
-    let ext = Extension.pp Structure_item ext in
+    let ext = Attribute.Extension.pp Structure_item ext in
     Attribute.attach_to_top_item ext attrs
 
   let pp_include ~ext_attrs:(extension, attrs)
@@ -2746,7 +2480,7 @@ end = struct
     | Pcty_constr (ct, args) -> pp_constr ct args, attrs
     | Pcty_signature sg -> Class_signature.pp ~loc sg, attrs
     | Pcty_arrow (lbl, ct, cty) -> pp_arrow lbl ct cty, attrs
-    | Pcty_extension ext -> Extension.pp Item ext, attrs
+    | Pcty_extension ext -> Attribute.Extension.pp Item ext, attrs
     | Pcty_open (od, ct) -> pp_open ~loc od ct attrs, []
 end
 
@@ -2849,7 +2583,7 @@ end = struct
     | Pcl_apply (ce, args) -> pp_apply ce args, attrs
     | Pcl_let (rf, vbs, ce) -> pp_let ~loc rf vbs ce, attrs
     | Pcl_constraint (ce, ct) -> pp_constraint ce ct, attrs
-    | Pcl_extension ext -> Extension.pp Item ext, attrs
+    | Pcl_extension ext -> Attribute.Extension.pp Item ext, attrs
     | Pcl_open (od, ce) -> pp_open ~loc od ce attrs, []
     | Pcl_parens ce -> parens (pp ce), attrs
 end
@@ -2963,7 +2697,7 @@ end = struct
     | Pcf_constraint (ct1, ct2) -> pp_constraint ~loc ct1 ct2
     | Pcf_initializer e -> pp_init ~loc e
     | Pcf_attribute attr -> Attribute.pp Free_floating attr
-    | Pcf_extension ext -> Extension.pp Structure_item ext
+    | Pcf_extension ext -> Attribute.Extension.pp Structure_item ext
 
   let pp_field { pcf_desc; pcf_loc; pcf_attributes } =
     let doc = pp_field_desc ~loc:pcf_loc pcf_desc in
@@ -3049,7 +2783,7 @@ end = struct
     | Pctf_method meth -> pp_method ~loc meth
     | Pctf_constraint (ct1, ct2) -> Class_structure.pp_constraint ~loc ct1 ct2
     | Pctf_attribute attr -> Attribute.pp Free_floating attr
-    | Pctf_extension ext -> Extension.pp Structure_item ext
+    | Pctf_extension ext -> Attribute.Extension.pp Structure_item ext
 
   let pp_field { pctf_desc; pctf_loc; pctf_attributes } =
     let doc = pp_field_desc ~loc:pctf_loc pctf_desc in
