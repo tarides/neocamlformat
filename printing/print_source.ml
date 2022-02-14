@@ -2236,7 +2236,7 @@ end = struct
       | Some mty ->
         let typ = Module_type.pp mty in
         Binding.pp_simple ~keyword:kw name typ
-          ~binder:(if subst then EQUAL else COLONEQUAL)
+          ~binder:(if subst then COLONEQUAL else EQUAL)
     in
     let decl =
       Attribute.attach_to_top_item doc pmtd_attributes
