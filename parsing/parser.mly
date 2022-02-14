@@ -1396,7 +1396,8 @@ module_type:
           let mty = $1 in
           let mty, cstrs =
             match mty.pmty_desc with
-            | Pmty_with (mty, cstrs') -> mty, cstrs' @ cstrs
+            | Pmty_with (sub_mty, cstrs') when mty.pmty_attributes = [] ->
+                sub_mty, cstrs' @ cstrs
             | _ -> mty, cstrs
           in
           Pmty_with(mty, cstrs) }
