@@ -2759,7 +2759,7 @@ end = struct
     in
     match inject with
     | Injective -> bang ++ doc
-    | NoInjectivity -> ct
+    | NoInjectivity -> doc
 
   let with_params ?(always_enclosed=false) ?(enclosing=parens) lst name =
     match lst with
