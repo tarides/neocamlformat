@@ -417,11 +417,17 @@ module Enclosed_separated = struct
     val pp : loc:Location.t ->
       left:Parser.token -> right:Parser.token -> raw -> raw list -> t
   end = struct
-    let ( * ) before after =
-      { after with doc = before ^^ after.doc }
+    let rec insert_semi : element list -> t list = function
+      | [] -> assert false
+      | [ x ] -> [ x.doc ]
+      | x1 :: (x2 :: _ as xs) ->
+        if x1.has_semi then
+          x1.doc :: insert_semi xs
+        else
+          let semi = pp_token ~after:x1.doc ~before:x2.doc SEMI in
+          group (x1.doc ^^ semi) :: insert_semi xs
 
-    let fmt (x, attrs) =
-      let doc = nest 2 (group (break_before x)) in
+    let fmt (doc, attrs) =
       match attrs with
       | [] -> { doc; has_semi = false }
       | x :: xs ->
@@ -429,27 +435,30 @@ module Enclosed_separated = struct
         { doc = prefix ~indent:2 ~spaces:1 (suffix ~after:doc PPrint.semi) attrs
         ; has_semi = true }
 
+    let rec collate ?(first=false) = function
+      | [] -> assert false
+      | [ x ] -> (* last one! *)
+        if first
+        then x
+        else group (break_before ~spaces:0 x) 
+      | x :: xs ->
+        let x =
+          if first
+          then group (break_after x)
+          else group (break_before ~spaces:0 @@ break_after x)
+        in
+        x ^^ collate xs
+
     let pp_fields x xs =
-      let res =
-        List.fold_left
-          (fun { doc = acc; has_semi } elt ->
-             let elt = fmt elt in
-             if has_semi then
-               acc * elt
-             else
-               let semi = pp_token ~after:acc ~before:elt.doc SEMI in
-               group (acc ^^ semi) * elt)
-          (fmt x)
-          xs
-      in
-      res.doc
+      List.map fmt (x :: xs)
+      |> insert_semi
+      |> collate ~first:true
 
     let pp ~loc ~left ~right x xs =
       let fields = pp_fields x xs in
       let left = pp_token ~inside:loc ~before:fields left in
       let right = pp_token ~inside:loc ~after:fields right in
-      let before_snd snd = PPrint.(group (break 1 ^^ snd)) in
-      concat' ~indent:0 ~before_snd (left ^^ fields) right
+      group (break_after left) ^^ hang 0 fields ^^ group (break_before right)
   end
 
   module Fit_or_vertical : sig

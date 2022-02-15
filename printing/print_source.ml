@@ -178,15 +178,13 @@ end = struct
 
   and pp_record ~loc pats closed =
     let fields = List.map pp_record_field pats in
-    let extra_fields =
+    let fields =
       match closed with
-      | OClosed -> []
-      | OOpen loc -> [underscore ~loc]
+      | OClosed -> fields
+      | OOpen loc -> fields @ [underscore ~loc]
     in
-    List_like.pp ~loc
-      ~formatting:!Options.Record.pattern
-      ~left:LBRACE ~right:RBRACE
-      (fields @ extra_fields)
+    List_like.pp ~loc ~formatting:!Options.Record.pattern
+      ~left:LBRACE ~right:RBRACE fields
 
   and pp_array ~loc pats =
     let pats = List.map pp pats in
