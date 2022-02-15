@@ -363,6 +363,22 @@ let flow sep first rest =
   flow_map sep (fun x -> x) first rest
 
 module Two_separated_parts = struct
+  (* FIXME: does sep_with_first make sense?
+
+     Shouldn't it be just [nest 2 (flow (break 1) x [ xs ])] ?
+     which would go to
+     {v
+       Foo
+         of bar
+     v}
+
+     before going to
+
+     {v
+       Foo
+         of
+         bar
+     v} *)
   (** Degrades in the following way:
       {v
         Foo of bar
