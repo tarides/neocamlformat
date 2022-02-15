@@ -99,7 +99,8 @@ end = struct
     let pat = pp pat in
     let alias = str alias in
     let as_ = pp_token ~after:pat ~before:alias AS in
-    let doc = pat ^^ group (nest 2 (break_before ~spaces:1 as_ ^/^ alias)) in
+    let aliaser = group (as_ ^/^ alias) in
+    let doc = pat ^^ group (nest 2 (break_before aliaser)) in
     doc
 
   and pp_interval c1 c2 =
