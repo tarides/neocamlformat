@@ -1,6 +1,6 @@
-open Source_parsing
-open Source_tree
 open Document
+open Import
+open Source_tree
 
 let imported_pp_exp : (expression -> t) ref = ref (fun _ -> assert false)
 let[@inline] pp exp = !imported_pp_exp exp

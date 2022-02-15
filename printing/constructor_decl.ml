@@ -1,8 +1,6 @@
-let pp_longident = Longident.pp
-
-open Source_parsing
-open Source_tree
 open Document
+open Import
+open Source_tree
 
 (******************************************************)
 (* Waiting for: https://github.com/ocaml/RFCs/pull/11 *)
@@ -82,7 +80,7 @@ let pp_constructor name vars args res_ty attributes =
 
 let pp_rebind name rebound attributes =
   let name = str name in
-  let rebound = pp_longident rebound in
+  let rebound = Longident.pp rebound in
   let decl = Two_separated_parts.sep_with_first name rebound ~sep:EQUAL in
   Attribute.attach_to_item decl attributes
 

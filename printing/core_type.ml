@@ -1,12 +1,8 @@
-module LI = Longident
-
 open Document
-open Source_parsing
+open Import
 open Asttypes
 open Source_tree
 open Location
-
-module Longident = LI
 
 module rec Polymorphic_variant : sig 
   val pp_row

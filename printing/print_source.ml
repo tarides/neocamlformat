@@ -1,11 +1,7 @@
-module Li = Longident (* ... *)
-
-open Source_parsing
+open Document
+open Import
 open Asttypes
 open Source_tree
-
-open Document
-open struct type document = Document.t end
 
 let rec list_last = function
   | [] -> None
@@ -28,8 +24,6 @@ let rec_token ~recursive_by_default rf : Source_parsing.Parser.token option =
   | Recursive, false   -> Some REC
   | Nonrecursive, true -> Some NONREC
   | _, _ -> None
-
-module Longident = Li
 
 module Constant : sig
   val pp : loc:Location.t -> constant -> document

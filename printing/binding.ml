@@ -1,6 +1,6 @@
-open Source_parsing.Location
 open Document
-type document = t
+open Import
+open Location
 
 type t = {
   lhs : document;
