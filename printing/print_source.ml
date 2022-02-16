@@ -168,7 +168,7 @@ end = struct
         rhs = Binding.Rhs.of_opt pp pato;
       }
     in
-    Binding.pp binding
+    group (Binding.pp binding)
 
   and pp_record ~loc pats closed =
     let fields = List.map pp_record_field pats in
