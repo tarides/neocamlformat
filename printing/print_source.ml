@@ -291,32 +291,60 @@ and Application : sig
 
   val pp_prefix : string loc -> expression -> document
 end = struct
+  let get_delims ~ext_attrs:(extension, attrs) ~begin_end ~loc prefix kw body =
+    let opening =
+      if begin_end then (
+        let begin_ = pp_token ~after:prefix ~before:kw BEGIN in
+        Keyword.decorate begin_ ~extension attrs ~later:kw
+        |> break_after ~spaces:1
+      ) else  (
+        (* Can't put [%foo[@bar]] on '(' *)
+        pp_token ~after:prefix ~before:kw LPAREN
+        |> break_after ~spaces:0
+      )
+    in
+    let closing =
+      if begin_end then
+        pp_token ~after:body ~inside:loc END 
+        |> break_before ~spaces:1
+      else 
+        pp_token ~after:body ~inside:loc RPAREN
+        |> break_before ~spaces:0
+    in
+    opening, closing
+
   let argument (lbl, exp) =
     let suffix ~prefix:sym lbl =
-      match exp.pexp_desc with
-      | Pexp_ident Lident id when lbl.txt = id.txt -> sym ++ str lbl
-      | Pexp_parens { exp = { pexp_desc = Pexp_fun (params, tycstr, body); _ }
-                            as e
-                    ; begin_end = _ (* FIXME *) } when
-          exp.pexp_attributes = [] ->
-        let exp = e in
+      match exp with
+      | { pexp_desc = Pexp_ident Lident id; _ } when lbl.txt = id.txt ->
+        sym ++ str lbl
+      | { pexp_desc =
+            Pexp_parens
+              { exp = { pexp_desc = Pexp_fun (params, tycstr, body); _ } as exp
+              ; begin_end } 
+        ; pexp_attributes = []
+        ; pexp_loc = loc; pexp_ext_attributes = ext_attrs; _ } ->
         let lbl = string ~loc:lbl.loc (lbl.txt ^ ":") in
         let fun_, args, arrow, body =
           Expression.fun_chunks ~loc:exp.pexp_loc
             ~ext_attrs:exp.pexp_ext_attributes params tycstr body
         in
-        let open_ = (sym ++ lbl) ^^ (lparen ++ break_before ~spaces:0 fun_) in
+        let opening, closing =
+          get_delims ~ext_attrs ~begin_end ~loc lbl fun_ body
+        in
+        let open_ = (sym ++ lbl) ^^ opening ^^ fun_ in
         let unclosed =
           prefix ~indent:2 ~spaces:1
             (group ((prefix ~indent:2 ~spaces:1 open_ args) ^/^ arrow))
             body
         in
-        break_after ~spaces:0 unclosed +++ rparen
-      | Pexp_parens { exp = { pexp_desc = Pexp_function (c :: cs); _ }
-                            as e
-                    ; begin_end = _ (* FIXME *) } when
-          exp.pexp_attributes = [] ->
-        let exp = e in
+        unclosed ^^ closing
+      | { pexp_desc =
+            Pexp_parens
+              { exp = { pexp_desc = Pexp_function (c :: cs); _ } as exp
+              ; begin_end }
+        ; pexp_attributes = []
+        ; pexp_loc = loc; pexp_ext_attributes = ext_attrs; _ } ->
         let lbl = string ~loc:lbl.loc (lbl.txt ^ ":") in
         let compact =
           match !Options.Match.compact with
@@ -327,11 +355,11 @@ end = struct
           Expression.function_chunks ~compact ~loc:exp.pexp_loc
             ~ext_attrs:exp.pexp_ext_attributes c cs
         in
-        let open_ =
-          (sym ++ lbl) ^^ (lparen ++ break_before ~spaces:0 function_)
+        let opening, closing =
+          get_delims ~ext_attrs ~begin_end ~loc lbl function_ cases
         in
-        let unclosed = open_ ^^ cases in
-        break_after ~spaces:0 unclosed +++ rparen
+        let open_ = (sym ++ lbl) ^^ opening ^^ function_ in
+        open_ ^^ cases ^^ closing
       | _ ->
         let lbl = string ~loc:lbl.loc (lbl.txt ^ ":") in
         let exp = Expression.pp exp in
@@ -347,18 +375,16 @@ end = struct
         fst_chunk: document;
         break: bool;
         snd_chunk: document;
+        closing: document;
       }
     | Fully_built of document
 
   let rec combine_app_chunks acc = function
     | [] -> acc
-    | Function { fst_chunk; break; snd_chunk } :: rest ->
+    | Function { fst_chunk; break; snd_chunk; closing } :: rest ->
       let d1 = break_before fst_chunk in
       let d2 = if break then break_before snd_chunk else snd_chunk in
-      let fn =
-        break_after ~spaces:0 (nest 2 @@ (ifflat d1 (group d1)) ^^ d2)
-        +++ rparen
-      in
+      let fn = (nest 2 @@ (ifflat d1 (group d1)) ^^ d2) ^^ closing in
       combine_app_chunks (acc ^^ group fn) rest
     | Fully_built doc :: rest ->
       combine_app_chunks (acc ^^ nest 2 @@ group (break_before doc)) rest
@@ -367,25 +393,28 @@ end = struct
     | { pexp_desc =
           Pexp_parens { exp = { pexp_desc = Pexp_fun (params, ty, body);
                                 pexp_attributes = []; _ } as exp
-                      ; begin_end = _ (* TODO? *) };
-        pexp_attributes = []; _ } ->
+                      ; begin_end  };
+        pexp_attributes = [];
+        pexp_loc = loc; pexp_ext_attributes = ext_attrs; _ } ->
       let fun_, args, arrow, body =
         Expression.fun_chunks ~loc:exp.pexp_loc
           ~ext_attrs:exp.pexp_ext_attributes params ty body
       in
+      let opening, closing =
+        get_delims ~ext_attrs ~begin_end ~loc p fun_ body
+      in
       let first_chunk =
         group ((prefix ~indent:2 ~spaces:1 fun_ args) ^/^ arrow)
       in
-      let fst_chunk =
-        p ^^ group @@ lparen ++ break_before ~spaces:0 first_chunk
-      in
+      let fst_chunk = p ^^ group (opening ^^ first_chunk) in
       let snd_chunk = group body in
-      Function { fst_chunk; snd_chunk; break = true }
+      Function { fst_chunk; snd_chunk; break = true; closing }
     | { pexp_desc =
           Pexp_parens { exp = { pexp_desc = Pexp_function (c :: cs);
                                 pexp_attributes = []; _ } as exp
-                      ; begin_end = _ (*TODO?*) };
-        pexp_attributes = []; _ } ->
+                      ; begin_end };
+        pexp_attributes = [];
+        pexp_loc = loc; pexp_ext_attributes = ext_attrs; _ } ->
       let compact =
         match !Options.Match.compact with
         | Multi -> false
@@ -395,11 +424,12 @@ end = struct
         Expression.function_chunks ~compact ~loc:exp.pexp_loc
           ~ext_attrs:exp.pexp_ext_attributes c cs
       in
-      let fst_chunk =
-        p ^^ group @@ lparen ++ break_before ~spaces:0 function_
+      let opening, closing =
+        get_delims ~ext_attrs ~begin_end ~loc p function_ cases
       in
+      let fst_chunk = p ^^ group (opening ^^ function_) in
       let snd_chunk = group cases in
-      Function { fst_chunk; snd_chunk; break = false }
+      Function { fst_chunk; snd_chunk; break = false; closing }
     | arg ->
       Fully_built (argument (lbl, arg))
 
