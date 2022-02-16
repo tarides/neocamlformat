@@ -2,12 +2,23 @@ open Document
 open Import
 open Location
 
+module Rhs = struct
+  type t =
+    | Absent
+    | Regular of document
+    | Two_parts of document * document
+
+  let of_opt f = function
+    | None -> Absent
+    | Some x -> Regular (f x)
+end
+
 type t = {
   lhs : document;
   params: document list loc;
   constr: document option;
   coerce: document option;
-  rhs : document option;
+  rhs : Rhs.t;
 }
 
 let pp_params { loc; txt = params } =
@@ -33,17 +44,21 @@ let pp ?(binder=Source_parsing.Parser.EQUAL) ?keyword
   let with_constraint = attach_annot params ~sep:COLON constr in
   let with_coercion = attach_annot with_constraint ~sep:COLONGREATER coerce in
   match rhs with
-  | None -> pre ^^ with_coercion
-  | Some rhs ->
+  | Absent -> pre ^^ with_coercion
+  | Regular rhs ->
     let binder = pp_token ~after:with_coercion ~before:rhs binder in
     let lhs = pre ^^ group (with_coercion ^/^ binder) in
     concat ~indent:2 ~sep:(break 1) lhs rhs (* Not prefix: no grouping *)
+  | Two_parts (fst, snd) ->
+    let binder = pp_token ~after:with_coercion ~before:fst binder in
+    let lhs = pre ^^ group (with_coercion ^/^ binder) in
+    prefix ~indent:2 ~spaces:1 lhs fst ^^ nest 2 snd
 
 let pp_simple ?binder ~keyword lhs rhs =
   let loc = { lhs.loc with loc_start = lhs.loc.loc_end } in
   pp ?binder ~keyword
     { lhs; params = { loc; txt = [] }; constr = None; coerce = None;
-      rhs = Some rhs }
+      rhs = Regular rhs }
 
 module Module = struct
   type constraint_ = None | Sig of document | Mty of document

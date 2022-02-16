@@ -1,11 +1,20 @@
 open Source_parsing.Location
 
+module Rhs : sig
+  type t =
+    | Absent
+    | Regular of Document.t
+    | Two_parts of Document.t * Document.t
+
+  val of_opt : ('a -> Document.t) -> 'a option -> t
+end
+
 type t = {
   lhs : Document.t;
   params: Document.t list loc;
   constr: Document.t option;
   coerce: Document.t option;
-  rhs : Document.t option;
+  rhs : Rhs.t;
 }
 
 val pp

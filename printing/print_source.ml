@@ -165,7 +165,7 @@ end = struct
         params;
         constr = Option.map Core_type.pp ctyo;
         coerce = None;
-        rhs = Option.map pp pato;
+        rhs = Binding.Rhs.of_opt pp pato;
       }
     in
     Binding.pp binding
@@ -833,7 +833,7 @@ end = struct
         params;
         constr = Option.map Core_type.pp oct1;
         coerce = Option.map Core_type.pp oct2;
-        rhs = Option.map pp exp;
+        rhs = Binding.Rhs.of_opt pp exp;
       }
     in
     Binding.pp binding
@@ -1259,14 +1259,28 @@ and Value_binding : sig
   val pp : Attribute.kind -> value_binding -> Binding.t
 end = struct
 
+  let pp_rhs ~attr_kind ~attrs
+      ({ pexp_desc; pexp_loc; pexp_ext_attributes; pexp_attributes; _ } as e) =
+    match pexp_desc with
+    | Pexp_function (c :: cs) ->
+      let kw, cases =
+        Expression.function_chunks ~compact:false
+          ~ext_attrs:pexp_ext_attributes ~loc:pexp_loc c cs
+      in
+      let cases = Attribute.attach_to_item cases pexp_attributes in
+      let cases = Attribute.attach attr_kind cases attrs in
+      Binding.Rhs.Two_parts (kw, cases)
+    | _ ->
+      let rhs = Attribute.attach attr_kind (Expression.pp e) attrs in
+      Binding.Rhs.Regular rhs
+
   let pp_raw attr_kind pvb_pat pvb_params pvb_type pvb_expr pvb_attributes =
     let pat = Pattern.pp pvb_pat in
     let params = List.map Fun_param.pp pvb_params in
     let constr, coerce = pvb_type in
     let constr = Option.map Core_type.pp constr in
     let coerce = Option.map Core_type.pp coerce in
-    let rhs = Expression.pp pvb_expr in
-    let rhs = Some (Attribute.attach attr_kind rhs pvb_attributes) in
+    let rhs = pp_rhs ~attr_kind ~attrs:pvb_attributes pvb_expr in
     let params =
       let loc = { pat.loc with loc_start = pat.loc.loc_end } in
       { txt = params; loc }
@@ -2644,7 +2658,7 @@ end = struct
     let params = List.map Fun_param.pp params in
     let constr = Option.map Core_type.pp constr in
     let coerce = Option.map Core_type.pp coerce in
-    let rhs = Some (Expression.pp expr) in
+    let rhs = Binding.Rhs.Regular (Expression.pp expr) in
     let params =
       let loc = { name.loc with loc_start = name.loc.loc_end } in
       { txt = params; loc }
@@ -2832,7 +2846,7 @@ end = struct
               { loc; txt = List.map Fun_param.pp pci_term_params });
             constr = Option.map Class_type.pp pci_type;
             coerce = None;
-            rhs = Some (Class_expr.pp pci_expr) }
+            rhs = Binding.Rhs.Regular (Class_expr.pp pci_expr) }
         in
         let keyword =
           match !previous_cd with
@@ -2884,7 +2898,7 @@ end = struct
               { loc; txt = List.map Fun_param.pp pci_term_params });
             constr = None;
             coerce = None;
-            rhs = Some (Class_type.pp pci_expr) }
+            rhs = Binding.Rhs.Regular (Class_type.pp pci_expr) }
         in
         let keyword =
           match !previous_cd with
@@ -2934,7 +2948,7 @@ end = struct
               { loc; txt = List.map Fun_param.pp pci_term_params });
             constr = None;
             coerce = None;
-            rhs = Some (Class_type.pp pci_expr) }
+            rhs = Binding.Rhs.Regular (Class_type.pp pci_expr) }
         in
         let keyword =
           match !previous_cd with
