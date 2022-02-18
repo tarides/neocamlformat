@@ -4,7 +4,7 @@ open Asttypes
 open Source_tree
 open Location
 
-module rec Polymorphic_variant : sig 
+module rec Polymorphic_variant : sig
   val pp_row
     :  loc:Location.t
     -> row_field list
@@ -12,8 +12,8 @@ module rec Polymorphic_variant : sig
     -> label loc list option
     -> Document.t
 end = struct
-
-  let pp_tag (tag : string Location.loc) = string ~loc:tag.loc ("`" ^ tag.txt)
+  let pp_tag (tag : string Location.loc) =
+    string ~loc:tag.loc ("`" ^ tag.txt)
 
   module Row_field : sig
     val pp : row_field -> Document.t
@@ -24,8 +24,7 @@ end = struct
 
     let pp_desc = function
       | Rinherit ct -> Core_type.pp ct
-      | Rtag (tag, _, []) ->
-        pp_tag tag
+      | Rtag (tag, _, []) -> pp_tag tag
       | Rtag (tag, has_empty_constr, p :: ps) ->
         let tag = pp_tag tag in
         let params = pp_params p ps in
@@ -47,18 +46,20 @@ end = struct
      TODO: generalize a bit [left_assoc_map] and rename it to [dock] *)
   let dock_fields ~opening_token x xs =
     let fmt x = nest 2 (PPrint.space ++ x) in
-    List.fold_left
-      (fun acc elt ->
-         let elt = fmt elt in
-         let pipe = pp_token ~after:acc ~before:elt BAR in
-         acc ^/^ group (pipe ^^ elt))
-      (group (opening_token ^^ fmt x))
-      xs
+    List.fold_left (fun acc elt ->
+      let elt = fmt elt in
+      let pipe = pp_token ~after:acc ~before:elt BAR in
+      acc ^/^ group (pipe ^^ elt)
+    ) (group (opening_token ^^ fmt x)) xs
 
   let pp_row_prefix ~prefix_if_necessary ~loc ~opening_token x xs =
     let needs_prefix =
-      prefix_if_necessary && opening_token = Source_parsing.Parser.LBRACKET &&
-      xs = [] && (match x.prf_desc with Rinherit _ -> true | _ -> false)
+      prefix_if_necessary &&
+        opening_token = Source_parsing.Parser.LBRACKET &&
+          xs = [] &&
+            (match x.prf_desc with
+            | Rinherit _ -> true
+            | _ -> false)
     in
     let x = Row_field.pp x in
     let xs = List.map Row_field.pp xs in
@@ -73,8 +74,10 @@ end = struct
     dock_fields ~opening_token x xs
 
   let pp_simple_row ~loc ~opening_token ~hang_indent = function
-    | [] -> 
-      let lbracket = token_between_locs loc.loc_start loc.loc_end opening_token in
+    | [] ->
+      let lbracket =
+        token_between_locs loc.loc_start loc.loc_end opening_token
+      in
       let rbracket = pp_token ~inside:loc ~after:lbracket RBRACKET in
       group (lbracket ^/^ rbracket)
     | x :: xs ->
@@ -91,7 +94,7 @@ end = struct
         pp_row_prefix ~prefix_if_necessary:false ~loc
           ~opening_token:LBRACKETLESS x xs
       in
-      let labels = flow_map (PPrint.break 1) pp_tag l ls in
+      let labels = flow_map ~spaces:1 pp_tag l ls in
       let sep = pp_token ~after:fields ~before:labels GREATER in
       let rbracket = pp_token ~inside:loc ~after:labels RBRACKET in
       hang 1 (fields ^/^ sep ^/^ labels ^/^ rbracket)
@@ -101,18 +104,17 @@ end = struct
     | Open, Some _ -> assert false
     | Closed, None ->
       pp_simple_row ~loc ~opening_token:LBRACKET ~hang_indent:0 fields
-    | Open, None -> 
+    | Open, None ->
       pp_simple_row ~loc ~opening_token:LBRACKETGREATER ~hang_indent:1 fields
     | Closed, Some [] ->
       pp_simple_row ~loc ~opening_token:LBRACKETLESS ~hang_indent:1 fields
-    | Closed, Some (l::ls) ->
-      pp_mixed_row ~loc ~labels:(l, ls) fields
+    | Closed, Some (l :: ls) -> pp_mixed_row ~loc ~labels:(l, ls) fields
 end
+
 
 and Core_type : sig
   val ends_in_obj : core_type -> bool
   val starts_with_obj : core_type -> bool
-
   val pp : core_type -> Document.t
   val pp_param : (arg_label * core_type) -> Document.t
 end = struct
@@ -120,7 +122,9 @@ end = struct
     match core_type.ptyp_desc with
     | Ptyp_alias (lhs, _)
     | Ptyp_tuple (lhs :: _)
-    | Ptyp_arrow ((_, lhs) :: _, _) -> starts_with_obj lhs
+    | Ptyp_arrow ((_, lhs) :: _, _)
+      ->
+      starts_with_obj lhs
     | Ptyp_object (_, _) -> true
     | Ptyp_any
     | Ptyp_var _
@@ -133,33 +137,38 @@ end = struct
     | Ptyp_poly _
     | Ptype_poly _
     | Ptyp_package _
-    | Ptyp_extension _ -> false
+    | Ptyp_extension _
+      ->
+      false
 
   let rec ends_in_obj core_type =
     core_type.ptyp_attributes = [] &&
-    match core_type.ptyp_desc with
-    | Ptyp_arrow (_, rhs)
-    | Ptype_poly (_, rhs)
-    | Ptyp_poly (_, rhs) -> ends_in_obj rhs
-    | Ptyp_tuple lst -> ends_in_obj (List.hd (List.rev lst))
-    | Ptyp_object (_, _) -> true
-    | Ptyp_any
-    | Ptyp_var _
-    | Ptyp_parens _
-    | Ptyp_constr (_, _)
-    | Ptyp_class (_, _)
-    | Ptyp_alias (_, _)
-    | Ptyp_variant (_, _, _)
-    | Ptyp_package _
-    | Ptyp_extension _ -> false
+      match core_type.ptyp_desc with
+      | Ptyp_arrow (_, rhs) | Ptype_poly (_, rhs) | Ptyp_poly (_, rhs) ->
+        ends_in_obj rhs
+      | Ptyp_tuple lst -> ends_in_obj (List.hd (List.rev lst))
+      | Ptyp_object (_, _) -> true
+      | Ptyp_any
+      | Ptyp_var _
+      | Ptyp_parens _
+      | Ptyp_constr (_, _)
+      | Ptyp_class (_, _)
+      | Ptyp_alias (_, _)
+      | Ptyp_variant (_, _, _)
+      | Ptyp_package _
+      | Ptyp_extension _
+        ->
+        false
 
   let pp_var ~loc v =
     match String.index_opt v '\'' with
     | None -> string ~loc ("'" ^ v)
     | Some _ -> string ~loc ("' " ^ v)
 
-  let rec pp { ptyp_loc; ptyp_desc; ptyp_attributes; ptyp_ext_attributes;
-               ptyp_loc_stack = _ } =
+  let rec pp
+      { ptyp_loc; ptyp_desc; ptyp_attributes; ptyp_ext_attributes;
+        ptyp_loc_stack = _ }
+  =
     let doc =
       group (pp_desc ~loc:ptyp_loc ~ext_attrs:ptyp_ext_attributes ptyp_desc)
     in
@@ -187,16 +196,16 @@ end = struct
     match arg_label with
     | Nolabel -> ct
     | Labelled l -> join_with_colon l ct
-    | Optional l -> join_with_colon { l with txt = "?" ^ l.txt } ct
+    | Optional l -> join_with_colon { l with  txt = "?" ^ l.txt } ct
 
   and pp_arrow params res =
     let params =
       let fmt elt = hang 0 (pp_param elt) in
       List.fold_left (fun acc elt ->
-          let elt = fmt elt in
-          let sep = pp_token ~after:acc ~before:elt MINUSGREATER in
-          acc ^/^ group (sep ^^ space ++ hang 0 elt)
-        ) (fmt @@ List.hd params) (List.tl params)
+        let elt = fmt elt in
+        let sep = pp_token ~after:acc ~before:elt MINUSGREATER in
+        acc ^/^ group (sep ^^ space ++ hang 0 elt)
+      ) (fmt @@ List.hd params) (List.tl params)
     in
     let res = pp res in
     let arrow = pp_token ~after:params ~before:res MINUSGREATER in
@@ -214,7 +223,7 @@ end = struct
     | x :: xs -> pp_params x xs ^/^ name
 
   and pp_params first = function
-    | []   -> pp first
+    | [] -> pp first
     | rest ->
       let fmt elt = group (pp elt) in
       let params = separate_map PPrint.(comma ^^ break 1) ~f:fmt first rest in
@@ -250,11 +259,11 @@ end = struct
     match vars with
     | [] -> ct
     | v :: vs ->
-      let vars= separate_map space ~f:(fun v -> pp_var ~loc:v.loc v.txt) v vs in
+      let vars =
+        separate_map space ~f:(fun v -> pp_var ~loc:v.loc v.txt) v vs
+      in
       let dot = pp_token ~after:vars ~before:ct DOT in
-      prefix ~indent:2 ~spaces:1
-        (group (vars ^^ dot))
-        ct
+      prefix ~indent:2 ~spaces:1 (group (vars ^^ dot)) ct
 
   and pp_newtype_poly ~loc vars ct =
     (* FIXME: doesn't look right. *)
@@ -262,12 +271,12 @@ end = struct
     match vars with
     | [] -> ct
     | v :: vs ->
+      let v = str v in
+      let vs = List.map str vs in
       let type_ = pp_token ~inside:loc ~before:v TYPE in
-      let vars = separate_map space ~f:str v vs in
+      let vars = separate space v vs in
       let dot = pp_token ~after:vars ~before:ct DOT in
-      prefix ~indent:2 ~spaces:1
-        (group (type_ ^/^ vars ^^ dot))
-        ct
+      prefix ~indent:2 ~spaces:1 (group (type_ ^/^ vars ^^ dot)) ct
 
   and pp_package ~loc (extension, attrs) pkg =
     let pkg = Package_type.pp pkg in
@@ -283,6 +292,7 @@ end = struct
       pp_core_type := pp
     )
 end
+
 
 and Object_field : sig
   val pp : object_field -> Document.t * Document.t list
@@ -301,6 +311,7 @@ end = struct
     let desc = pp_desc pof_desc in
     desc, List.map (Attribute.pp Attached_to_item) pof_attributes
 end
+
 
 and Package_type : sig
   val pp : package_type -> Document.t
@@ -324,5 +335,6 @@ end = struct
       let sep = PPrint.(break 1 ^^ !^"with" ^/^ !^"type" ^^ break 1) in
       group (concat lid constrs ~sep)
 end
+
 
 include Core_type

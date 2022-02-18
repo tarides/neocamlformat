@@ -11,11 +11,38 @@ type t =
 let classify s =
   match s.txt with
   | "" -> assert false
-  | ":=" | "or" | "&" | "&&" | "!=" | "mod" | "land" | "lor" | "lxor"
-  | "lsl" | "lsr" | "asr" | "::" -> Infix_op s
+  | ":="
+  | "or"
+  | "&"
+  | "&&"
+  | "!="
+  | "mod"
+  | "land"
+  | "lor"
+  | "lxor"
+  | "lsl"
+  | "lsr"
+  | "asr"
+  | "::"
+    ->
+    Infix_op s
   | _ ->
     match String.get s.txt 0 with
     | '!' | '?' | '~' -> Prefix_op s
-    | '$' | '&' | '*' | '+' | '-' | '/' | '=' | '>' | '@' | '^' | '|'
-    | '%' | '<' | '#' -> Infix_op s
+    | '$'
+    | '&'
+    | '*'
+    | '+'
+    | '-'
+    | '/'
+    | '='
+    | '>'
+    | '@'
+    | '^'
+    | '|'
+    | '%'
+    | '<'
+    | '#'
+      ->
+      Infix_op s
     | _ -> Normal

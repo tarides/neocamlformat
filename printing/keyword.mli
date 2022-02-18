@@ -1,9 +1,8 @@
 open Source_parsing
 
 val decorate
-  : Document.t
+  :  Document.t
   -> extension:string Location.loc option
   -> Source_tree.attributes
-  -> later:_ Location.loc
+  -> later:Document.t
   -> Document.t
-

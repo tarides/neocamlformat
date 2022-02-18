@@ -9,4 +9,3 @@ let decorate token ~extension attrs ~later =
       token ^^ percent ^^ str ext
   in
   Attribute.attach_to_item ~spaces:0 kw attrs
-
