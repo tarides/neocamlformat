@@ -299,8 +299,8 @@ end = struct
         let begin_ = pp_token ~after:prefix ~before:kw BEGIN in
         Keyword.decorate begin_ ~extension attrs ~later:kw |>
           break_after ~spaces:1
-      ) else ((* Can't put [%foo[@bar]] on '(' *)
-
+      ) else (
+        (* Can't put [%foo[@bar]] on '(' *)
         pp_token ~after:prefix ~before:kw LPAREN |> break_after ~spaces:0
       )
     in

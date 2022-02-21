@@ -243,6 +243,7 @@ let merge_possibly_swapped ?(sep=PPrint.empty) d1 d2 =
 let concat ?(sep=PPrint.empty) ?(indent=0) t1 t2 =
   let attach_fst, attach_snd = comments_between t1 t2 in
   let fst_chunk =
+    let comment_indent = t1.rightmost_indent + indent in
     List.fold_left (fun t elt ->
       let break =
         if t.loc.loc_end.pos_lnum = elt.Location.loc.loc_start.pos_lnum then
@@ -250,15 +251,14 @@ let concat ?(sep=PPrint.empty) ?(indent=0) t1 t2 =
         else
           hardline
       in
-      let doc = t.doc ^^ group (nest indent @@ break ^^ elt.txt) in
-      { doc;
+      { t with
+        doc = t.doc ^^ group (nest comment_indent @@ break ^^ elt.txt);
         loc = merge_locs t.loc elt.loc;
-        leftmost_indent = t.leftmost_indent;
-        rightmost_indent = t.rightmost_indent;
-      }
+        rightmost_indent = comment_indent }
     ) t1 attach_fst
   in
   let snd_chunk =
+    let comment_indent = t2.leftmost_indent in
     List.fold_right (fun elt t ->
       let break =
         if elt.Location.loc.loc_end.pos_lnum = t.loc.loc_start.pos_lnum then
@@ -266,17 +266,15 @@ let concat ?(sep=PPrint.empty) ?(indent=0) t1 t2 =
         else
           hardline
       in
-      let doc = elt.txt ^^ group (break ^^ t.doc) in
-      { doc;
-        loc = merge_locs elt.loc t.loc;
-        leftmost_indent = t.leftmost_indent;
-        rightmost_indent = t.rightmost_indent; }
+      { t with
+        doc = nest comment_indent elt.txt ^^ group (break ^^ t.doc);
+        loc = merge_locs elt.loc t.loc }
     ) attach_snd t2
   in
   { doc = fst_chunk.doc ^^ nest indent (sep ^^ snd_chunk.doc); 
     loc = merge_locs fst_chunk.loc snd_chunk.loc;
     leftmost_indent = fst_chunk.leftmost_indent;
-    rightmost_indent = snd_chunk.rightmost_indent }
+    rightmost_indent = snd_chunk.rightmost_indent + indent }
 
 let collate_toplevel_items lst =
   let rec insert_blanks = function
