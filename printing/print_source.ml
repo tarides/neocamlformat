@@ -2643,22 +2643,17 @@ end = struct
       let as_ = pp_token ~after:pre ~before:name AS in
       group (pre ^/^ as_ ^/^ name)
 
-  let pp_virtual ~loc kind name mod_tok ct =
+  let pp_virtual ~loc kind name decorate_keyword ct =
     let name = str name in
     let ct = Core_type.pp ct in
     let keyword =
       let kw = pp_token ~inside:loc ~before:name kind in
-      let virt = pp_token ~after:kw ~before:name VIRTUAL in
-      group
-        (match mod_tok with
-        | None -> kw ^/^ virt
-        | Some tok ->
-          let tok = pp_token ~after:kw ~before:name tok in
-          kw ^/^ merge_possibly_swapped ~sep:(PPrint.break 1) tok virt)
+      group (decorate_keyword kw name)
     in
     Binding.pp_simple ~binder:COLON ~keyword name ct
 
-  let pp_concrete ~loc kind name mod_tok override params (constr, coerce) expr =
+  let pp_concrete ~loc kind name decorate_keyword override params
+      (constr, coerce) expr =
     let name = str name in
     let keyword =
       let kw = pp_token ~inside:loc ~before:name kind in
@@ -2667,10 +2662,7 @@ end = struct
         | Override -> kw ^^ pp_token ~after:kw ~before:name BANG
         | _ -> kw
       in
-      group
-        (match mod_tok with
-        | None -> with_bang
-        | Some tok -> with_bang ^/^ pp_token ~after:with_bang ~before:name tok)
+      group (decorate_keyword with_bang name)
     in
     let params = List.map Fun_param.pp params in
     let constr = Option.map Core_type.pp constr in
@@ -2682,26 +2674,44 @@ end = struct
     in
     Binding.pp ~keyword { lhs = name; params; constr; coerce; rhs }
 
-  let pp_field_kind ~loc kind name mod_tok = function
-    | Cfk_virtual ct -> pp_virtual ~loc kind name mod_tok ct
+  let pp_field_kind ~loc kind name decorate_keyword = function
+    | Cfk_virtual ct -> pp_virtual ~loc kind name decorate_keyword ct
     | Cfk_concrete (override, params, cts, expr) ->
-      pp_concrete ~loc kind name mod_tok override params cts expr
+      pp_concrete ~loc kind name decorate_keyword override params cts expr
 
-  let pp_val ~loc name mut cfk =
-    let modifier_token =
-      match mut with
-      | Immutable -> None
-      | Mutable _ -> Some Source_parsing.Parser.MUTABLE
+  let pp_val ~loc name mut_virt cfk =
+    let decorate_val keyword name =
+      match mut_virt with
+      | MV_none -> keyword
+      | MV_virtual -> keyword ^/^ pp_token ~after:keyword ~before:name VIRTUAL
+      | MV_mutable _ -> keyword ^/^ pp_token ~after:keyword ~before:name MUTABLE
+      | MV_mut_virt ->
+        let mut = pp_token ~after:keyword ~before:name MUTABLE in
+        let virt = pp_token ~after:mut ~before:name VIRTUAL in
+        keyword ^/^ mut ^/^ virt
+      | MV_virt_mut ->
+        let virt = pp_token ~after:keyword ~before:name VIRTUAL in
+        let mut = pp_token ~after:virt ~before:name MUTABLE in
+        keyword ^/^ virt ^/^ mut
     in
-    pp_field_kind ~loc VAL name modifier_token cfk
+    pp_field_kind ~loc VAL name decorate_val cfk
 
-  let pp_method ~loc name priv cfk =
-    let modifier_token =
-      match priv with
-      | Public -> None
-      | Private -> Some Source_parsing.Parser.PRIVATE
+  let pp_method ~loc name priv_virt cfk =
+    let decorate_method keyword name =
+      match priv_virt with
+      | PV_none -> keyword
+      | PV_virtual -> keyword ^/^ pp_token ~after:keyword ~before:name VIRTUAL
+      | PV_private -> keyword ^/^ pp_token ~after:keyword ~before:name PRIVATE
+      | PV_priv_virt ->
+        let priv = pp_token ~after:keyword ~before:name PRIVATE in
+        let virt = pp_token ~after:priv ~before:name VIRTUAL in
+        keyword ^/^ priv ^/^ virt
+      | PV_virt_priv ->
+        let virt = pp_token ~after:keyword ~before:name VIRTUAL in
+        let priv = pp_token ~after:virt ~before:name PRIVATE in
+        keyword ^/^ virt ^/^ priv
     in
-    pp_field_kind ~loc METHOD name modifier_token cfk
+    pp_field_kind ~loc METHOD name decorate_method cfk
 
   let pp_constraint ~loc ct1 ct2 =
     let ct1 = Core_type.pp ct1 in
@@ -2764,42 +2774,55 @@ end = struct
     let inh_kw = pp_token ~inside:loc ~before:ct INHERIT in
     group (inh_kw ^/^ ct)
 
-  let pp_maybe_virtual ~loc kind name mod_tok vf ct =
+  let pp_val ~loc (name, mut_virt, ct) =
     let name = str name in
     let ct = Core_type.pp ct in
     let keyword =
-      let kw = pp_token ~inside:loc ~before:name kind in
+      let kw = pp_token ~inside:loc ~before:name VAL in
       group
-        (match mod_tok, vf with
-        | None, Concrete -> kw
-        | Some tok, Concrete ->
-          let tok = pp_token ~after:kw ~before:name tok in
+        (match mut_virt with
+        | MV_none -> kw
+        | MV_mutable _ ->
+          let tok = pp_token ~after:kw ~before:name MUTABLE in
           kw ^/^ tok
-        | None, Virtual ->
+        | MV_virtual ->
           let virt = pp_token ~after:kw ~before:name VIRTUAL in
           kw ^/^ virt
-        | Some tok, Virtual ->
+        | MV_mut_virt ->
+          let mut = pp_token ~after:kw ~before:name MUTABLE in
+          let virt = pp_token ~after:mut ~before:name VIRTUAL in
+          kw ^/^ mut ^/^ virt
+        | MV_virt_mut ->
           let virt = pp_token ~after:kw ~before:name VIRTUAL in
-          let tok = pp_token ~after:kw ~before:name tok in
-          kw ^/^ merge_possibly_swapped ~sep:(PPrint.break 1) tok virt)
+          let mut = pp_token ~after:virt ~before:name MUTABLE in
+          kw ^/^ virt ^/^ mut)
     in
     Binding.pp_simple ~binder:COLON ~keyword name ct
 
-  let pp_val ~loc (name, mut, vf, ct) =
-    let mod_tok =
-      match mut with
-      | Immutable -> None
-      | Mutable _ -> Some Source_parsing.Parser.MUTABLE
+  let pp_method ~loc (name, priv_virt, ct) =
+    let name = str name in
+    let ct = Core_type.pp ct in
+    let keyword =
+      let kw = pp_token ~inside:loc ~before:name METHOD in
+      group
+        (match priv_virt with
+        | PV_none -> kw
+        | PV_private ->
+          let tok = pp_token ~after:kw ~before:name PRIVATE in
+          kw ^/^ tok
+        | PV_virtual ->
+          let virt = pp_token ~after:kw ~before:name VIRTUAL in
+          kw ^/^ virt
+        | PV_priv_virt ->
+          let priv = pp_token ~after:kw ~before:name PRIVATE in
+          let virt = pp_token ~after:priv ~before:name VIRTUAL in
+          kw ^/^ priv ^/^ virt
+        | PV_virt_priv ->
+          let virt = pp_token ~after:kw ~before:name VIRTUAL in
+          let priv = pp_token ~after:virt ~before:name PRIVATE in
+          kw ^/^ virt ^/^ priv)
     in
-    pp_maybe_virtual ~loc VAL name mod_tok vf ct
-
-  let pp_method ~loc (name, priv, vf, ct) =
-    let mod_tok =
-      match priv with
-      | Public -> None
-      | Private -> Some Source_parsing.Parser.PRIVATE
-    in
-    pp_maybe_virtual ~loc METHOD name mod_tok vf ct
+    Binding.pp_simple ~binder:COLON ~keyword name ct
 
   let pp_field_desc ~loc = function
     | Pctf_inherit ct -> pp_inherit ~loc ct

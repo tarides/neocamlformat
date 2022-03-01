@@ -221,25 +221,6 @@ let attach_surrounding_comments doc =
   let after = Comments.after doc.loc.loc_end |> fmt_comments false in
   before ^^ doc.doc ^^ after
 
-(* FIXME: sep is shit, remove. *)
-let merge_possibly_swapped ?(sep=PPrint.empty) d1 d2 =
-  let t1, t2 = if Location.ends_before d1.loc d2.loc then d1, d2 else d2, d1 in
-  let attach_fst, attach_snd = comments_between t1 t2 in
-  let fst_chunk =
-    List.fold_left (fun t elt -> t ^^ group (break 1 ^^ elt.txt)) d1.doc
-      attach_fst
-  in
-  let snd_chunk =
-    List.fold_right (fun elt t -> elt.txt ^^ group (break 1 ^^ t)) attach_snd
-      d2.doc
-  in
-  let doc =
-    fst_chunk ^^ sep ^^ snd_chunk
-  in
-  { doc; loc = merge_locs t1.loc t2.loc;
-    leftmost_indent = d1.leftmost_indent;
-    rightmost_indent = d2.rightmost_indent }
-
 let concat ?(sep=PPrint.empty) ?(indent=0) t1 t2 =
   let attach_fst, attach_snd = comments_between t1 t2 in
   let fst_chunk =

@@ -40,6 +40,20 @@ type mutable_flag = Immutable | Mutable of Location.t
 
 type virtual_flag = Virtual | Concrete
 
+type private_virtual =
+  | PV_none
+  | PV_private
+  | PV_virtual
+  | PV_priv_virt
+  | PV_virt_priv
+
+type mutable_virtual =
+  | MV_none
+  | MV_mutable of Location.t
+  | MV_virtual
+  | MV_mut_virt
+  | MV_virt_mut
+
 type override_flag = Override | Fresh
 
 type closed_flag = Closed | Open

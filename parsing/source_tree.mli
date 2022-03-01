@@ -654,9 +654,9 @@ and class_type_field =
 and class_type_field_desc =
   | Pctf_inherit of class_type
         (* inherit CT *)
-  | Pctf_val of (label loc * mutable_flag * virtual_flag * core_type)
+  | Pctf_val of (label loc * mutable_virtual * core_type)
         (* val x: T *)
-  | Pctf_method  of (label loc * private_flag * virtual_flag * core_type)
+  | Pctf_method  of (label loc * private_virtual * core_type)
         (* method x: T
 
            Note: T can be a Ptyp_poly.
@@ -754,11 +754,11 @@ and class_field_desc =
            inherit! CE
            inherit! CE as x
          *)
-  | Pcf_val of (label loc * mutable_flag * class_field_kind)
+  | Pcf_val of (label loc * mutable_virtual * class_field_kind)
         (* val x = E
            val virtual x: T
          *)
-  | Pcf_method of (label loc * private_flag * class_field_kind)
+  | Pcf_method of (label loc * private_virtual * class_field_kind)
         (* method x = E            (E can be a Pexp_poly)
            method virtual x: T     (T can be a Ptyp_poly)
          *)
