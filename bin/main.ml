@@ -132,7 +132,7 @@ let cmd =
   if not !ok then exit 1
 
 let info =
-  Term.info ~exits:Term.default_exits "neocamlformat"
+  Cmd.info ~exits:Cmd.Exit.defaults "neocamlformat"
 
 let () =
-  Term.exit (Term.eval (cmd, info))
+  Stdlib.exit (Cmd.eval @@ Cmd.v info cmd)
