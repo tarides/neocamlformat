@@ -1,87 +1,5 @@
-include PPrint
-
 open Source_parsing
 open Location
-
-let can_shift_lines comment init_col s =
-  let rec all_blank ~from ~to_ =
-    from = to_ || (String.get s from = ' ' && all_blank ~from:(from + 1) ~to_)
-  in
-  let rec aux i =
-    match String.index_from_opt s i '\n' with
-    | None -> true
-    | Some j ->
-      let from = j + 1 in
-      let to_ = from + init_col in
-      begin
-        try (comment || String.get s (j - 1) = '\\') && all_blank ~from ~to_
-        with Invalid_argument _ (* out of bounds *) ->
-          false
-      end &&
-        aux to_
-  in
-  aux 0
-
-class verbatim_string ?(comment=false) ?adjust_indent s : PPrint.custom =
-  let req = if String.contains s '\n' then infinity else String.length s in
-  let init_col =
-    Option.bind adjust_indent (fun (loc : Location.t) ->
-      let init_col = loc.loc_start.pos_cnum - loc.loc_start.pos_bol in
-      if can_shift_lines comment init_col s then Some init_col else None
-    )
-  in
-  object
-    method requirement =
-      req
-
-    method pretty output state _ flattening =
-      let shift =
-        match init_col with
-        | None -> `Done
-        | Some init_col ->
-          let shift = state.column - init_col in
-          if shift = 0 then
-            `Done
-          else if shift > 0 then
-            `Positive (shift, String.init shift (Fun.const ' '))
-          else
-            `Negative (abs shift)
-      in
-      let rec aux i =
-        match String.index_from_opt s i '\n' with
-        | Some j ->
-          assert (not flattening);
-          if j - i > 0 then output#substring s i (j - i);
-          output#char '\n';
-          state.line <- state.line + 1;
-          let j =
-            match shift with
-            | `Done ->
-              state.column <- 0;
-              j
-            | `Positive (len, str) ->
-              output#substring str 0 len;
-              state.column <- len;
-              j
-            | `Negative i ->
-              state.column <- 0;
-              j + i
-          in
-          aux (j + 1)
-        | None ->
-          let len = String.length s - i in
-          output#substring s i len;
-          state.column <- state.column + len
-      in
-      aux 0
-
-    method compact output =
-      assert (req != infinity);
-      output#substring s 0 req
-  end
-
-let pp_verbatim_string ?comment ?adjust_indent s =
-  custom (new verbatim_string ?comment ?adjust_indent s)
 
 let merge_locs l1 l2 =
   { Location.loc_start = l1.loc_start; loc_end = l2.loc_end }
@@ -89,94 +7,207 @@ let merge_locs l1 l2 =
 let loc_between t1 t2 =
   { Location.loc_start = t1.loc.loc_end; loc_end = t2.loc.loc_start }
 
-let comment (s, (loc : Location.t)) =
-  let loc_start =
-    { loc.loc_start with  pos_cnum = loc.loc_start.pos_cnum + 2 }
-  in
-  match s with
-  | "*" when loc.loc_end.pos_cnum - loc.loc_start.pos_cnum = 4 ->
-    { txt = !^"(**)"; loc }
-  | _ ->
-    let l = { loc with  loc_start } in
-    let txt =
-      !^"(*" ^^ pp_verbatim_string ~comment:true ~adjust_indent:l s ^^ !^"*)"
-    in
-    { txt; loc }
-
 type comments =
   | No_comment
-  | Attach_fst of document
-  | Attach_snd of document
+  | Attach_fst of PPrint.document
+  | Attach_snd of PPrint.document
+
+type ws_kind =
+  | Space
+  | Hardline
+
+type doc =
+  | Empty
+  | WS of PPrint.document
+  | Located of PPrint.document loc
 
 type t = {
-  loc: Location.t;
-  doc: document;
-  leftmost_indent: int;
-  rightmost_indent: int;
+  doc: doc;
+  left: border_info;
+  right: border_info;
 }
+
+and border_info = {
+  nest: int;
+  ws: ws_kind option;
+}
+
+let map_loc f { txt; loc } = { txt = f txt; loc }
+
+let empty =
+  let bi = { nest = 0; ws = None } in
+  { doc = Empty; left = bi; right = bi }
+
+let string ~loc s =
+  let bi = { nest = 0; ws = None } in
+  { doc = Located (mkloc (PPrint.string s) loc); left = bi; right = bi }
+
+let str (s : string loc) =
+  let bi = { nest = 0; ws = None } in
+  { doc = Located (map_loc PPrint.string s); left = bi; right = bi }
+
+let hardline =
+  let bi = { nest = 0; ws = Some Hardline } in
+  { doc = WS PPrint.hardline; left = bi; right = bi }
+
+let break n =
+  let bi = { nest = 0; ws = Some Space } in
+  { doc = WS (PPrint.break n); left = bi; right = bi }
+
+let blank n =
+  let bi = { nest = 0; ws = Some Space } in
+  { doc = WS (PPrint.blank n); left = bi; right = bi }
+
+let space = blank 1
+
+let repeat n d =
+  let rec aux n doc =
+    if n = 1
+    then doc
+    else PPrint.(doc ^^ aux (n - 1) doc)
+  in
+  match d.doc with
+  | Empty -> d
+  | WS doc -> { d with doc = WS (aux n doc) }
+  | Located doc -> { d with doc = Located (map_loc (aux n) doc) }
+
+let twice = repeat 2
+
+let nest nb t =
+  let left = { t.left with nest = t.left.nest + nb } in
+  let right = { t.right with nest = t.right.nest + nb } in
+  match t.doc with
+  | Empty -> t
+  | WS doc -> { doc = WS (PPrint.nest nb doc); left; right }
+  | Located doc -> { doc = Located (map_loc (PPrint.nest nb) doc); left; right }
+
+let group t =
+  match t.doc with
+  | Empty -> t
+  | WS doc -> { t with doc = WS (PPrint.group doc) }
+  | Located doc -> { t with doc = Located (map_loc PPrint.group doc) }
+
+let hang nb t =
+  match t.doc with
+  | Empty -> t
+  | WS doc -> { t with doc = WS (PPrint.hang nb doc) }
+  | Located doc -> { t with doc = Located (map_loc (PPrint.hang nb) doc) }
 
 let docstring ~loc s (l : Location.t) =
   (* [l] is the location of [s], without the "(**" "*)". *)
   let loc_start = { l.loc_start with  pos_cnum = l.loc_start.pos_cnum + 3 } in
   let l = { l with  loc_start } in
   let doc =
-    !^"(**" ^^ pp_verbatim_string ~comment:true ~adjust_indent:l s ^^ !^"*)"
+    let open PPrint in
+    !^"(**" ^^ Verbatim.pp_string ~comment:true ~adjust_indent:l s ^^ !^"*)"
   in
-  { doc; loc; leftmost_indent = 0; rightmost_indent = 0 }
-
-let comments_between_pos p1 p2 =
-  let comments = Source_parsing.Comments.between p1 p2 () in
-  List.partition_map (fun ((_, l) as cmt) ->
-    let cmt = comment cmt in
-    let dist_p1 = l.loc_start.pos_cnum - p1.pos_cnum in
-    let dist_p2 = p2.pos_cnum - l.loc_end.pos_cnum in
-    if dist_p1 < dist_p2 then Left cmt else Right cmt
-  ) comments
-
-let comments_between t1 t2 =
-  comments_between_pos t1.loc.loc_end t2.loc.loc_start
-
-let empty ~loc =
-  { doc = empty; loc; leftmost_indent = 0; rightmost_indent = 0 }
-
-let string ~loc x =
-  { doc = string x; loc; leftmost_indent = 0; rightmost_indent = 0 }
-
-let str (s : string loc) = string ~loc:s.loc s.txt
+  let bi = { nest = 0; ws = None } in
+  { doc = Located { txt = doc; loc }; left = bi; right = bi }
 
 let arbitrary_string ~loc x =
-  { doc = arbitrary_string x; loc; leftmost_indent = 0; rightmost_indent = 0 }
+  let bi = { nest = 0; ws = None } in
+  { doc = Located { txt = PPrint.arbitrary_string x; loc };
+    left = bi; right = bi }
 
 let quoted_string ?adjust_indent ~loc s =
   let adjust_indent = Option.map (Fun.const loc) adjust_indent in
-  let doc = pp_verbatim_string ?adjust_indent s in
-  { doc; loc; leftmost_indent = 0; rightmost_indent = 0 }
+  let bi = { nest = 0; ws = None } in
+  let txt = Verbatim.pp_string ?adjust_indent s in
+  { doc = Located { txt; loc }; left = bi; right = bi }
 
 let char ~loc c =
-  { doc = char c; loc; leftmost_indent = 0; rightmost_indent = 0 }
+  let bi = { nest = 0; ws = None } in
+  let c = PPrint.(squotes @@ string @@ Char.escaped c) in
+  { doc = Located (mkloc c loc); left = bi; right = bi }
 
 let underscore ~loc : t =
-  { doc = underscore; loc; leftmost_indent = 0; rightmost_indent = 0 }
+  let bi = { nest = 0; ws = None } in
+  { doc = Located (mkloc PPrint.underscore loc); left = bi; right = bi }
 
-let token ~loc t =
-  string ~loc (Source_parsing.Source.print_tok t)
+let concat_located (d1, right) (d2, left) =
+  let final_loc = merge_locs d1.loc d2.loc in
+  let open PPrint in
+  final_loc,
+  match Comment.between d1.loc d2.loc with
+  | [], [] -> d1.txt ^^ d2.txt
+  | left_cmts, right_cmts ->
+    let d1 = d1.txt in
+    let d2 = d2.txt in
+    (* FIXME: in each group, comments are separated by one space. 
+       Is this the behaviour we want?
 
-let token_between_locs start stop tok =
-  let loc = Source_parsing.Source.loc_of_token_between ~start ~stop tok in
-  token ~loc tok
+       For instance, in the absence of any ws between d1 and d2, we probably
+       want to [break 0] between the comments. *)
+    (* FIXME: what about the loc of comments themselves that I am dropping here.
+       Do we want to keep it? Is it useful? *)
+    let left_cmts  = separate_map (break 1) (fun x -> x.txt) left_cmts in
+    let right_cmts = separate_map (break 1) (fun x -> x.txt) right_cmts in
+    (* FIXME: Perhaps I don't need all these hardlines in there.
+       The presence of them anywhere, is going to turn all the break into
+       hardlines, in the absence of grouping. *)
+    (* FIXME: add groups. *)
+    match right.ws, left.ws with
+    | None, None ->
+      d1
+      ^^ nest right.nest (break 0 ^^ left_cmts)
+      ^^ nest left.nest (break 0 ^^ right_cmts ^^ break 0)
+      ^^ d2
+    | Some Space, Some Space ->
+      d1
+      ^^ nest right.nest left_cmts
+      ^^ nest left.nest (break 1 ^^ right_cmts)
+      ^^ d2
+    | Some Hardline, Some Hardline ->
+      d1
+      ^^ nest right.nest left_cmts
+      ^^ nest left.nest (hardline ^^ right_cmts)
+      ^^ d2
+    | Some Hardline, Some _
+    | Some _, Some Hardline ->
+      d1
+      ^^ nest right.nest left_cmts
+      ^^ nest left.nest (hardline ^^ right_cmts)
+      ^^ d2
+    | Some Hardline, None ->
+      d1
+      ^^ nest right.nest left_cmts
+      ^^ nest left.nest (hardline ^^ right_cmts ^^ break 0)
+      ^^ d2
+    | None, Some Hardline ->
+      d1
+      ^^ nest right.nest (break 0 ^^ left_cmts)
+      ^^ nest left.nest (hardline ^^ right_cmts)
+      ^^ d2
+    | Some Space, None ->
+      d1
+      ^^ nest right.nest left_cmts
+      ^^ nest left.nest (break 1 ^^ right_cmts ^^ break 0)
+      ^^ d2
+    | None, Some Space ->
+      d1
+      ^^ nest right.nest (break 0 ^^ left_cmts)
+      ^^ nest left.nest (break 1 ^^ right_cmts)
+      ^^ d2
 
-let pp_token ?inside ?before ?after tok =
-  match inside, after, before with
-  | _,
-    Some { loc = { loc_end = start; _ }; _ },
-    Some { loc = { loc_start = stop; _ }; _ }
-  |
-  Some { loc_start = start; _ }, None, Some { loc = { loc_start = stop; _ }; _ }
-  | Some { loc_end = stop; _ }, Some { loc = { loc_end = start; _ }; _ }, None
-    ->
-    token_between_locs start stop tok
-  | None, None, _ | _, None, None | None, _, None ->
-    invalid_arg "pp_token: need at least two positions"
+let (^^) t1 t2 =
+  match t1.doc, t2.doc with
+  | Empty, _ -> t2
+  | _, Empty -> t1
+  | WS d1, WS d2 ->
+    let doc = WS PPrint.(d1 ^^ d2) in
+    { doc; left = t1.left; right = t2.right }
+  | Located d1, Located d2 ->
+    let loc, txt = concat_located (d1, t1.right) (d2, t2.left) in
+    let doc = Located { txt; loc } in
+    { doc; left = t1.left; right = t2.right }
+  | WS d1, Located d2 ->
+    let d = PPrint.(d1 ^^ d2.txt) in
+    let doc = Located { txt = d; loc = d2.loc } in
+    { doc; left = t1.left; right = t2.right }
+  | Located d1, WS d2 ->
+    let d = PPrint.(d1.txt ^^ d2) in
+    let doc = Located { txt = d; loc = d1.loc } in
+    { doc; left = t1.left; right = t2.right }
 
 (* FIXME: do I really want to keep this?
    Currently it's being used for:
@@ -186,12 +217,27 @@ let pp_token ?inside ?before ?after tok =
    - the [if] token...
    - Pexp_newtypes
 *)
+
+(* Should be used only to insert tokens not necessarily present in the source *)
+(* FIXME: but if they are present, we'd want to reuse them, to get accurate
+   locations and comment placement. *)
 let (++) doc t =
-  { t with doc = doc ^^ t.doc }
+  match t.doc with
+  | Empty
+  | WS _ -> invalid_arg "Document.(++)"
+  | Located d ->
+    { t with doc = Located (map_loc (fun t -> PPrint.(^^) doc t) d) }
+    (*
 let (+++) t doc =
   { t with doc = t.doc ^^ doc }
+*)
 let suffix ~after:t c =
-  { t with doc = t.doc ^^ PPrint.char c; loc = t.loc }
+  match t.doc with
+  | Empty 
+  | WS _ -> invalid_arg "Document.suffix"
+  | Located doc ->
+    { t with doc = Located (map_loc (fun d -> PPrint.(d ^^ char c)) doc) }
+    (*
 let angles (t : t) =
   { t with  doc = angles t.doc }
 let braces (t : t) =
@@ -208,64 +254,22 @@ let squotes (t : t) =
 let enclose ~before ~after t =
   let doc = before ^^ t.doc ^^ after in
   { t with  doc }
-
-let fmt_comments before = function
-  | [] -> PPrint.empty
-  | comments ->
-    let comment x = (comment x).txt in
-    let cmts = separate_map hardline comment comments in
-    if before then cmts ^^ hardline else hardline ^^ cmts
-
-let attach_surrounding_comments doc =
-  let before = Comments.before doc.loc.loc_start |> fmt_comments true in
-  let after = Comments.after doc.loc.loc_end |> fmt_comments false in
-  before ^^ doc.doc ^^ after
-
-let concat ?(sep=PPrint.empty) ?(indent=0) t1 t2 =
-  let attach_fst, attach_snd = comments_between t1 t2 in
-  let fst_chunk =
-    let comment_indent = t1.rightmost_indent + indent in
-    List.fold_left (fun t elt ->
-      let break =
-        if t.loc.loc_end.pos_lnum = elt.Location.loc.loc_start.pos_lnum then
-          break 1
-        else
-          hardline
-      in
-      { t with
-        doc = t.doc ^^ group (nest comment_indent @@ break ^^ elt.txt);
-        loc = merge_locs t.loc elt.loc;
-        rightmost_indent = comment_indent }
-    ) t1 attach_fst
-  in
-  let snd_chunk =
-    let comment_indent = t2.leftmost_indent in
-    List.fold_right (fun elt t ->
-      let break =
-        if elt.Location.loc.loc_end.pos_lnum = t.loc.loc_start.pos_lnum then
-          break 1
-        else
-          hardline
-      in
-      { t with
-        doc = nest comment_indent elt.txt ^^ group (break ^^ t.doc);
-        loc = merge_locs elt.loc t.loc }
-    ) attach_snd t2
-  in
-  { doc = fst_chunk.doc ^^ nest indent (sep ^^ snd_chunk.doc); 
-    loc = merge_locs fst_chunk.loc snd_chunk.loc;
-    leftmost_indent = fst_chunk.leftmost_indent;
-    rightmost_indent = snd_chunk.rightmost_indent + indent }
+*)
 
 let collate_toplevel_items lst =
   let rec insert_blanks = function
     | [] -> invalid_arg "collate_toplevel_items"
     | [ x ] -> [ `Doc x ]
     | x1 :: x2 :: rest ->
+      let requirement x =
+        match x.doc with
+        | WS doc
+        | Located { txt = doc; _ } -> PPrint.requirement doc
+        | Empty -> 0
+      in
       `Doc x1 ::
         (if
-          requirement x1.doc > !Options.width ||
-            requirement x2.doc > !Options.width
+          requirement x1 > !Options.width || requirement x2 > !Options.width
         then
           `Twice
         else
@@ -274,10 +278,10 @@ let collate_toplevel_items lst =
   in
   let rec join = function
     | `Doc x1 :: `Twice :: `Doc x2 :: rest ->
-      let joined = concat x1 x2 ~sep:(twice hardline) in
+      let joined = x1 ^^ twice hardline ^^ x2 in
       join (`Doc joined :: rest)
     | `Doc x1 :: `Once :: `Doc x2 :: rest ->
-      let joined = concat x1 x2 ~sep:hardline in
+      let joined = x1 ^^ hardline ^^ x2 in
       join (`Doc joined :: rest)
     | otherwise -> otherwise
   in
@@ -288,260 +292,78 @@ let collate_toplevel_items lst =
 let separate sep doc docs =
   match docs with
   | [] -> doc
-  | _ -> List.fold_left (concat ~sep) doc docs
+  | _ -> List.fold_left (fun d1 d2 -> d1 ^^ sep ^^ d2) doc docs
 
 let separate_map sep ~f doc docs =
   separate sep (f doc) (List.map f docs)
-let break_after ?(spaces=1) t =
-  { t with doc = t.doc ^^ break spaces }
-let break_before ?(spaces=1) t =
-  { t with doc = break spaces ^^ t.doc }
+
 (* Wrapping PPrint combinators *)
-let (^^) t1 t2 =
-  concat t1 t2
-let (^/^) t1 t2 =
-  concat t1 t2 ~sep:(break 1)
+let (^/^) t1 t2 = t1 ^^ break 1 ^^ t2
+let (^//^) t1 t2 = t1 ^^ hardline ^^ t2
 
 let ifflat t1 t2 =
-  (* TODO: assert same locs *)
-  { t1 with  doc = ifflat t1.doc t2.doc }
+  (* FIXME: what about border infos? are they necessarily the same? :/ *)
+  match t1.doc, t2.doc with
+  | Empty, Empty -> t1
+  | WS d1, WS d2 -> { t1 with doc = WS (PPrint.ifflat d1 d2) }
+  | WS flat, Empty -> { t1 with doc = WS PPrint.(ifflat flat empty) }
+  | Empty, WS nonflat -> { t1 with doc = WS PPrint.(ifflat empty nonflat) }
+  | Located d1, Located d2 ->
+    let txt = PPrint.ifflat d1.txt d2.txt in
+    (* TODO: assert same locs *)
+    { t1 with doc = Located { txt; loc = d1.loc } }
+  | Located { txt = flat; loc }, WS nonflat
+  | WS flat, Located { txt = nonflat; loc } ->
+    let txt = PPrint.ifflat flat nonflat in
+    { t1 with doc = Located { txt; loc } }
+  | Located { txt = flat; loc }, Empty ->
+    let txt = PPrint.(ifflat flat empty) in
+    { t1 with doc = Located { txt; loc } }
+  | Empty, Located { txt = nonflat; loc } ->
+    let txt = PPrint.(ifflat empty nonflat) in
+    { t1 with doc = Located { txt; loc } }
 
-let group t =
-  { t with  doc = group t.doc }
-let nest n { doc; loc; leftmost_indent = li; rightmost_indent = ri} =
-  { doc = nest n doc; loc; leftmost_indent = li + n; rightmost_indent = ri + n}
-let hang n t =
-  { t with  doc = hang n t.doc }
-
+(*
 let optional ~loc f = function
   | None -> empty ~loc
   | Some d -> f d
+   *)
 
 let prefix ~indent ~spaces x y =
-  group (concat ~indent ~sep:(break spaces) x y)
+  group (x ^^ nest indent (break spaces ^^ y))
 
 let infix ~indent ~spaces op x y =
-  prefix ~indent ~spaces (concat x ~sep:PPrint.(blank spaces) op) y
+  prefix ~indent ~spaces (x ^^ blank spaces ^^ op) y
 
-let left_assoc_map ?sep ~f first rest =
+
+let flow_map sep f first rest =
   List.fold_left (fun t elt ->
     let elt = f elt in
-    match sep with
-    | None -> t ^^ group (break_before elt)
-    | Some sep ->
-      let sep = pp_token ~after:t ~before:elt sep in
-      t ^/^ group (sep ^/^ elt)
+    t ^^ group (sep ^^ elt)
   ) (f first) rest
 
-let flow_map ~spaces f first rest =
-  List.fold_left (fun t elt ->
-    let elt = f elt in
-    t ^^ group (break_before ~spaces elt)
-  ) (f first) rest
+let flow sep first rest =
+  flow_map sep (fun x -> x) first rest
 
-let flow ~spaces first rest =
-  flow_map ~spaces (fun x -> x) first rest
+let fmt_comments before = function
+  | [] -> empty
+  | c :: cs ->
+    let bi = { nest = 0; ws = None } in
+    let cmt x = { doc = Located (Comment.comment x); left = bi; right = bi } in
+    let cmts = separate_map hardline ~f:cmt c cs in
+    if before then cmts ^^ hardline else hardline ^^ cmts
 
-module Two_separated_parts = struct(* FIXME: does sep_with_first make sense?
+let attach_surrounding_comments doc =
+  match doc.doc with
+  | Empty -> fmt_comments true (Comments.get ())
+  | Located { loc; _ } ->
+    let before = Comments.before loc.loc_start |> fmt_comments true in
+    let after = Comments.after loc.loc_end |> fmt_comments false in
+    before ^^ doc ^^ after
+  | WS _ -> invalid_arg "Document.attach_surrounding_comments"
 
-     Shouldn't it be just [nest 2 (flow (break 1) x [ xs ])] ?
-     which would go to
-     {v
-       Foo
-         of bar
-     v}
-
-     before going to
-
-     {v
-       Foo
-         of
-         bar
-     v} *)
-
-  (** Degrades in the following way:
-      {v
-        Foo of bar
-
-        Foo of
-          bar
-
-        Foo
-          of
-          bar
-      v}
-  *)
-  let sep_with_first fst snd ~sep =
-    let sep = pp_token ~after:fst ~before:snd sep in
-    prefix ~indent:2 ~spaces:1 (group (fst ^^ nest 2 (break_before sep))) snd
-
-  (** Degrades in the following way:
-      {v
-        Foo of bar
-
-        Foo
-          of bar
-
-        Foo
-          of
-          bar
-      v}
-  *)
-  let sep_with_second fst snd ~sep =
-    let sep = pp_token ~after:fst ~before:snd sep in
-    prefix ~indent:2 ~spaces:1 fst (group (sep ^/^ snd))
-end
-
-
-module Enclosed_separated = struct
-  type raw =
-    t * t list
-  type element =
-    {
-      doc : t;
-      has_semi : bool
-    }
-
-  module Wrapped : sig
-    val pp_fields : raw -> raw list -> t
-
-    val pp
-      :  loc:Location.t
-      -> left:Parser.token
-      -> right:Parser.token
-      -> raw
-      -> raw list
-      -> t
-  end = struct
-    let rec insert_semi : element list -> t list = function
-      | [] -> assert false
-      | [ x ] -> [ x.doc ]
-      | x1 :: (x2 :: _ as xs) ->
-        if x1.has_semi then
-          x1.doc :: insert_semi xs
-        else
-          let semi = pp_token ~after:x1.doc ~before:x2.doc SEMI in
-          group (x1.doc ^^ semi) :: insert_semi xs
-
-    let fmt (doc, attrs) =
-      match attrs with
-      | [] -> { doc; has_semi = false }
-      | x :: xs ->
-        let attrs = group (separate (PPrint.break 0) x xs) in
-        {
-          doc = prefix ~indent:2 ~spaces:1 (suffix ~after:doc ';') attrs;
-          has_semi = true
-        }
-
-    let rec collate ?(first=false) = function
-      | [] -> assert false
-      | [ x ] -> (* last one! *)
-        if first then x else group (break_before ~spaces:0 x)
-      | x :: xs ->
-        let x =
-          if first then
-            group (break_after x)
-          else
-            group (break_before ~spaces:0 @@ break_after x)
-        in
-        x ^^ collate xs
-
-    let pp_fields x xs =
-      List.map fmt (x :: xs) |> insert_semi |> collate ~first:true
-
-    let pp ~loc ~left ~right x xs =
-      let fields = pp_fields x xs in
-      let left = pp_token ~inside:loc ~before:fields left in
-      let right = pp_token ~inside:loc ~after:fields right in
-      group (break_after left) ^^ hang 0 fields ^^ group (break_before right)
-  end
-
-
-  module Fit_or_vertical : sig
-    val pp_fields : raw -> raw list -> t
-
-    val pp
-      :  loc:Location.t
-      -> left:Parser.token
-      -> right:Parser.token
-      -> raw
-      -> raw list
-      -> t
-  end = struct
-    let fmt (doc, attrs) =
-      match attrs with
-      | [] -> { doc = group doc; has_semi = false }
-      | x :: xs ->
-        let attrs = separate (PPrint.break 0) x xs in
-        {
-          doc =
-            prefix ~indent:2 ~spaces:1 (group (suffix ~after:doc ';')) attrs;
-          has_semi = true
-        }
-
-    let rec pp_fields_aux = function
-      | [] -> assert false
-      | [ x ] -> (fmt x).doc
-      | x :: ((_ :: _) as rest) ->
-        let elt = fmt x in
-        if elt.has_semi then
-          elt.doc ^^ break_before (pp_fields_aux rest)
-        else
-          let rest = pp_fields_aux rest in
-          let semi = pp_token ~after:elt.doc ~before:rest SEMI in
-          group (elt.doc ^^ semi) ^^ break_before rest
-
-    let pp_fields x xs =
-      let fields = pp_fields_aux (x :: xs) in
-      nest 2 (break_before fields)
-
-    let pp ~loc ~left ~right x xs =
-      let fields = pp_fields x xs in
-      let left = pp_token ~inside:loc ~before:fields left in
-      let right = pp_token ~inside:loc ~after:fields right in
-      left ^^ fields ^/^ right
-  end
-
-
-  let pp ~loc ~formatting ~left ~right = function
-    | [] ->
-      let start = empty ~loc:{ loc with  loc_end = loc.loc_start } in
-      let stop = empty ~loc:{ loc with  loc_start = loc.loc_end } in
-      let fst = pp_token ~after:start ~before:stop left in
-      let snd = pp_token ~after:start ~before:stop right in
-      group (fst ^/^ snd)
-    | x :: xs ->
-      match (formatting : Options.Wrappable.t) with
-      | Wrap -> Wrapped.pp ~loc ~left ~right x xs
-      | Fit_or_vertical -> Fit_or_vertical.pp ~loc ~left ~right x xs
-
-  let pp_fields ~formatting x xs =
-    match (formatting : Options.Wrappable.t) with
-    | Wrap -> Wrapped.pp_fields x xs
-    | Fit_or_vertical -> Fit_or_vertical.pp_fields x xs
-end
-
-
-module List_like = struct
-  let pp ~formatting ~left ~right elts =
-    let elts = List.map (fun x -> (x, [])) elts in
-    Enclosed_separated.pp ~formatting ~left ~right elts
-
-  let pp_fields ~formatting x xs =
-    Enclosed_separated.pp_fields ~formatting (x, [])
-      (List.map (fun x -> (x, [])) xs)
-end
-
-
-module Record_like = Enclosed_separated
-
-(* Horrible hack *)
-let join_with_colon lbl doc =
-  let l = str lbl in
-  let just_before =
-    (* Shifting so we always get the colon! *)
-    let pos_cnum = l.loc.loc_end.pos_cnum - 1 in
-    { l.loc with  loc_end = { l.loc.loc_end with  pos_cnum } }
-  in
-  let colon = pp_token ~after:{ l with  loc = just_before } ~before:doc COLON in
-  prefix ~indent:2 ~spaces:0 (group (l ^^ colon)) doc
+let to_pprint t =
+  match t.doc with
+  | Empty -> PPrint.empty
+  | WS doc -> doc
+  | Located { txt; _ } -> txt

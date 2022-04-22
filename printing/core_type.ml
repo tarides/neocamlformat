@@ -1,4 +1,5 @@
 open Document
+open Custom_combinators
 open Import
 open Asttypes
 open Source_tree
@@ -19,8 +20,11 @@ end = struct
     val pp : row_field -> Document.t
   end = struct
     let pp_params p ps =
-      let sep = PPrint.(break 1 ^^ ampersand ^^ break 1) in
-      separate_map sep ~f:Core_type.pp p ps (* FIXME? *)
+      List.fold_left (fun acc ct ->
+        let ct = Core_type.pp ct in
+        let ampersand = Token.pp ~after:acc ~before:ct AMPERSAND in
+        acc ^/^ ampersand ^/^ ct
+      ) (Core_type.pp p) ps
 
     let pp_desc = function
       | Rinherit ct -> Core_type.pp ct
@@ -32,7 +36,8 @@ end = struct
           if not has_empty_constr then
             params
           else
-            PPrint.ampersand ++ break_before params
+            let amper = Token.pp ~after:tag ~before:params AMPERSAND in
+            amper ^/^ params
         in
         Two_separated_parts.sep_with_first tag params ~sep:OF
 
@@ -45,10 +50,10 @@ end = struct
   (* Looks a lot like [left_assoc_map] … except for the first element...
      TODO: generalize a bit [left_assoc_map] and rename it to [dock] *)
   let dock_fields ~opening_token x xs =
-    let fmt x = nest 2 (PPrint.space ++ x) in
+    let fmt x = nest 2 (blank 1 ^^ x) in
     List.fold_left (fun acc elt ->
       let elt = fmt elt in
-      let pipe = pp_token ~after:acc ~before:elt BAR in
+      let pipe = Token.pp ~after:acc ~before:elt BAR in
       acc ^/^ group (pipe ^^ elt)
     ) (group (opening_token ^^ fmt x)) xs
 
@@ -63,28 +68,26 @@ end = struct
     in
     let x = Row_field.pp x in
     let xs = List.map Row_field.pp xs in
-    let opening_token = pp_token ~inside:loc ~before:x opening_token in
+    let opening_token = Token.pp ~inside:loc ~before:x opening_token in
     let opening_token =
       if not needs_prefix then
         opening_token
       else
-        let pipe = pp_token ~after:opening_token ~before:x BAR in
+        let pipe = Token.pp ~after:opening_token ~before:x BAR in
         opening_token ^/^ pipe
     in
     dock_fields ~opening_token x xs
 
   let pp_simple_row ~loc ~opening_token ~hang_indent = function
     | [] ->
-      let lbracket =
-        token_between_locs loc.loc_start loc.loc_end opening_token
-      in
-      let rbracket = pp_token ~inside:loc ~after:lbracket RBRACKET in
+      let lbracket = Token.pp ~inside:loc opening_token in
+      let rbracket = Token.pp ~inside:loc ~after:lbracket RBRACKET in
       group (lbracket ^/^ rbracket)
     | x :: xs ->
       let fields =
         pp_row_prefix ~prefix_if_necessary:true ~loc ~opening_token x xs
       in
-      let rbracket = pp_token ~inside:loc ~after:fields RBRACKET in
+      let rbracket = Token.pp ~inside:loc ~after:fields RBRACKET in
       hang hang_indent (fields ^/^ rbracket)
 
   let pp_mixed_row ~loc ~labels:(l, ls) = function
@@ -94,9 +97,9 @@ end = struct
         pp_row_prefix ~prefix_if_necessary:false ~loc
           ~opening_token:LBRACKETLESS x xs
       in
-      let labels = flow_map ~spaces:1 pp_tag l ls in
-      let sep = pp_token ~after:fields ~before:labels GREATER in
-      let rbracket = pp_token ~inside:loc ~after:labels RBRACKET in
+      let labels = flow_map (break 1) pp_tag l ls in
+      let sep = Token.pp ~after:fields ~before:labels GREATER in
+      let rbracket = Token.pp ~inside:loc ~after:labels RBRACKET in
       hang 1 (fields ^/^ sep ^/^ labels ^/^ rbracket)
 
   let pp_row ~loc fields closed present =
@@ -177,57 +180,66 @@ end = struct
   and pp_desc ~loc ~ext_attrs = function
     | Ptyp_any -> underscore ~loc
     | Ptyp_var v -> pp_var ~loc v
-    | Ptyp_parens ct -> parens (pp ct)
+    | Ptyp_parens ct -> parens ~loc (pp ct)
     | Ptyp_arrow (params, ct2) -> pp_arrow params ct2
     | Ptyp_tuple lst -> pp_tuple lst
-    | Ptyp_constr (name, args) -> pp_constr name args
+    | Ptyp_constr (name, args) -> pp_constr ~loc name args
     | Ptyp_object (fields, closed) -> pp_object ~loc fields closed
-    | Ptyp_class (name, args) -> pp_class name args
+    | Ptyp_class (name, args) -> pp_class ~loc name args
     | Ptyp_alias (ct, alias) -> pp_alias ct alias
     | Ptyp_variant (fields, closed, present) ->
       Polymorphic_variant.pp_row ~loc fields closed present
     | Ptyp_poly (vars, ct) -> pp_poly vars ct
     | Ptype_poly (vars, ct) -> pp_newtype_poly ~loc vars ct
     | Ptyp_package pkg -> pp_package ~loc ext_attrs pkg
-    | Ptyp_extension ext -> Attribute.Extension.pp Item ext
+    | Ptyp_extension ext -> Attribute.Extension.pp ~loc Item ext
 
   and pp_param (arg_label, ct) =
     let ct = hang 0 @@ pp ct in
     match arg_label with
     | Nolabel -> ct
-    | Labelled l -> join_with_colon l ct
-    | Optional l -> join_with_colon { l with  txt = "?" ^ l.txt } ct
+    | Labelled { name; _ } ->
+      let name = str name in
+      let colon = Token.pp ~after:name ~before:ct COLON in
+      prefix ~indent:2 ~spaces:0 (group (name ^^ colon)) ct
+    | Optional { name; extra_info = `Single_token } ->
+      prefix ~indent:2 ~spaces:0 (str name) ct
+    | Optional { name; extra_info = `Previous_token loc } ->
+      let question = string ~loc "?" in
+      let name = str name in
+      let colon = Token.pp ~after:name ~before:ct COLON in
+      prefix ~indent:2 ~spaces:0 (group (question ^^ name ^^ colon)) ct
 
   and pp_arrow params res =
     let params =
       let fmt elt = hang 0 (pp_param elt) in
       List.fold_left (fun acc elt ->
         let elt = fmt elt in
-        let sep = pp_token ~after:acc ~before:elt MINUSGREATER in
-        acc ^/^ group (sep ^^ space ++ hang 0 elt)
+        let sep = Token.pp ~after:acc ~before:elt MINUSGREATER in
+        acc ^/^ group (sep ^^ blank 1 ^^ hang 0 elt)
       ) (fmt @@ List.hd params) (List.tl params)
     in
     let res = pp res in
-    let arrow = pp_token ~after:params ~before:res MINUSGREATER in
-    let doc = params ^/^ group (arrow ^^ space ++ hang 0 res) in
+    let arrow = Token.pp ~after:params ~before:res MINUSGREATER in
+    let doc = params ^/^ group (arrow ^^ blank 1 ^^ hang 0 res) in
     doc
 
   and pp_tuple = function
     | [] -> assert false
     | x :: xs -> left_assoc_map ~sep:STAR ~f:pp x xs
 
-  and pp_constr name args =
+  and pp_constr ~loc name args =
     let name = Longident.pp name in
     match args with
     | [] -> name
-    | x :: xs -> pp_params x xs ^/^ name
+    | x :: xs -> pp_params ~loc x xs ^/^ name
 
-  and pp_params first = function
+  and pp_params ~loc first = function
     | [] -> pp first
     | rest ->
       let fmt elt = group (pp elt) in
-      let params = separate_map PPrint.(comma ^^ break 1) ~f:fmt first rest in
-      parens (hang 0 params)
+      let params = tuple_fields fmt first rest in
+      parens ~loc (hang 0 params)
 
   and pp_object ~loc fields closed =
     let fields = List.map Object_field.pp fields in
@@ -239,16 +251,17 @@ end = struct
     Record_like.pp ~loc ~formatting:Fit_or_vertical ~left:LESS ~right:GREATER
       fields
 
-  and pp_class name args =
-    let name = sharp ++ Longident.pp name in
+  and pp_class ~loc name args =
+    let name = Longident.pp name in
+    let hash = Token.pp ~inside:loc ~before:name HASH in
     match args with
-    | [] -> name
-    | x :: xs -> pp_params x xs ^/^ name
+    | [] -> hash ^^ name
+    | x :: xs -> pp_params ~loc x xs ^/^ hash ^^ name
 
   and pp_alias ct alias =
     let ct = pp ct in
     let alias = pp_var ~loc:alias.loc alias.txt in
-    let as_ = pp_token ~after:ct ~before:alias AS in
+    let as_ = Token.pp ~after:ct ~before:alias AS in
     (* TODO: hang & ident one linebreak *)
     let doc = ct ^/^ as_ ^/^ alias in
     doc
@@ -262,7 +275,7 @@ end = struct
       let vars =
         separate_map space ~f:(fun v -> pp_var ~loc:v.loc v.txt) v vs
       in
-      let dot = pp_token ~after:vars ~before:ct DOT in
+      let dot = Token.pp ~after:vars ~before:ct DOT in
       prefix ~indent:2 ~spaces:1 (group (vars ^^ dot)) ct
 
   and pp_newtype_poly ~loc vars ct =
@@ -273,18 +286,18 @@ end = struct
     | v :: vs ->
       let v = str v in
       let vs = List.map str vs in
-      let type_ = pp_token ~inside:loc ~before:v TYPE in
+      let type_ = Token.pp ~inside:loc ~before:v TYPE in
       let vars = separate space v vs in
-      let dot = pp_token ~after:vars ~before:ct DOT in
+      let dot = Token.pp ~after:vars ~before:ct DOT in
       prefix ~indent:2 ~spaces:1 (group (type_ ^/^ vars ^^ dot)) ct
 
   and pp_package ~loc (extension, attrs) pkg =
     let pkg = Package_type.pp pkg in
     let module_ =
-      let tok = pp_token ~inside:loc ~before:pkg MODULE in
-      Keyword.decorate tok ~extension attrs ~later:pkg
+      let tok = Token.pp ~inside:loc ~before:pkg MODULE in
+      Keyword.decorate tok ~extension attrs
     in
-    parens (module_ ^/^ pkg)
+    parens ~loc (module_ ^/^ pkg)
 
   let () =
     Attribute.Payload.(
@@ -300,7 +313,7 @@ end = struct
   let pp_otag name ct =
     let name = str name in
     let ct = Core_type.pp ct in
-    let colon = pp_token ~after:name ~before:ct COLON in
+    let colon = Token.pp ~after:name ~before:ct COLON in
     group (name ^^ colon) ^/^ ct
 
   let pp_desc = function
@@ -319,7 +332,7 @@ end = struct
   let pp_constr (lid, ct) =
     let lid = Longident.pp lid in
     let ct = Core_type.pp ct in
-    let colon = pp_token ~after:lid ~before:ct EQUAL in
+    let colon = Token.pp ~after:lid ~before:ct EQUAL in
     lid ^/^ colon ^/^ ct
 
   let pp (lid, constrs) =
@@ -328,12 +341,16 @@ end = struct
     | [] -> lid
     | x :: xs ->
       let constrs =
-        separate_map
-          PPrint.(break 1 ^^ !^"and" ^^ break 1 ^^ !^"type" ^^ break 1)
-          ~f:pp_constr x xs
+        List.fold_left (fun acc x ->
+          let x = pp_constr x in
+          let and_ = Token.pp ~after:acc ~before:x AND in
+          let typ_ = Token.pp ~after:and_ ~before:x TYPE in
+          acc ^/^ and_ ^/^ typ_ ^/^ x
+        ) (pp_constr x) xs
       in
-      let sep = PPrint.(break 1 ^^ !^"with" ^/^ !^"type" ^^ break 1) in
-      group (concat lid constrs ~sep)
+      let with_ = Token.pp ~after:lid ~before:constrs WITH in
+      let type_ = Token.pp ~after:with_ ~before:constrs TYPE in
+      group (lid ^/^ with_ ^/^ type_ ^/^ constrs)
 end
 
 

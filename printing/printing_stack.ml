@@ -734,6 +734,7 @@ let rec normalize = function
 let normalize x =
   x
 
+(*
 let enclose style t doc =
   let open Document in
   match style with
@@ -786,3 +787,4 @@ let parenthesize_exp ?(situations=Options.Always_or_needed.When_needed) t =
     | elt :: parents ->
       let parents = normalize parents in
       if needs_parens elt parents then [ elt ], true else elt :: parents, false
+   *)

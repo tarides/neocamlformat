@@ -1,4 +1,5 @@
-open Source_parsing.Source_tree
+open Source_parsing
+open Source_tree
 
 type kind =
   | Free_floating
@@ -22,7 +23,7 @@ module Extension : sig
     | Structure_item
     | Item
 
-  val pp : kind -> extension -> Document.t
+  val pp : loc:Location.t -> kind -> extension -> Document.t
 end
 
 

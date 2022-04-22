@@ -28,40 +28,40 @@ module Payload = struct
     | [] -> tag
     | si :: st as items ->
       let st = !pp_struct si st in
-      let res = tag ^^ nest 2 (break_before st) in
-      if !struct_ends_in_obj items then break_after res else res
+      let res = tag ^^ nest 2 (break 1 ^^ st) in
+      if !struct_ends_in_obj items then res ^^ break 1 else res
 
   let psig tag = function
     | [] -> suffix ':' ~after:tag
     | si :: sg as items ->
       let sg = !pp_sig si sg in
       let res =
-        match pp_token ~after:tag ~before:sg COLON with
+        match Token.pp ~after:tag ~before:sg COLON with
         | colon -> tag ^^ nest 2 (colon ^/^ sg)
         | exception Assert_failure _ ->
           (* Can disappear when we properly handle exts and attrs on kw *)
-          suffix ~after:tag ':' ^^ nest 2 (break_before ~spaces:1 sg)
+          suffix ~after:tag ':' ^^ nest 2 (break 1 ^^ sg)
       in
-      if !sig_ends_in_obj items then break_after res else res
+      if !sig_ends_in_obj items then res ^^ break 1 else res
 
   let ptyp tag ct =
-    let break_after =
-      if !ct_ends_in_obj ct then break_after ~spaces:1 else (fun x -> x)
+    let break_after x =
+      if !ct_ends_in_obj ct then x ^^ break 1 else x
     in
     let ct = break_after (!pp_core_type ct) in
-    let colon = pp_token ~after:tag ~before:ct COLON in
+    let colon = Token.pp ~after:tag ~before:ct COLON in
     tag ^^ nest 2 (colon ^/^ ct)
 
   let ppat tag p =
     let p = !pp_pattern p in
-    let qmark = pp_token ~after:tag ~before:p QUESTION in
+    let qmark = Token.pp ~after:tag ~before:p QUESTION in
     tag ^^ nest 2 (qmark ^/^ p)
 
   let ppat_guard tag p e =
     let p = !pp_pattern p in
     let e = !pp_expression e in
-    let qmark = pp_token ~after:tag ~before:p QUESTION in
-    let when_ = pp_token ~after:p ~before:e WHEN in
+    let qmark = Token.pp ~after:tag ~before:p QUESTION in
+    let when_ = Token.pp ~after:p ~before:e WHEN in
     tag ^^ nest 2 (qmark ^/^ p ^/^ group (when_ ^/^ e))
 
   let pp_after ~tag = function
@@ -80,15 +80,16 @@ type kind =
 
 let ats kind =
   match kind with
-  | Free_floating -> "@@@"
-  | Attached_to_structure_item -> "@@"
-  | Attached_to_item -> "@"
+  | Free_floating -> Parser.LBRACKETATATAT
+  | Attached_to_structure_item -> LBRACKETATAT
+  | Attached_to_item -> LBRACKETAT
 
-let pp_attr kind attr_name attr_payload =
-  let tag =
-    let open Location in string ~loc:attr_name.loc (ats kind ^ attr_name.txt)
-  in
-  group (brackets (Payload.pp_after ~tag attr_payload))
+let pp_attr ~loc kind attr_name attr_payload =
+  let tag = str attr_name in
+  let left = Token.pp ~inside:loc ~before:tag (ats kind) in
+  let payload = Payload.pp_after ~tag attr_payload in
+  let right = Token.pp ~inside:loc ~after:payload RBRACKET in
+  left ^^ payload ^^ right
 
 (* :/ *)
 let pp_doc ~loc = function
@@ -126,7 +127,7 @@ let pp kind { attr_name; attr_payload; attr_loc } =
     assert (kind = Free_floating);
     *)
     pp_doc attr_payload ~loc:attr_loc
-  | _ -> pp_attr kind attr_name attr_payload
+  | _ -> pp_attr ~loc:attr_loc kind attr_name attr_payload
 
 let attach ?(spaces=1) kind doc attrs =
   let postdoc, attrs =
@@ -145,7 +146,7 @@ let attach ?(spaces=1) kind doc attrs =
     | attr :: attrs ->
       group
         (prefix ~indent:2 ~spaces doc
-          (separate_map (PPrint.break 0) ~f:(pp kind) attr attrs))
+          (separate_map (break 0) ~f:(pp kind) attr attrs))
   in
   match postdoc with
   | None -> with_attrs
@@ -162,7 +163,7 @@ let attach ?(spaces=1) kind doc attrs =
          will follow. But also, we know that PPrint doesn't print trailing
          whitespaces. So the these, while being counted towards the document
          {!requirement} will never actually get printed. *)
-      break_after ~spaces:81 doc
+      doc ^^ break 81
     else
       doc
 
@@ -200,14 +201,14 @@ let prepend_text attrs doc =
     match docstring with
     | [] -> doc
     | [ { attr_loc = loc; attr_payload; _ } ] ->
-      concat ~sep:hardline (pp_doc ~loc attr_payload) doc
+      pp_doc ~loc attr_payload ^//^ doc
     | _ -> assert false
   in
   match text with
   | [] -> [ doc ]
   | text :: texts ->
     let texts =
-      separate_map PPrint.hardline ~f:(fun { attr_payload; attr_loc; _ } ->
+      separate_map hardline ~f:(fun { attr_payload; attr_loc; _ } ->
         pp_doc ~loc:attr_loc attr_payload
       ) text texts
     in
@@ -218,12 +219,15 @@ module Extension = struct
     | Structure_item
     | Item
 
-  let percents = function
-    | Structure_item -> "%%"
-    | Item -> "%"
+  let opening_token = function
+    | Structure_item -> Parser.LBRACKETPERCENTPERCENT
+    | Item -> LBRACKETPERCENT
 
-  let pp kind ({ Location.txt = ext_name; loc }, ext_payload) =
-    let tag = string ~loc (percents kind ^ ext_name) in
-    brackets (Payload.pp_after ~tag ext_payload)
+  let pp ~loc kind ({ Location.txt = ext_name; loc = ext_loc }, ext_payload) =
+    let tag = string ~loc:ext_loc ext_name in
+    let left = Token.pp ~inside:loc ~before:tag (opening_token kind) in
+    let payload = Payload.pp_after ~tag ext_payload in
+    let right = Token.pp ~inside:loc ~after:payload RBRACKET in
+    left ^^ payload ^^ right
 end
 

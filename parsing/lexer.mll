@@ -387,17 +387,17 @@ rule token = parse
   | ".~"
       { error lexbuf
           (Reserved_sequence (".~", Some "is reserved for use in MetaOCaml")) }
-  | "~" (lowercase identchar * as name) ':'
+  | "~" lowercase identchar * ':' as name
       { check_label_name lexbuf name;
         LABEL name }
-  | "~" (lowercase_latin1 identchar_latin1 * as name) ':'
+  | "~" lowercase_latin1 identchar_latin1 * ':' as name
       { LABEL name }
   | "?"
       { QUESTION }
-  | "?" (lowercase identchar * as name) ':'
+  | "?" lowercase identchar * ':' as name
       { check_label_name lexbuf name;
         OPTLABEL name }
-  | "?" (lowercase_latin1 identchar_latin1 * as name) ':'
+  | "?" lowercase_latin1 identchar_latin1 * ':' as name
       { OPTLABEL name }
   | lowercase identchar * as name
       { try Hashtbl.find keyword_table name
@@ -514,7 +514,7 @@ rule token = parse
   | "->" { MINUSGREATER }
   | "."  { DOT }
   | ".." { DOTDOT }
-  | "." (dotsymbolchar symbolchar* as op) { DOTOP op }
+  | "." dotsymbolchar symbolchar* as op { DOTOP op }
   | ":"  { COLON }
   | "::" { COLONCOLON }
   | ":=" { COLONEQUAL }

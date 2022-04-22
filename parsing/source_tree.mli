@@ -22,11 +22,6 @@
 
 open Asttypes
 
-type arg_label =
-    Nolabel
-  | Labelled of string loc (*  label:T -> ... *)
-  | Optional of string loc (* ?label:T -> ... *)
-
 type obj_closed_flag =
   | OClosed
   | OOpen of Location.t
@@ -286,14 +281,14 @@ and expression =
 
 and fun_param =
   | Term of 
-      { lbl: arg_label;
+      { loc: Location.t;
+        lbl: arg_label;
         default: expression option;
         pat_with_annot: (pattern option * core_type option);
         parens: bool;
       }
-  (* FIXME? location *)
-  | Type of string loc
-        (* fun (type t) -> E *)
+  | Type of Location.t * string loc list
+        (* fun (type t u) -> E *)
 
 and expression_desc =
   | Pexp_parens of { begin_end: bool; exp: expression }
@@ -499,13 +494,14 @@ and value_description =
 and type_declaration =
     {
      ptype_name: string loc;
-     ptype_params: (core_type * (variance * injectivity)) list;
+     ptype_params: (core_type * variance_and_inj) list;
            (* ('a1,...'an) t; None represents  _*)
      ptype_cstrs: (core_type * core_type * Location.t) list;
            (* ... constraint T1=T1'  ... constraint Tn=Tn' *)
      ptype_kind: type_kind;
      ptype_private: Location.t option;   (* = private ... *)
      ptype_manifest: core_type option;  (* = T *)
+     ptype_ext_attributes: string loc option * attributes;
      ptype_attributes: attributes;   (* ... [@@id1] [@@id2] *)
      ptype_loc: Location.t;
     }
@@ -568,7 +564,7 @@ and constructor_arguments =
 and type_extension =
     {
      ptyext_path: Longident.t;
-     ptyext_params: (core_type * (variance * injectivity)) list;
+     ptyext_params: (core_type * variance_and_inj) list;
      ptyext_constructors: extension_constructor list;
      ptyext_private: Location.t option;
      ptyext_loc: Location.t;
@@ -648,6 +644,7 @@ and class_type_field =
     {
      pctf_desc: class_type_field_desc;
      pctf_loc: Location.t;
+     pctf_ext_attributes: string loc option * attributes;
      pctf_attributes: attributes; (* ... [@@id1] [@@id2] *)
     }
 
@@ -671,12 +668,13 @@ and class_type_field_desc =
 and 'a class_infos =
     {
      pci_virt: virtual_flag;
-     pci_params: (core_type * (variance * injectivity)) list;
+     pci_params: (core_type * variance_and_inj) list;
      pci_name: string loc;
      pci_term_params: fun_param list;
      pci_type: class_type option;
      pci_expr: 'a;
      pci_loc: Location.t;
+     pci_ext_attributes: string loc option * attributes;
      pci_attributes: attributes;  (* ... [@@id1] [@@id2] *)
     }
 (* class c = ...
@@ -744,6 +742,7 @@ and class_field =
     {
      pcf_desc: class_field_desc;
      pcf_loc: Location.t;
+     pcf_ext_attributes: string loc option * attributes;
      pcf_attributes: attributes; (* ... [@@id1] [@@id2] *)
     }
 
@@ -867,6 +866,7 @@ and module_declaration =
      pmd_name: string option loc;
      pmd_params: functor_parameter loc list;
      pmd_type: module_type;
+     pmd_ext_attributes: string loc option * attributes;
      pmd_attributes: attributes; (* ... [@@id1] [@@id2] *)
      pmd_loc: Location.t;
     }
@@ -1034,6 +1034,7 @@ and module_binding =
      pmb_params: functor_parameter loc list;
      pmb_type: module_type option;
      pmb_expr: module_expr;
+     pmb_ext_attributes: string loc option * attributes;
      pmb_attributes: attributes;
      pmb_loc: Location.t;
     }

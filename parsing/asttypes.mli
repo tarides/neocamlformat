@@ -62,25 +62,22 @@ type label = string
 
 type and_or_with = And | With
 
-type arg_label =
-    Nolabel
-  | Labelled of string (*  label:T -> ... *)
-  | Optional of string (* ?label:T -> ... *)
-
 type 'a loc = 'a Location.loc = {
   txt : 'a;
   loc : Location.t;
 }
 
+type label_info = {
+  name: string loc;
+  extra_info: [ `Single_token | `Previous_token of Location.t ];
+}
 
-type variance =
-  | Covariant
-  | Contravariant
-  | NoVariance
+type arg_label =
+    Nolabel
+  | Labelled of label_info (*  label:T -> ... *)
+  | Optional of label_info (* ?label:T -> ... *)
 
-type injectivity =
-  | Injective
-  | NoInjectivity
+type variance_and_inj = string loc list
 
 (* For Pexp_dotop_[gs]et *)
 type paren_kind = Paren | Brace | Bracket

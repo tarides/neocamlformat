@@ -3,14 +3,14 @@ open Asttypes
 type t = 
   | Lident of string loc
   | Ldot of t * string loc
-  | Lapply of t * t
+  | Lapply of t * t * Location.t
 
 let last = function
     Lident s -> s
   | Ldot(_, s) -> s
-  | Lapply(_, _) -> invalid_arg "Longident.last"
+  | Lapply(_, _, _) -> invalid_arg "Longident.last"
 
-let rec endpos = function
+let endpos = function
   | Lident s
   | Ldot(_, s) -> s.loc
-  | Lapply(_, t) -> endpos t
+  | Lapply(_, _, loc) -> loc

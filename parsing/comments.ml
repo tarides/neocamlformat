@@ -121,5 +121,14 @@ let between pos1 pos2 () =
 let before = fetch (fun relative_pos -> relative_pos >= 0)
 let after = fetch (fun relative_pos -> relative_pos <= 0)
 
+let get () =
+  let rec aux = function
+    | Null -> []
+    | Cell { loc; txt; prev = _; next } -> (txt, loc) :: aux next
+  in
+  let lst = aux !comments in
+  comments := Null;
+  lst
+
 let report_remaining () =
   iter !comments ~f:(fun l _ -> Format.eprintf "- %a\n%!" Location.print_loc l)

@@ -15,10 +15,8 @@ let pp_ident s =
   | Infix_op _ | Prefix_op _ -> str s
        *)
 let pp_empty ~(loc:Location.t) left right =
-  let after = empty ~loc:{ loc with  loc_end = loc.loc_start } in
-  let before = empty ~loc:{ loc with  loc_start = loc.loc_end } in
-  let fst = pp_token ~after ~before left in
-  let snd = pp_token ~after ~before right in
+  let fst = Token.pp ~inside:loc left in
+  let snd = Token.pp ~inside:loc right in
   group (fst ^^ snd)
 
 let rec pp lid =
@@ -28,8 +26,17 @@ and aux = function
   | Lident { txt = "()"; loc } -> pp_empty ~loc LPAREN RPAREN
   | Lident { txt = "[]"; loc } -> pp_empty ~loc LBRACKET RBRACKET
   | Lident s -> pp_ident s
-  | Ldot (lid, s) -> concat (pp lid) ~sep:PPrint.(dot ^^ break 0) (pp_ident s)
-  | Lapply (l1, l2) -> concat (pp l1) ~sep:(break 0) (parens (pp l2))
+  | Ldot (lid, s) ->
+    let prefix = pp lid in
+    let tail = pp_ident s in
+    let dot = Token.pp ~after:prefix ~before:tail DOT in
+    prefix ^^ dot ^^ break 0 ^^ tail
+  | Lapply (l1, l2, rparen_loc) ->
+    let d1 = pp l1 in
+    let d2 = pp l2 in
+    let lparen = Token.pp ~after:d1 ~before:d2 LPAREN in
+    let rparen = Token.pp ~inside:rparen_loc RPAREN in
+    d1 ^^ break 0 ^^ lparen ^^ d2 ^^ rparen
 
 let pp lid =
   hang 2 (pp lid)

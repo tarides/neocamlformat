@@ -1,4 +1,4 @@
-open Source_parsing.Location
+open Source_parsing
 
 module Rhs : sig
   type t =
@@ -13,20 +13,20 @@ end
 type t =
   {
     lhs : Document.t;
-    params : Document.t list loc;
+    params : Document.t list;
     constr : Document.t option;
     coerce : Document.t option;
     rhs : Rhs.t
   }
 
 val pp
-  :  ?binder:Source_parsing.Parser.token
+  :  ?binder:Parser.token
   -> ?keyword:Document.t
   -> t
   -> Document.t
 
 val pp_simple
-  :  ?binder:Source_parsing.Parser.token
+  :  ?binder:Parser.token
   -> keyword:Document.t
   -> Document.t
   -> Document.t
@@ -44,7 +44,7 @@ module Module : sig
   type t =
     {
       name : Document.t;
-      params : Document.t list loc;
+      params : Document.t list;
       constr : constraint_;
       body : body;
       attributes : Document.t
@@ -54,6 +54,7 @@ module Module : sig
     | Sig
     | Struct
 
-  val pp : keyword:Document.t -> context:context -> t -> Document.t
+  val pp
+    : keyword:Document.t -> loc:Location.t -> context:context -> t -> Document.t
 end
 

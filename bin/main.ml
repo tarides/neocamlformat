@@ -53,7 +53,7 @@ let fmt_file fn =
     in
     Comments.report_remaining ();
     let buf = Buffer.create (String.length source) in
-    PPrint.ToBuffer.pretty 10. !Options.width buf doc;
+    PPrint.ToBuffer.pretty 10. !Options.width buf (Document.to_pprint doc);
     Buffer.to_bytes buf |> Bytes.to_string
   in
   (try

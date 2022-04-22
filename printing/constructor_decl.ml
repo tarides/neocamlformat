@@ -1,4 +1,5 @@
 open Document
+open Custom_combinators
 open Import
 open Source_tree
 (******************************************************)
@@ -19,9 +20,13 @@ let constructor_arguments = function
   | Pcstr_tuple (a1 :: args) -> left_assoc_map ~sep:STAR ~f:Core_type.pp a1 args
 
 let constructor_name name =
+  (* FIXME: remove if there's no issue with (::) in tests *)
+  (*
   match Ident_class.classify name with
   | Normal -> str name
   | _ -> Document.parens (str name)
+  *)
+  str name
 
 let gadt_constructor name vars args res_ty attributes =
   let name = constructor_name name in
@@ -36,13 +41,11 @@ let gadt_constructor name vars args res_ty attributes =
           Two_separated_parts.sep_with_first vars args ~sep:DOT
       in
       let res = Core_type.pp (Option.get res_ty) in
-      let colon = pp_token ~after:name ~before:args COLON in
-      let arrow = pp_token ~after:args ~before:res MINUSGREATER in
-      group
-        (name ^^
-          nest 2
-            (break_before (group (colon ^^ nest 2 (break_before args))) ^/^
-              group (arrow ^^ nest 2 (break_before res))))
+      let colon = Token.pp ~after:name ~before:args COLON in
+      let arrow = Token.pp ~after:args ~before:res MINUSGREATER in
+      prefix ~indent:2 ~spaces:1 name
+        (prefix ~indent:2 ~spaces:1 colon args ^/^
+         prefix ~indent:2 ~spaces:1 arrow res)
     else
       let res = Core_type.pp (Option.get res_ty) in
       let res =

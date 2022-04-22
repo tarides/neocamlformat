@@ -1,6 +1,5 @@
 open Document
 open Import
-open Location
 
 module Rhs = struct
   type t =
@@ -17,23 +16,23 @@ end
 type t =
   {
     lhs : document;
-    params : document list loc;
+    params : document list;
     constr : document option;
     coerce : document option;
     rhs : Rhs.t
   }
 
-let pp_params { loc; txt = params } =
-  match params with
-  | [] -> empty ~loc
-  | p :: ps -> nest 4 (break_before @@ group (flow ~spaces:1 p ps))
+let pp_params = function
+  | [] -> empty
+  | p :: ps -> nest 4 (break 1 ^^ group (flow (break 1) p ps))
 
-let attach_annot doc ~sep annot =
+let attach_annot pre doc ~sep annot =
   match annot with
   | None -> doc
   | Some annot ->
-    let sep = pp_token ~after:doc ~before:annot sep in
-    (prefix ~indent:2 ~spaces:1 doc sep) ^^ nest 2 (break_before annot)
+    let after = if doc == empty then pre else doc in
+    let sep = Token.pp ~after ~before:annot sep in
+    (prefix ~indent:2 ~spaces:1 doc sep) ^^ nest 2 (break 1 ^^ annot)
 
 let pp
     ?(binder=Source_parsing.Parser.EQUAL) ?keyword
@@ -45,25 +44,25 @@ let pp
     | Some keyword -> prefix ~indent:2 ~spaces:1 keyword lhs
   in
   let params = pp_params params in
-  let with_constraint = attach_annot params ~sep:COLON constr in
-  let with_coercion = attach_annot with_constraint ~sep:COLONGREATER coerce in
+  let with_constraint = attach_annot pre params ~sep:COLON constr in
+  let with_coercion = attach_annot pre with_constraint ~sep:COLONGREATER coerce in
+  let after = if with_coercion == empty then pre else with_coercion in
   match rhs with
   | Absent -> pre ^^ with_coercion
   | Regular rhs ->
-    let binder = pp_token ~after:with_coercion ~before:rhs binder in
+    let binder = Token.pp ~after ~before:rhs binder in
     let lhs = pre ^^ group (with_coercion ^/^ binder) in
-    concat ~indent:2 ~sep:(break 1) lhs rhs (* Not prefix: no grouping *)
+    lhs ^^ nest 2 (break 1 ^^ rhs) (* Not prefix: no grouping *)
   | Two_parts (fst, snd) ->
-    let binder = pp_token ~after:with_coercion ~before:fst binder in
+    let binder = Token.pp ~after ~before:fst binder in
     let lhs = pre ^^ group (with_coercion ^/^ binder) in
     prefix ~indent:2 ~spaces:1 lhs fst ^^ nest 2 snd
 
 let pp_simple ?binder ~keyword lhs rhs =
-  let loc = { lhs.Document.loc with  loc_start = lhs.loc.loc_end } in
   pp ?binder ~keyword
     {
       lhs;
-      params = { loc; txt = [] };
+      params = [];
       constr = None;
       coerce = None;
       rhs = Regular rhs
@@ -84,7 +83,7 @@ module Module = struct
   type t =
     {
       name : document;
-      params : document list loc;
+      params : document list;
       constr : constraint_;
       body : body;
       attributes : document
@@ -93,46 +92,47 @@ module Module = struct
   let located_body = function
     | Generic doc | Items doc -> doc
 
-  let pp ~keyword ~context { name; params; constr; body; attributes } =
+  let pp ~keyword ~loc ~context { name; params; constr; body; attributes } =
     let pre = prefix ~indent:2 ~spaces:1 keyword name in
     let params = pp_params params in
+    let after  = if params == empty then pre else params in
     let with_constraint, binder =
       let body = located_body body in
       match constr, context with
-      | None, Struct -> params, pp_token ~after:params ~before:body EQUAL
-      | None, Sig -> params, pp_token ~after:params ~before:body COLON
+      | None, Struct -> params, Token.pp ~after ~before:body EQUAL
+      | None, Sig -> params, Token.pp ~after ~before:body COLON
       | Sig sg, Struct ->
         let sep =
-          let colon = pp_token ~after:params ~before:sg COLON in
-          let sig_ = pp_token ~after:colon ~before:sg SIG in
-          prefix ~indent:2 ~spaces:1 (group (break_before colon)) sig_
+          let colon = Token.pp ~after ~before:sg COLON in
+          let sig_ = Token.pp ~after:colon ~before:sg SIG in
+          prefix ~indent:2 ~spaces:1 (group (break 1 ^^ colon)) sig_
         in
         let doc =
-          group (params ^^ nest 2 sep) ^^ nest 2 (PPrint.hardline ++ sg)
+          group (params ^^ nest 2 sep) ^^ nest 2 (hardline ^^ sg)
         in
-        let end_ = pp_token ~after:doc ~before:body END in
-        let eq = pp_token ~after:end_ ~before:body EQUAL in
+        let end_ = Token.pp ~after:doc ~before:body END in
+        let eq = Token.pp ~after:end_ ~before:body EQUAL in
         doc, end_ ^/^ eq
       | Mty constraint_, Struct ->
-        let doc = attach_annot params ~sep:COLON (Some constraint_) in
-        doc, pp_token ~after:doc ~before:body EQUAL
+        let doc = attach_annot pre params ~sep:COLON (Some constraint_) in
+        doc, Token.pp ~after:doc ~before:body EQUAL
       | _, Sig -> assert false
     in
     let binder, rhs =
       match body with
       | Items items ->
         let doc =
-          let end_ = pp_token ~after:items ~before:attributes END in
-          concat ~sep:hardline (nest 2 (hardline ++ items)) end_
+          let end_ = Token.pp ~inside:loc ~after:items ~before:attributes END in
+          nest 2 (hardline ^^ items) ^^ hardline ^^ end_
         in
         let open_ =
-          pp_token ~after:binder ~before:doc
+          Token.pp ~after:binder ~before:doc
             (match context with
             | Struct -> STRUCT
             | Sig -> SIG)
         in
         binder ^/^ open_, doc
-      | Generic doc -> binder, nest 2 (break_before doc)
+      | Generic doc -> binder, nest 2 (break 1 ^^ doc)
     in
     let doc = pre ^^ group (with_constraint ^/^ group binder) ^^ rhs in
     group (prefix ~indent:2 ~spaces:1 doc attributes)

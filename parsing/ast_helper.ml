@@ -184,9 +184,9 @@ module Exp = struct
   let ident ?loc ?attrs a = mk ?loc ?attrs (Pexp_ident a)
   let constant ?loc ?attrs a = mk ?loc ?attrs (Pexp_constant a)
   let let_ ?loc ?attrs a b c = mk ?loc ?attrs (Pexp_let (a, b, c))
-  let fun_ ?loc ?attrs a b c d =
+  let fun_ ?loc ?attrs l a b c d =
     let term = 
-      Term { lbl = a; default = b; pat_with_annot = c; parens = false }
+      Term { loc = l; lbl = a; default = b; pat_with_annot = c; parens = false }
     in
     mk ?loc ?attrs (Pexp_fun ([term], None, d))
   let function_ ?loc ?attrs a = mk ?loc ?attrs (Pexp_function a)
@@ -225,7 +225,8 @@ module Exp = struct
   let assert_ ?loc ?attrs a = mk ?loc ?attrs (Pexp_assert a)
   let lazy_ ?loc ?attrs a = mk ?loc ?attrs (Pexp_lazy a)
   let object_ ?loc ?attrs a = mk ?loc ?attrs (Pexp_object a)
-  let newtype ?loc ?attrs a b = mk ?loc ?attrs (Pexp_fun ([Type a], None, b))
+  let newtype ?loc ?attrs l a b =
+    mk ?loc ?attrs (Pexp_fun ([Type (l, a)], None, b))
   let pack ?loc ?attrs a = mk ?loc ?attrs (Pexp_pack (a, None))
   let open_ ?loc ?attrs a b = mk ?loc ?attrs (Pexp_letopen (a, b))
   let letop ?loc ?attrs let_ ands body =
@@ -343,9 +344,9 @@ module Cl = struct
 
   let constr ?loc ?attrs a b = mk ?loc ?attrs (Pcl_constr (a, b))
   let structure ?loc ?attrs a = mk ?loc ?attrs (Pcl_structure a)
-  let fun_ ?loc ?attrs a b c d =
+  let fun_ ?loc ?attrs l a b c d =
     let term = 
-      Term { lbl = a; default = b; pat_with_annot = c; parens = false }
+      Term { loc = l; lbl = a; default = b; pat_with_annot = c; parens = false }
     in
     mk ?loc ?attrs (Pcl_fun ([term], d))
   let apply ?loc ?attrs a b = mk ?loc ?attrs (Pcl_apply (a, b))
@@ -372,11 +373,12 @@ module Cty = struct
 end
 
 module Ctf = struct
-  let mk ?(loc = !default_loc) ?(attrs = [])
+  let mk ?(loc = !default_loc) ?(ext_attrs = None, []) ?(attrs = [])
            ?(docs = empty_docs) d =
     {
      pctf_desc = d;
      pctf_loc = loc;
+     pctf_ext_attributes = ext_attrs;
      pctf_attributes = add_docs_attrs docs attrs;
     }
 
@@ -397,11 +399,12 @@ module Ctf = struct
 end
 
 module Cf = struct
-  let mk ?(loc = !default_loc) ?(attrs = [])
+  let mk ?(loc = !default_loc) ?(ext_attrs = None, [])?(attrs = [])
         ?(docs = empty_docs) d =
     {
      pcf_desc = d;
      pcf_loc = loc;
+     pcf_ext_attributes = ext_attrs;
      pcf_attributes = add_docs_attrs docs attrs;
     }
 
@@ -438,12 +441,13 @@ module Val = struct
 end
 
 module Md = struct
-  let mk ?(loc = !default_loc) ?(attrs = [])
+  let mk ?(loc = !default_loc) ?(ext_attrs = None, []) ?(attrs = [])
         ?(docs = empty_docs) ?(text = []) name (params, typ) =
     {
      pmd_name = name;
      pmd_type = typ;
      pmd_params = params;
+     pmd_ext_attributes = ext_attrs;
      pmd_attributes =
        add_text_attrs text (add_docs_attrs docs attrs);
      pmd_loc = loc;
@@ -475,13 +479,14 @@ module Mtd = struct
 end
 
 module Mb = struct
-  let mk ?(loc = !default_loc) ?(attrs = [])
+  let mk ?(loc = !default_loc) ?(ext_attrs = None, []) ?(attrs = [])
         ?(docs = empty_docs) ?(text = []) name (params, typ, expr) =
     {
      pmb_name = name;
      pmb_params = params;
      pmb_type = typ;
      pmb_expr = expr;
+     pmb_ext_attributes = ext_attrs;
      pmb_attributes =
        add_text_attrs text (add_docs_attrs docs attrs);
      pmb_loc = loc;
@@ -525,7 +530,7 @@ module Vb = struct
 end
 
 module Ci = struct
-  let mk ?(loc = !default_loc) ?(attrs = [])
+  let mk ?(loc = !default_loc) ?(ext_attrs = None, []) ?(attrs = [])
         ?(docs = empty_docs) ?(text = [])
         ?(virt = Concrete) ?(params = []) name term_params typ expr =
     {
@@ -535,6 +540,7 @@ module Ci = struct
      pci_term_params = term_params;
      pci_type = typ;
      pci_expr = expr;
+     pci_ext_attributes = ext_attrs;
      pci_attributes =
        add_text_attrs text (add_docs_attrs docs attrs);
      pci_loc = loc;
@@ -542,7 +548,7 @@ module Ci = struct
 end
 
 module Type = struct
-  let mk ?(loc = !default_loc) ?(attrs = [])
+  let mk ?(loc = !default_loc) ?(ext_attrs = None, []) ?(attrs = [])
         ?(docs = empty_docs) ?(text = [])
       ?(params = [])
       ?(cstrs = [])
@@ -557,6 +563,7 @@ module Type = struct
      ptype_kind = kind;
      ptype_private = priv;
      ptype_manifest = manifest;
+     ptype_ext_attributes = ext_attrs;
      ptype_attributes =
        add_text_attrs text (add_docs_attrs docs attrs);
      ptype_loc = loc;

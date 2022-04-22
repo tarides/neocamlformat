@@ -134,7 +134,7 @@ module Exp:
     val constant: ?loc:loc -> ?attrs:attrs -> constant -> expression
     val let_: ?loc:loc -> ?attrs:attrs -> rec_flag -> value_binding list
               -> expression -> expression
-    val fun_: ?loc:loc -> ?attrs:attrs -> arg_label -> expression option
+    val fun_: ?loc:loc -> ?attrs:attrs -> loc -> arg_label -> expression option
               -> pattern option * core_type option -> expression -> expression
     val function_: ?loc:loc -> ?attrs:attrs -> case list -> expression
     val apply: ?loc:loc -> ?attrs:attrs -> expression
@@ -181,7 +181,8 @@ module Exp:
     val assert_: ?loc:loc -> ?attrs:attrs -> expression -> expression
     val lazy_: ?loc:loc -> ?attrs:attrs -> expression -> expression
     val object_: ?loc:loc -> ?attrs:attrs -> class_structure -> expression
-    val newtype: ?loc:loc -> ?attrs:attrs -> str -> expression -> expression
+    val newtype: ?loc:loc -> ?attrs:attrs -> loc -> str list -> expression
+      -> expression
     val pack: ?loc:loc -> ?attrs:attrs -> module_expr -> expression
     val open_: ?loc:loc -> ?attrs:attrs -> open_declaration -> expression
                -> expression
@@ -204,8 +205,8 @@ module Val:
 (** Type declarations *)
 module Type:
   sig
-    val mk: ?loc:loc -> ?attrs:attrs -> ?docs:docs -> ?text:text ->
-      ?params:(core_type * (variance * injectivity)) list ->
+    val mk: ?loc:loc -> ?ext_attrs:str option * attrs -> ?attrs:attrs ->
+      ?docs:docs -> ?text:text -> ?params:(core_type * variance_and_inj) list ->
       ?cstrs:(core_type * core_type * loc) list ->
       ?kind:type_kind -> ?priv:Location.t -> ?manifest:core_type -> str ->
       type_declaration
@@ -221,7 +222,7 @@ module Type:
 module Te:
   sig
     val mk: ?loc:loc -> ?attrs:attrs -> ?docs:docs ->
-      ?params:(core_type * (variance * injectivity)) list -> ?priv:Location.t ->
+      ?params:(core_type * variance_and_inj) list -> ?priv:Location.t ->
       lid -> extension_constructor list -> type_extension
 
     val mk_exception: ?loc:loc -> ?attrs:attrs -> ?docs:docs ->
@@ -323,7 +324,8 @@ module Str:
 (** Module declarations *)
 module Md:
   sig
-    val mk: ?loc:loc -> ?attrs:attrs -> ?docs:docs -> ?text:text ->
+    val mk: ?loc:loc -> ?ext_attrs:str option * attrs -> ?attrs:attrs ->
+      ?docs:docs -> ?text:text ->
       str_opt -> (functor_parameter with_loc list * module_type) ->
       module_declaration
   end
@@ -345,7 +347,8 @@ module Mtd:
 (** Module bindings *)
 module Mb:
   sig
-    val mk: ?loc:loc -> ?attrs:attrs -> ?docs:docs -> ?text:text ->
+    val mk: ?loc:loc -> ?ext_attrs:str option * attrs -> ?attrs:attrs ->
+      ?docs:docs -> ?text:text ->
       str_opt -> (functor_parameter with_loc list * module_type option * module_expr) ->
       module_binding
   end
@@ -393,8 +396,8 @@ module Cty:
 (** Class type fields *)
 module Ctf:
   sig
-    val mk: ?loc:loc -> ?attrs:attrs -> ?docs:docs ->
-      class_type_field_desc -> class_type_field
+    val mk: ?loc:loc -> ?ext_attrs:str option * attrs -> ?attrs:attrs ->
+      ?docs:docs -> class_type_field_desc -> class_type_field
     val attr: class_type_field -> attribute -> class_type_field
 
     val inherit_: ?loc:loc -> ?attrs:attrs -> class_type -> class_type_field
@@ -417,8 +420,9 @@ module Cl:
 
     val constr: ?loc:loc -> ?attrs:attrs -> lid -> core_type list -> class_expr
     val structure: ?loc:loc -> ?attrs:attrs -> class_structure -> class_expr
-    val fun_: ?loc:loc -> ?attrs:attrs -> arg_label -> expression option ->
-      pattern option * core_type option -> class_expr -> class_expr
+    val fun_: ?loc:loc -> ?attrs:attrs -> loc -> arg_label ->
+      expression option -> pattern option * core_type option -> class_expr ->
+      class_expr
     val apply: ?loc:loc -> ?attrs:attrs -> class_expr ->
       (arg_label * expression) list -> class_expr
     val let_: ?loc:loc -> ?attrs:attrs -> rec_flag -> value_binding list ->
@@ -433,8 +437,8 @@ module Cl:
 (** Class fields *)
 module Cf:
   sig
-    val mk: ?loc:loc -> ?attrs:attrs -> ?docs:docs -> class_field_desc ->
-      class_field
+    val mk: ?loc:loc -> ?ext_attrs:str option * attrs -> ?attrs:attrs ->
+      ?docs:docs -> class_field_desc -> class_field
     val attr: class_field -> attribute -> class_field
 
     val inherit_: ?loc:loc -> ?attrs:attrs -> override_flag -> class_expr ->
@@ -458,8 +462,9 @@ module Cf:
 (** Classes *)
 module Ci:
   sig
-    val mk: ?loc:loc -> ?attrs:attrs -> ?docs:docs -> ?text:text ->
-      ?virt:virtual_flag -> ?params:(core_type * (variance * injectivity)) list ->
+    val mk: ?loc:loc -> ?ext_attrs:str option * attrs -> ?attrs:attrs ->
+      ?docs:docs -> ?text:text ->
+      ?virt:virtual_flag -> ?params:(core_type * variance_and_inj) list ->
       str -> fun_param list -> class_type option -> 'a -> 'a class_infos
   end
 

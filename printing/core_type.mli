@@ -1,4 +1,6 @@
-open Source_parsing.Source_tree
+open Source_parsing
+open Asttypes
+open Source_tree
 
 val ends_in_obj : core_type -> bool
 val starts_with_obj : core_type -> bool
