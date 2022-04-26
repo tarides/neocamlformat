@@ -1206,9 +1206,14 @@ end = struct
         match default with
         | None -> label_let_pattern
         | Some exp ->
+          let spaces =
+            match exp.pexp_desc with
+            | Pexp_prefix_apply _ -> 1
+            | _ -> 0
+          in
           let exp = Expression.pp exp in
           let equal = Token.pp ~after:label_let_pattern ~before:exp EQUAL in
-          group (label_let_pattern ^^ equal ^^ break 0 ^^ exp)
+          group (label_let_pattern ^^ equal ^^ break spaces ^^ exp)
       in
       let rparen = Token.pp ~inside:sloc ~after:with_default RPAREN in
       question ^^ lparen ^^ with_default ^^ rparen
