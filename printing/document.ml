@@ -145,48 +145,62 @@ let concat_located (d1, right) (d2, left) =
     (* FIXME: Perhaps I don't need all these hardlines in there.
        The presence of them anywhere, is going to turn all the break into
        hardlines, in the absence of grouping. *)
-    (* FIXME: add groups. *)
+    (* FIXME: add groups? it's not working well, we'd want to push comments into
+       existing groups … but that's expensive and probably not worth it? *)
+    let layout indent ?before ?after cmts =
+      if cmts == empty then
+        empty
+      else 
+        let break i = if i = -1 then hardline else break i in
+        nest indent
+          begin match before, after with
+          | None, None -> cmts
+          | Some i, None -> break i ^^ cmts
+          | None, Some j -> cmts ^^ break j
+          | Some i, Some j -> break i ^^ cmts ^^ break j
+          end
+    in
     match right.ws, left.ws with
     | None, None ->
       d1
-      ^^ nest right.nest (break 0 ^^ left_cmts)
-      ^^ nest left.nest (break 0 ^^ right_cmts ^^ break 0)
+      ^^ layout right.nest ~before:0 left_cmts
+      ^^ layout left.nest ~before:0 right_cmts ~after:0
       ^^ d2
     | Some Space, Some Space ->
       d1
-      ^^ nest right.nest left_cmts
-      ^^ nest left.nest (break 1 ^^ right_cmts)
+      ^^ layout right.nest left_cmts
+      ^^ layout left.nest ~before:1 right_cmts
       ^^ d2
     | Some Hardline, Some Hardline ->
       d1
-      ^^ nest right.nest left_cmts
-      ^^ nest left.nest (hardline ^^ right_cmts)
+      ^^ layout right.nest left_cmts
+      ^^ layout left.nest ~before:(-1) right_cmts
       ^^ d2
     | Some Hardline, Some _
     | Some _, Some Hardline ->
       d1
-      ^^ nest right.nest left_cmts
-      ^^ nest left.nest (hardline ^^ right_cmts)
+      ^^ layout right.nest left_cmts
+      ^^ layout left.nest ~before:(-1) right_cmts
       ^^ d2
     | Some Hardline, None ->
       d1
-      ^^ nest right.nest left_cmts
-      ^^ nest left.nest (hardline ^^ right_cmts ^^ break 0)
+      ^^ layout right.nest left_cmts
+      ^^ layout left.nest ~before:(-1) right_cmts ~after:0
       ^^ d2
     | None, Some Hardline ->
       d1
-      ^^ nest right.nest (break 0 ^^ left_cmts)
-      ^^ nest left.nest (hardline ^^ right_cmts)
+      ^^ layout right.nest ~before:0 left_cmts
+      ^^ layout left.nest ~before:(-1) right_cmts
       ^^ d2
     | Some Space, None ->
       d1
-      ^^ nest right.nest left_cmts
-      ^^ nest left.nest (break 1 ^^ right_cmts ^^ break 0)
+      ^^ layout right.nest left_cmts
+      ^^ layout left.nest ~before:1 right_cmts ~after:0
       ^^ d2
     | None, Some Space ->
       d1
-      ^^ nest right.nest (break 0 ^^ left_cmts)
-      ^^ nest left.nest (break 1 ^^ right_cmts)
+      ^^ layout right.nest ~before:0 left_cmts
+      ^^ layout left.nest ~before:1 right_cmts
       ^^ d2
 
 let (^^) t1 t2 =

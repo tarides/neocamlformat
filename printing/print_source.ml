@@ -391,7 +391,10 @@ end = struct
     | _ ->
       let exp = Expression.pp exp in
       let lbl = arg_label ~later:exp lbl in
-      group (lbl ^^ break 0 ^^ exp)
+      if lbl == empty then
+        exp
+      else
+        group (lbl ^^ break 0 ^^ exp)
 
   type argument =
     | Function of
