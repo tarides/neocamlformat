@@ -5,7 +5,7 @@
  (deps (:t align_cases.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -13,7 +13,7 @@
  (deps (:t align_infix.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -21,7 +21,7 @@
  (deps (:t apply.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -29,7 +29,7 @@
  (deps (:t array.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -37,7 +37,7 @@
  (deps (:t assignment_operator.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -45,7 +45,7 @@
  (deps (:t attribute_and_expression.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -53,7 +53,7 @@
  (deps (:t attributes.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -61,7 +61,7 @@
  (deps (:t break_before_in.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -69,7 +69,7 @@
  (deps (:t break_cases.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -77,7 +77,7 @@
  (deps (:t break_fun_decl.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -85,7 +85,7 @@
  (deps (:t break_record.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -93,7 +93,7 @@
  (deps (:t break_separators.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -101,7 +101,7 @@
  (deps (:t break_sequence_before.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -109,7 +109,7 @@
  (deps (:t break_string_literals.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -117,7 +117,7 @@
  (deps (:t break_struct.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -125,7 +125,7 @@
  (deps (:t cinaps.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -133,7 +133,7 @@
  (deps (:t cmdline_override.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -141,7 +141,7 @@
  (deps (:t cmdline_override2.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -149,7 +149,7 @@
  (deps (:t comment_breaking.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -157,7 +157,7 @@
  (deps (:t comment_header.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -165,7 +165,7 @@
  (deps (:t comment_in_empty.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -173,7 +173,7 @@
  (deps (:t comment_in_modules.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -181,7 +181,7 @@
  (deps (:t comment_last.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -189,7 +189,7 @@
  (deps (:t comment_sparse.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -197,7 +197,7 @@
  (deps (:t comments.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -205,7 +205,7 @@
  (deps (:t comments_args.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -213,7 +213,7 @@
  (deps (:t comments_around_disabled.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -221,7 +221,7 @@
  (deps (:t comments_in_record.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -229,7 +229,7 @@
  (deps (:t compact_lists_arrays.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -237,7 +237,7 @@
  (deps (:t custom_list.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -245,7 +245,7 @@
  (deps (:t disabled.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -253,7 +253,7 @@
  (deps (:t disambiguate.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -261,7 +261,7 @@
  (deps (:t doc_comments.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -269,7 +269,7 @@
  (deps (:t doc_comments_padding.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -277,7 +277,7 @@
  (deps (:t empty.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -285,7 +285,7 @@
  (deps (:t empty_ml.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -293,7 +293,7 @@
  (deps (:t error1.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -301,7 +301,7 @@
  (deps (:t error2.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -309,7 +309,7 @@
  (deps (:t error3.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -317,7 +317,7 @@
  (deps (:t error4.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -325,7 +325,7 @@
  (deps (:t exceptions.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -333,7 +333,7 @@
  (deps (:t exp_grouping.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -341,7 +341,7 @@
  (deps (:t exp_record.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -349,7 +349,7 @@
  (deps (:t expect_test.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -357,7 +357,7 @@
  (deps (:t extensions.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -365,7 +365,7 @@
  (deps (:t field.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -373,7 +373,7 @@
  (deps (:t first_class_module.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -381,7 +381,7 @@
  (deps (:t floating_doc.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -389,7 +389,7 @@
  (deps (:t for_while.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -397,7 +397,7 @@
  (deps (:t format_invalid_files.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -405,7 +405,7 @@
  (deps (:t fun_decl.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -413,7 +413,7 @@
  (deps (:t function_indent.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -421,7 +421,7 @@
  (deps (:t functor.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -429,7 +429,7 @@
  (deps (:t funsig.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -437,7 +437,7 @@
  (deps (:t gadt.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -445,7 +445,7 @@
  (deps (:t generative.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -453,7 +453,7 @@
  (deps (:t index_op.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -461,7 +461,7 @@
  (deps (:t infix_arg_grouping.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -469,7 +469,7 @@
  (deps (:t infix_bind.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -477,7 +477,7 @@
  (deps (:t infix_precedence.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -485,7 +485,7 @@
  (deps (:t invalid.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -493,7 +493,7 @@
  (deps (:t invalid_docstring.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -501,7 +501,7 @@
  (deps (:t issue114.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -509,7 +509,7 @@
  (deps (:t issue289.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -517,7 +517,7 @@
  (deps (:t issue48.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -525,7 +525,7 @@
  (deps (:t issue51.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -533,7 +533,7 @@
  (deps (:t issue57.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -541,7 +541,7 @@
  (deps (:t issue60.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -549,7 +549,7 @@
  (deps (:t issue77.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -557,7 +557,7 @@
  (deps (:t issue85.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -565,7 +565,7 @@
  (deps (:t issue89.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -573,7 +573,7 @@
  (deps (:t ite.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -581,7 +581,7 @@
  (deps (:t js_source.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -589,7 +589,7 @@
  (deps (:t kw_extentions.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -597,7 +597,7 @@
  (deps (:t label_option_default_args.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -605,7 +605,7 @@
  (deps (:t lazy.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -613,7 +613,7 @@
  (deps (:t let_binding.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -621,7 +621,7 @@
  (deps (:t let_in_constr.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -629,7 +629,7 @@
  (deps (:t let_module.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -637,7 +637,7 @@
  (deps (:t list.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -645,7 +645,7 @@
  (deps (:t loc_stack.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -653,7 +653,7 @@
  (deps (:t locally_abtract_types.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -661,7 +661,7 @@
  (deps (:t margin_80.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -669,7 +669,7 @@
  (deps (:t match.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -677,7 +677,7 @@
  (deps (:t match2.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -685,7 +685,7 @@
  (deps (:t match_indent.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -693,7 +693,7 @@
  (deps (:t max_indent.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -701,7 +701,7 @@
  (deps (:t module.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -709,7 +709,7 @@
  (deps (:t module_anonymous.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -717,7 +717,7 @@
  (deps (:t module_attributes.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -725,7 +725,7 @@
  (deps (:t module_item_spacing.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -733,7 +733,7 @@
  (deps (:t module_type.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -741,7 +741,7 @@
  (deps (:t monadic_binding.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -749,7 +749,7 @@
  (deps (:t multi_index_op.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -757,7 +757,7 @@
  (deps (:t need_format.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -765,7 +765,7 @@
  (deps (:t new.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -773,7 +773,7 @@
  (deps (:t object.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -781,7 +781,7 @@
  (deps (:t object_type.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -789,7 +789,7 @@
  (deps (:t ocp_indent_compat.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -797,7 +797,7 @@
  (deps (:t ocp_indent_options.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -805,7 +805,7 @@
  (deps (:t open.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -813,7 +813,7 @@
  (deps (:t open_types.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -821,7 +821,7 @@
  (deps (:t option.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -829,7 +829,7 @@
  (deps (:t parens_tuple_patterns.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -837,7 +837,7 @@
  (deps (:t precedence.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -845,7 +845,7 @@
  (deps (:t prefix_infix.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -853,7 +853,7 @@
  (deps (:t print_config.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -861,7 +861,7 @@
  (deps (:t profiles.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -869,7 +869,7 @@
  (deps (:t profiles2.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -877,7 +877,7 @@
  (deps (:t protected_object_types.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -885,7 +885,7 @@
  (deps (:t record.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -893,7 +893,7 @@
  (deps (:t record_punning.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -901,7 +901,7 @@
  (deps (:t reformat_string.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -909,7 +909,7 @@
  (deps (:t refs.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -917,7 +917,7 @@
  (deps (:t remove_extra_parens.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -925,7 +925,7 @@
  (deps (:t revapply_ext.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -933,7 +933,7 @@
  (deps (:t send.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -941,7 +941,7 @@
  (deps (:t sequence.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -949,7 +949,7 @@
  (deps (:t shebang.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -957,7 +957,7 @@
  (deps (:t shortcut_ext_attr.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -965,7 +965,7 @@
  (deps (:t skip.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -973,7 +973,7 @@
  (deps (:t source.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -981,7 +981,7 @@
  (deps (:t str_value.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -989,7 +989,7 @@
  (deps (:t string.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -997,7 +997,7 @@
  (deps (:t string_array.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -1005,7 +1005,7 @@
  (deps (:t string_wrapping.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -1013,7 +1013,7 @@
  (deps (:t symbol.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -1021,7 +1021,7 @@
  (deps (:t tag_only.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -1029,7 +1029,7 @@
  (deps (:t try_with_or_pattern.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -1037,7 +1037,7 @@
  (deps (:t tuple.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -1045,7 +1045,7 @@
  (deps (:t tuple_less_parens.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -1053,7 +1053,7 @@
  (deps (:t tuple_type_parens.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -1061,7 +1061,7 @@
  (deps (:t type_and_constraint.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -1069,7 +1069,7 @@
  (deps (:t type_annotations.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -1077,7 +1077,7 @@
  (deps (:t types.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -1085,7 +1085,7 @@
  (deps (:t unary.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -1093,7 +1093,7 @@
  (deps (:t unicode.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -1101,7 +1101,7 @@
  (deps (:t verbose1.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -1109,7 +1109,7 @@
  (deps (:t verbose2.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -1117,7 +1117,7 @@
  (deps (:t wrap_comments.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -1125,7 +1125,7 @@
  (deps (:t wrap_comments_break.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
 
 (rule
  (alias runtest)
@@ -1133,4 +1133,4 @@
  (deps (:t wrapping_functor_args.ml))
  (action
    (with-stdout-to %{target}
-     (run %{bin:neocamlformat} --ignore-docstrings %{t}))))
+     (run %{bin:neocamlformat} %{t}))))
