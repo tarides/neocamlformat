@@ -5,6 +5,7 @@ type kind =
   | Free_floating
   | Attached_to_structure_item
   | Attached_to_item
+  | Attached_to_exception
 
 val is_non_doc : attribute -> bool
 val has_non_doc : attributes -> bool

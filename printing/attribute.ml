@@ -77,12 +77,14 @@ type kind =
   | Free_floating
   | Attached_to_structure_item
   | Attached_to_item
+  | Attached_to_exception
 
 let ats kind =
   match kind with
   | Free_floating -> Parser.LBRACKETATATAT
   | Attached_to_structure_item -> LBRACKETATAT
-  | Attached_to_item -> LBRACKETAT
+  | Attached_to_item
+  | Attached_to_exception -> LBRACKETAT
 
 let pp_attr ~loc kind attr_name attr_payload =
   let tag = str attr_name in
@@ -154,7 +156,9 @@ let attach ?(spaces=1) kind doc attrs =
     let doc =
       prefix ~indent:0 ~spaces with_attrs (pp_doc attr_payload ~loc:attr_loc)
     in
-    if kind = Attached_to_structure_item then
+    match kind with
+    | Attached_to_structure_item
+    | Attached_to_exception ->
       (* This is a ugly hack: we want a blank like to follow the document, so
          the post item docstring is not deemed ambiguous.
          However, if we add a hardline here, then there will be two blank
@@ -164,7 +168,7 @@ let attach ?(spaces=1) kind doc attrs =
          whitespaces. So the these, while being counted towards the document
          {!requirement} will never actually get printed. *)
       doc ^^ break 81
-    else
+    | _ ->
       doc
 
 let is_non_doc attr =

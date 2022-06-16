@@ -1100,7 +1100,7 @@ end = struct
     doc
 
   and pp_letexception ~(loc:Location.t) ~ext_attrs:(extension, attrs) exn exp =
-    let exn = Constructor_decl.pp_extension exn in
+    let exn = Constructor_decl.pp_extension ~is_exn:true exn in
     let exp = pp exp in
     let keyword =
       let let_ = Token.pp ~inside:loc ~before:exn LET in
@@ -2208,7 +2208,7 @@ end = struct
       ~ext_attrs:(extension, attrs)
       { ptyexn_constructor; ptyexn_attributes; ptyexn_loc }
   =
-    let cstr = Constructor_decl.pp_extension ptyexn_constructor in
+    let cstr = Constructor_decl.pp_extension ~is_exn:true ptyexn_constructor in
     let kw =
       Keyword.decorate (Token.pp ~inside:ptyexn_loc ~before:cstr EXCEPTION)
         ~extension attrs

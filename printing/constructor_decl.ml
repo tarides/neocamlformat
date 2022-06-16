@@ -28,7 +28,7 @@ let constructor_name name =
   *)
   str name
 
-let gadt_constructor name vars args res_ty attributes =
+let gadt_constructor ~is_exn name vars args res_ty attributes =
   let name = constructor_name name in
   let decl =
     if has_args args then
@@ -57,9 +57,14 @@ let gadt_constructor name vars args res_ty attributes =
       in
       Two_separated_parts.sep_with_second name res ~sep:COLON
   in
-  Attribute.attach_to_item decl attributes
+  let kind : Attribute.kind =
+    if is_exn
+    then Attached_to_exception
+    else Attached_to_item
+  in
+  Attribute.attach kind decl attributes
 
-let simple_constructor name args attributes =
+let simple_constructor ~is_exn name args attributes =
   let name = constructor_name name in
   let decl =
     if has_args args then
@@ -68,24 +73,29 @@ let simple_constructor name args attributes =
     else
       name
   in
-  Attribute.attach_to_item decl attributes
+  let kind : Attribute.kind =
+    if is_exn
+    then Attached_to_exception
+    else Attached_to_item
+  in
+  Attribute.attach kind decl attributes
 
-let pp_constructor name vars args res_ty attributes =
+let pp_constructor ~is_exn name vars args res_ty attributes =
   match res_ty with
-  | None -> simple_constructor name args attributes
-  | Some _ -> gadt_constructor name vars args res_ty attributes
+  | None -> simple_constructor ~is_exn name args attributes
+  | Some _ -> gadt_constructor ~is_exn name vars args res_ty attributes
 
 let pp_rebind name rebound attributes =
   let name = str name in
   let rebound = Longident.pp rebound in
   let decl = Two_separated_parts.sep_with_first name rebound ~sep:EQUAL in
-  Attribute.attach_to_item decl attributes
+  Attribute.attach Attached_to_exception decl attributes
 
 let pp_decl { pcd_name; pcd_vars; pcd_args; pcd_res; pcd_attributes; _ } =
-  pp_constructor pcd_name pcd_vars pcd_args pcd_res pcd_attributes
+  pp_constructor ~is_exn:false pcd_name pcd_vars pcd_args pcd_res pcd_attributes
 
-let pp_extension { pext_name; pext_kind; pext_attributes; _ } =
+let pp_extension ?(is_exn=false) { pext_name; pext_kind; pext_attributes; _ } =
   match pext_kind with
   | Pext_decl (vars, args, res_ty) ->
-    pp_constructor pext_name vars args res_ty pext_attributes
+    pp_constructor ~is_exn pext_name vars args res_ty pext_attributes
   | Pext_rebind lid -> pp_rebind pext_name lid pext_attributes
