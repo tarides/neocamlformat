@@ -47,16 +47,18 @@ let pp
   let with_constraint = attach_annot pre params ~sep:COLON constr in
   let with_coercion = attach_annot pre with_constraint ~sep:COLONGREATER coerce in
   let after = if with_coercion == empty then pre else with_coercion in
-  match rhs with
-  | Absent -> pre ^^ with_coercion
-  | Regular rhs ->
-    let binder = Token.pp ~after ~before:rhs binder in
-    let lhs = pre ^^ group (with_coercion ^/^ binder) in
-    lhs ^^ nest 2 (break 1 ^^ rhs) (* Not prefix: no grouping *)
-  | Two_parts (fst, snd) ->
-    let binder = Token.pp ~after ~before:fst binder in
-    let lhs = pre ^^ group (with_coercion ^/^ binder) in
-    prefix ~indent:2 ~spaces:1 lhs fst ^^ nest 2 snd
+  group (
+    match rhs with
+    | Absent -> pre ^^ with_coercion
+    | Regular rhs ->
+      let binder = Token.pp ~after ~before:rhs binder in
+      let lhs = pre ^^ group (with_coercion ^/^ binder) in
+      lhs ^^ nest 2 (break 1 ^^ rhs) (* Not prefix: no grouping *)
+    | Two_parts (fst, snd) ->
+      let binder = Token.pp ~after ~before:fst binder in
+      let lhs = pre ^^ group (with_coercion ^/^ binder) in
+      prefix ~indent:2 ~spaces:1 lhs fst ^^ nest 2 snd
+  )
 
 let pp_simple ?binder ~keyword lhs rhs =
   pp ?binder ~keyword
