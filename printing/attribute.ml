@@ -64,12 +64,15 @@ module Payload = struct
     let when_ = Token.pp ~after:p ~before:e WHEN in
     tag ^^ nest 2 (qmark ^/^ p ^/^ group (when_ ^/^ e))
 
-  let pp_after ~tag = function
-    | PStr st -> pstr tag st
-    | PSig sg -> psig tag sg
-    | PTyp ct -> ptyp tag ct
-    | PPat (p, None) -> ppat tag p
-    | PPat (p, Some e) -> ppat_guard tag p e
+  let pp_after ~tag payload =
+    group (
+      match payload with
+      | PStr st -> pstr tag st
+      | PSig sg -> psig tag sg
+      | PTyp ct -> ptyp tag ct
+      | PPat (p, None) -> ppat tag p
+      | PPat (p, Some e) -> ppat_guard tag p e
+    )
 end
 
 
