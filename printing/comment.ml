@@ -20,9 +20,19 @@ let between_pos p1 p2 =
   let comments = Source_parsing.Comments.between p1 p2 () in
   List.partition_map (fun ((_, l) as cmt) ->
     let cmt = comment cmt in
-    let dist_p1 = l.loc_start.pos_cnum - p1.pos_cnum in
-    let dist_p2 = p2.pos_cnum - l.loc_end.pos_cnum in
-    if dist_p1 < dist_p2 then Left cmt else Right cmt
+    let dist_p1 = l.loc_start.pos_lnum - p1.pos_lnum in
+    let dist_p2 = p2.pos_lnum - l.loc_end.pos_lnum in
+    if dist_p1 < dist_p2 then
+      Left cmt
+    else if dist_p1 > dist_p2 then
+      Right cmt
+    else
+      let dist_p1 = l.loc_start.pos_cnum - p1.pos_cnum in
+      let dist_p2 = p2.pos_cnum - l.loc_end.pos_cnum in
+      if dist_p1 < dist_p2 then
+        Left cmt
+      else
+        Right cmt
   ) comments
 
 (* Returns the comments between two locations.
