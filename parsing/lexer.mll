@@ -313,6 +313,11 @@ let prepare_error loc = function
            | None -> ()
            | Some expl -> fprintf ppf ": %s" expl)
 
+let bol = ref true
+let line_indent = ref []
+
+let indents () = !line_indent
+
 let () =
   Location.register_error_of_exn
     (function
@@ -374,107 +379,149 @@ rule token = parse
   | ('\\' as bs) newline {
       if not !escaped_newlines then error lexbuf (Illegal_character bs);
       update_loc lexbuf None 1 false 0;
+      bol := true;
       token lexbuf }
   | newline
       { update_loc lexbuf None 1 false 0;
+        bol := true;
         EOL }
-  | blank +
-      { token lexbuf }
+  | blank + as ws
+      { if !bol then (
+          let lnum = lexbuf.lex_curr_p.pos_lnum in
+          let indent = String.length ws in
+          line_indent :=
+            match !line_indent with
+            | (l, old_indent) :: rest when l = lnum ->
+              (l, old_indent + indent) :: rest
+            | indents -> (lnum, indent) :: indents
+        );
+        token lexbuf }
   | "_"
-      { UNDERSCORE }
+      { bol := false;
+        UNDERSCORE }
   | "~"
-      { TILDE }
+      { bol := false;
+        TILDE }
   | ".~"
-      { error lexbuf
+      { bol := false;
+        error lexbuf
           (Reserved_sequence (".~", Some "is reserved for use in MetaOCaml")) }
   | "~" lowercase identchar * ':' as name
-      { check_label_name lexbuf name;
+      { bol := false;
+        check_label_name lexbuf name;
         LABEL name }
   | "~" lowercase_latin1 identchar_latin1 * ':' as name
-      { LABEL name }
+      { bol := false;
+        LABEL name }
   | "?"
-      { QUESTION }
+      { bol := false;
+        QUESTION }
   | "?" lowercase identchar * ':' as name
-      { check_label_name lexbuf name;
+      { bol := false;
+        check_label_name lexbuf name;
         OPTLABEL name }
   | "?" lowercase_latin1 identchar_latin1 * ':' as name
-      { OPTLABEL name }
+      { bol := false;
+        OPTLABEL name }
   | lowercase identchar * as name
-      { try Hashtbl.find keyword_table name
+      { bol := false;
+        try Hashtbl.find keyword_table name
         with Not_found -> LIDENT name }
   | lowercase_latin1 identchar_latin1 * as name
-      { LIDENT name }
+      { bol := false;
+        LIDENT name }
   | uppercase identchar * as name
-      { UIDENT name } (* No capitalized keywords *)
+      { bol := false;
+        UIDENT name } (* No capitalized keywords *)
   | uppercase_latin1 identchar_latin1 * as name
-      { UIDENT name }
+      { bol := false;
+        UIDENT name }
   | int_literal as lit { INT (lit, None) }
   | (int_literal as lit) (literal_modifier as modif)
-      { INT (lit, Some modif) }
+      { bol := false;
+        INT (lit, Some modif) }
   | float_literal | hex_float_literal as lit
-      { FLOAT (lit, None) }
+      { bol := false;
+        FLOAT (lit, None) }
   | (float_literal | hex_float_literal as lit) (literal_modifier as modif)
-      { FLOAT (lit, Some modif) }
+      { bol := false;
+        FLOAT (lit, Some modif) }
   | (float_literal | hex_float_literal | int_literal) identchar+ as invalid
-      { error lexbuf (Invalid_literal invalid) }
+      { bol := false;
+        error lexbuf (Invalid_literal invalid) }
   | "\""
-      { let s, _loc = wrap_string_lexer string lexbuf in
+      { bol := false;
+        let s, _loc = wrap_string_lexer string lexbuf in
         (* FIXME? *)
         STRING (s, None) }
   | "{" (lowercase* as delim) "|"
-      { let s, _loc = wrap_string_lexer (quoted_string delim) lexbuf in
+      { bol := false;
+        let s, _loc = wrap_string_lexer (quoted_string delim) lexbuf in
         (* FIXME? *)
         STRING (s, Some delim) }
   | "{%" (extattrident as id) "|"
-      { let orig_loc = Location.curr lexbuf in
+      { bol := false;
+        let orig_loc = Location.curr lexbuf in
         let s, loc = wrap_string_lexer (quoted_string "") lexbuf in
         let idloc = compute_quoted_string_idloc orig_loc 2 id in
         QUOTED_STRING_EXPR (id, idloc, s, loc, Some "") }
   | "{%" (extattrident as id) blank+ (lowercase* as delim) "|"
-      { let orig_loc = Location.curr lexbuf in
+      { bol := false;
+        let orig_loc = Location.curr lexbuf in
         let s, loc = wrap_string_lexer (quoted_string delim) lexbuf in
         let idloc = compute_quoted_string_idloc orig_loc 2 id in
         QUOTED_STRING_EXPR (id, idloc, s, loc, Some delim) }
   | "{%%" (extattrident as id) "|"
-      { let orig_loc = Location.curr lexbuf in
+      { bol := false;
+        let orig_loc = Location.curr lexbuf in
         let s, loc = wrap_string_lexer (quoted_string "") lexbuf in
         let idloc = compute_quoted_string_idloc orig_loc 3 id in
         QUOTED_STRING_ITEM (id, idloc, s, loc, Some "") }
   | "{%%" (extattrident as id) blank+ (lowercase* as delim) "|"
-      { let orig_loc = Location.curr lexbuf in
+      { bol := false;
+        let orig_loc = Location.curr lexbuf in
         let s, loc = wrap_string_lexer (quoted_string delim) lexbuf in
         let idloc = compute_quoted_string_idloc orig_loc 3 id in
         QUOTED_STRING_ITEM (id, idloc, s, loc, Some delim) }
   | "\'" newline "\'"
-      { update_loc lexbuf None 1 false 1;
+      { bol := false;
+        update_loc lexbuf None 1 false 1;
         (* newline is ('\013'* '\010') *)
         CHAR '\n' }
   | "\'" ([^ '\\' '\'' '\010' '\013'] as c) "\'"
-      { CHAR c }
+      { bol := false;
+        CHAR c }
   | "\'\\" (['\\' '\'' '\"' 'n' 't' 'b' 'r' ' '] as c) "\'"
-      { CHAR (char_for_backslash c) }
+      { bol := false;
+        CHAR (char_for_backslash c) }
   | "\'\\" ['0'-'9'] ['0'-'9'] ['0'-'9'] "\'"
-      { CHAR(char_for_decimal_code lexbuf 2) }
+      { bol := false;
+        CHAR(char_for_decimal_code lexbuf 2) }
   | "\'\\" 'o' ['0'-'7'] ['0'-'7'] ['0'-'7'] "\'"
-      { CHAR(char_for_octal_code lexbuf 3) }
+      { bol := false;
+        CHAR(char_for_octal_code lexbuf 3) }
   | "\'\\" 'x' ['0'-'9' 'a'-'f' 'A'-'F'] ['0'-'9' 'a'-'f' 'A'-'F'] "\'"
-      { CHAR(char_for_hexadecimal_code lexbuf 3) }
+      { bol := false;
+        CHAR(char_for_hexadecimal_code lexbuf 3) }
   | "\'" ("\\" _ as esc)
       { error lexbuf (Illegal_escape (esc, None)) }
   | "\'\'"
       { error lexbuf Empty_character_literal }
   | "(*"
-      { let s, loc = wrap_comment_lexer comment lexbuf in
+      { bol := false;
+        let s, loc = wrap_comment_lexer comment lexbuf in
         COMMENT (s, loc) }
   | "(**"
-      { let s, loc = wrap_comment_lexer comment lexbuf in
+      { bol := false;
+        let s, loc = wrap_comment_lexer comment lexbuf in
         if !handle_docstrings then
           DOCSTRING (Docstrings.docstring s loc)
         else
           COMMENT ("*" ^ s, loc)
       }
   | "(**" (('*'+) as stars)
-      { let s, loc =
+      { bol := false;
+        let s, loc =
           wrap_comment_lexer
             (fun lexbuf ->
                store_string ("*" ^ stars);
@@ -483,98 +530,113 @@ rule token = parse
         in
         COMMENT (s, loc) }
   | "(*)"
-      { let s, loc = wrap_comment_lexer comment lexbuf in
+      { bol := false;
+        let s, loc = wrap_comment_lexer comment lexbuf in
         COMMENT (s, loc) }
   | "(*" (('*'*) as stars) "*)"
-      { if !handle_docstrings && stars="" then
+      { bol := false;
+        if !handle_docstrings && stars="" then
          (* (**) is an empty docstring *)
           DOCSTRING(Docstrings.docstring "" (Location.curr lexbuf))
         else
           COMMENT (stars, Location.curr lexbuf) }
   | "*)"
-      { lexbuf.Lexing.lex_curr_pos <- lexbuf.Lexing.lex_curr_pos - 1;
+      { bol := false;
+        lexbuf.Lexing.lex_curr_pos <- lexbuf.Lexing.lex_curr_pos - 1;
         let curpos = lexbuf.lex_curr_p in
         lexbuf.lex_curr_p <- { curpos with pos_cnum = curpos.pos_cnum - 1 };
         STAR
       }
   | "#"
-      { let at_beginning_of_line pos = (pos.pos_cnum = pos.pos_bol) in
+      { bol := false;
+        let at_beginning_of_line pos = (pos.pos_cnum = pos.pos_bol) in
         if not (at_beginning_of_line lexbuf.lex_start_p)
         then HASH
         else try directive lexbuf with Failure _ -> HASH
       }
-  | "&"  { AMPERSAND }
-  | "&&" { AMPERAMPER }
-  | "`"  { BACKQUOTE }
-  | "\'" { QUOTE }
-  | "("  { LPAREN }
-  | ")"  { RPAREN }
-  | "*"  { STAR }
-  | ","  { COMMA }
-  | "->" { MINUSGREATER }
-  | "."  { DOT }
-  | ".." { DOTDOT }
-  | "." dotsymbolchar symbolchar* as op { DOTOP op }
-  | ":"  { COLON }
-  | "::" { COLONCOLON }
-  | ":=" { COLONEQUAL }
-  | ":>" { COLONGREATER }
-  | ";"  { SEMI }
-  | ";;" { SEMISEMI }
-  | "<"  { LESS }
-  | "<-" { LESSMINUS }
-  | "="  { EQUAL }
-  | "["  { LBRACKET }
-  | "[|" { LBRACKETBAR }
-  | "[<" { LBRACKETLESS }
-  | "[>" { LBRACKETGREATER }
-  | "]"  { RBRACKET }
-  | "{"  { LBRACE }
-  | "{<" { LBRACELESS }
-  | "|"  { BAR }
-  | "||" { BARBAR }
-  | "|]" { BARRBRACKET }
-  | ">"  { GREATER }
-  | ">]" { GREATERRBRACKET }
-  | "}"  { RBRACE }
-  | ">}" { GREATERRBRACE }
-  | "[@" { LBRACKETAT }
-  | "[@@"  { LBRACKETATAT }
-  | "[@@@" { LBRACKETATATAT }
-  | "[%"   { LBRACKETPERCENT }
-  | "[%%"  { LBRACKETPERCENTPERCENT }
-  | "!"  { BANG }
-  | "!=" { INFIXOP0 "!=" }
-  | "+"  { PLUS }
-  | "+." { PLUSDOT }
-  | "+=" { PLUSEQ }
-  | "-"  { MINUS }
-  | "-." { MINUSDOT }
+  | "&"  { bol := false; AMPERSAND }
+  | "&&" { bol := false; AMPERAMPER }
+  | "`"  { bol := false; BACKQUOTE }
+  | "\'" { bol := false; QUOTE }
+  | "("  { bol := false; LPAREN }
+  | ")"  { bol := false; RPAREN }
+  | "*"  { bol := false; STAR }
+  | ","  { bol := false; COMMA }
+  | "->" { bol := false; MINUSGREATER }
+  | "."  { bol := false; DOT }
+  | ".." { bol := false; DOTDOT }
+  | "." dotsymbolchar symbolchar* as op { bol := false; DOTOP op }
+  | ":"  { bol := false; COLON }
+  | "::" { bol := false; COLONCOLON }
+  | ":=" { bol := false; COLONEQUAL }
+  | ":>" { bol := false; COLONGREATER }
+  | ";"  { bol := false; SEMI }
+  | ";;" { bol := false; SEMISEMI }
+  | "<"  { bol := false; LESS }
+  | "<-" { bol := false; LESSMINUS }
+  | "="  { bol := false; EQUAL }
+  | "["  { bol := false; LBRACKET }
+  | "[|" { bol := false; LBRACKETBAR }
+  | "[<" { bol := false; LBRACKETLESS }
+  | "[>" { bol := false; LBRACKETGREATER }
+  | "]"  { bol := false; RBRACKET }
+  | "{"  { bol := false; LBRACE }
+  | "{<" { bol := false; LBRACELESS }
+  | "|"  { bol := false; BAR }
+  | "||" { bol := false; BARBAR }
+  | "|]" { bol := false; BARRBRACKET }
+  | ">"  { bol := false; GREATER }
+  | ">]" { bol := false; GREATERRBRACKET }
+  | "}"  { bol := false; RBRACE }
+  | ">}" { bol := false; GREATERRBRACE }
+  | "[@" { bol := false; LBRACKETAT }
+  | "[@@"  { bol := false; LBRACKETATAT }
+  | "[@@@" { bol := false; LBRACKETATATAT }
+  | "[%"   { bol := false; LBRACKETPERCENT }
+  | "[%%"  { bol := false; LBRACKETPERCENTPERCENT }
+  | "!"  { bol := false; BANG }
+  | "!=" { bol := false; INFIXOP0 "!=" }
+  | "+"  { bol := false; PLUS }
+  | "+." { bol := false; PLUSDOT }
+  | "+=" { bol := false; PLUSEQ }
+  | "-"  { bol := false; MINUS }
+  | "-." { bol := false; MINUSDOT }
 
   | "!" symbolchar_or_hash + as op
-            { PREFIXOP op }
+      { bol := false;
+        PREFIXOP op }
   | ['~' '?'] symbolchar_or_hash + as op
-            { PREFIXOP op }
+      { bol := false;
+        PREFIXOP op }
   | ['=' '<' '>' '|' '&' '$'] symbolchar * as op
-            { INFIXOP0 op }
+      { bol := false;
+        INFIXOP0 op }
   | ['@' '^'] symbolchar * as op
-            { INFIXOP1 op }
+      { bol := false;
+        INFIXOP1 op }
   | ['+' '-'] symbolchar * as op
-            { INFIXOP2 op }
+      { bol := false;
+        INFIXOP2 op }
   | "**" symbolchar * as op
-            { INFIXOP4 op }
-  | '%'     { PERCENT }
+      { bol := false;
+        INFIXOP4 op }
+  | '%'     { bol := false; PERCENT }
   | ['*' '/' '%'] symbolchar * as op
-            { INFIXOP3 op }
+      { bol := false;
+        INFIXOP3 op }
   | '#' symbolchar_or_hash + as op
-            { HASHOP op }
+      { bol := false;
+        HASHOP op }
   | "let" kwdopchar dotsymbolchar * as op
-            { LETOP op }
+      { bol := false;
+        LETOP op }
   | "and" kwdopchar dotsymbolchar * as op
-            { ANDOP op }
-  | eof { EOF }
+      { bol := false;
+        ANDOP op }
+  | eof { bol := false; EOF }
   | (_ as illegal_char)
-      { error lexbuf (Illegal_character illegal_char) }
+      { bol := false;
+        error lexbuf (Illegal_character illegal_char) }
 
 and directive = parse
   | ([' ' '\t']* (['0'-'9']+ as num) [' ' '\t']*
@@ -843,6 +905,8 @@ and skip_hash_bang = parse
     is_in_string := false;
     comment_start_loc := [];
     comment_list := [];
+    bol := true;
+    line_indent := [];
     match !preprocessor with
     | None -> ()
     | Some (init, _preprocess) -> init ()

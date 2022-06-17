@@ -48,6 +48,8 @@ val handle_docstrings: bool ref
 val comments : unit -> (string * Location.t) list
 val token_with_comments : Lexing.lexbuf -> Parser.token
 
+val indents : unit -> (int * int) list
+
 (*
   [set_preprocessor init preprocessor] registers [init] as the function
 to call to initialize the preprocessor when the lexer is initialized,

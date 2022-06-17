@@ -36,8 +36,9 @@ let fmt_file fn =
          raise (Fmt_file_error (Invalid_input exn))
       | sg ->
          let comments = Lexer.comments () in
+         let indents = Lexer.indents () in
          let () =
-           try Comments.init comments with e ->
+           try Comments.init comments indents with e ->
              raise (Fmt_file_error (Internal_error ("comments-init", e)))
          in
          try print sg with

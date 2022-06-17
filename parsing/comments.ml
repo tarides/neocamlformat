@@ -69,9 +69,26 @@ let populate rest =
       ) Null rest
 
 let comments = ref Null
+let indents = ref [||]
 
-let init l =
-  comments := populate l
+let mk_indents = function
+  | [] -> ()
+  | (last_line, _) :: _ as lst ->
+    let arr = Array.make last_line 0 in
+    List.iter (fun (line, i) -> 
+        try arr.(line - 1) <- i
+        with Invalid_argument _ ->
+          failwith (Printf.sprintf "no indent-cell for line %d" line)
+        ) lst;
+    indents := arr
+
+let get_line_indent i =
+  try (!indents).(i - 1)
+  with Invalid_argument _ -> 0
+
+let init l i =
+  comments := populate l;
+  mk_indents i
 
 let fetch accept pos =
   let rec aux = function
