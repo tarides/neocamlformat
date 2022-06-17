@@ -2333,7 +2333,7 @@ end = struct
     | [] -> string ~loc "|"
     | cstr :: cstrs ->
       case_list ~loc
-        (Constructor_decl.pp_decl cstr)
+        (nest 2 @@ Constructor_decl.pp_decl cstr)
         (List.map (fun c -> nest 2 @@ Constructor_decl.pp_decl c) cstrs)
 
   let non_abstract_kind = function
