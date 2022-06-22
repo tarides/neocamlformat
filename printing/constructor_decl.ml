@@ -2,14 +2,16 @@ open Document
 open Custom_combinators
 open Import
 open Source_tree
-(******************************************************)
 
+(******************************************************)
 (* Waiting for: https://github.com/ocaml/RFCs/pull/11 *)
 (******************************************************)
+
 let pp_record : (loc:Location.t -> label_declaration list -> t) ref =
   ref (fun ~loc:_ _ -> assert false)
 
 (******************************************************)
+
 let has_args = function
   | Pcstr_tuple [] -> false
   | _ -> true
