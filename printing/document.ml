@@ -133,75 +133,29 @@ let concat_located (d1, right) (d2, left) =
   | left_cmts, right_cmts ->
     let d1 = d1.txt in
     let d2 = d2.txt in
-    (* FIXME: in each group, comments are separated by one space. 
-       Is this the behaviour we want?
-
-       For instance, in the absence of any ws between d1 and d2, we probably
-       want to [break 0] between the comments. *)
-    (* FIXME: what about the loc of comments themselves that I am dropping here.
-       Do we want to keep it? Is it useful? *)
-    let left_cmts  = separate_map (break 1) (fun x -> x.txt) left_cmts in
-    let right_cmts = separate_map (break 1) (fun x -> x.txt) right_cmts in
-    (* FIXME: Perhaps I don't need all these hardlines in there.
-       The presence of them anywhere, is going to turn all the break into
-       hardlines, in the absence of grouping. *)
-    (* FIXME: add groups? it's not working well, we'd want to push comments into
-       existing groups … but that's expensive and probably not worth it? *)
-    let layout indent ?before ?after cmts =
-      if cmts == empty then
-        empty
-      else 
-        let break i = if i = -1 then hardline else break i in
-        nest indent
-          begin match before, after with
-          | None, None -> cmts
-          | Some i, None -> break i ^^ cmts
-          | None, Some j -> cmts ^^ break j
-          | Some i, Some j -> break i ^^ cmts ^^ break j
-          end
-    in
     match right.ws, left.ws with
     | None, None ->
+      (* compact *)
       d1
-      ^^ layout right.nest ~before:0 left_cmts
-      ^^ layout left.nest ~before:0 right_cmts ~after:0
+      ^^ concat_map (fun x -> x.txt) left_cmts
+      ^^ concat_map (fun x -> x.txt) right_cmts
       ^^ d2
-    | Some Space, Some Space ->
-      d1
-      ^^ layout right.nest left_cmts
-      ^^ layout left.nest ~before:1 right_cmts
-      ^^ d2
-    | Some Hardline, Some Hardline ->
-      d1
-      ^^ layout right.nest left_cmts
-      ^^ layout left.nest ~before:(-1) right_cmts
-      ^^ d2
-    | Some Hardline, Some _
-    | Some _, Some Hardline ->
-      d1
-      ^^ layout right.nest left_cmts
-      ^^ layout left.nest ~before:(-1) right_cmts
-      ^^ d2
-    | Some Hardline, None ->
-      d1
-      ^^ layout right.nest left_cmts
-      ^^ layout left.nest ~before:(-1) right_cmts ~after:0
-      ^^ d2
-    | None, Some Hardline ->
-      d1
-      ^^ layout right.nest ~before:0 left_cmts
-      ^^ layout left.nest ~before:(-1) right_cmts
-      ^^ d2
-    | Some Space, None ->
-      d1
-      ^^ layout right.nest left_cmts
-      ^^ layout left.nest ~before:1 right_cmts ~after:0
-      ^^ d2
-    | None, Some Space ->
-      d1
-      ^^ layout right.nest ~before:0 left_cmts
-      ^^ layout left.nest ~before:1 right_cmts
-      ^^ d2
+    | _, _ ->
+      let left =
+        match left_cmts with
+        | [] -> d1
+        | l ->
+          let cmts = separate_map (break 1) (fun x -> x.txt) l in
+          push_right (space ^^ cmts) d1
+      in
+      let right =
+        match right_cmts with
+        | [] -> d2
+        | l ->
+          let cmts = separate_map (break 1) (fun x -> x.txt) l in
+          push_left (cmts ^^ space) d2
+      in
+      left ^^ right
 
 let (^^) t1 t2 =
   match t1.doc, t2.doc with
