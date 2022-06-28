@@ -162,6 +162,7 @@ let attach ?(spaces=1) kind doc attrs =
     match kind with
     | Attached_to_structure_item
     | Attached_to_exception ->
+      (* FIXME: I don't understand how that makes any sense. *)
       (* This is a ugly hack: we want a blank like to follow the document, so
          the post item docstring is not deemed ambiguous.
          However, if we add a hardline here, then there will be two blank
