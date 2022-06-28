@@ -112,7 +112,10 @@ module Enclosed_separated = struct
       let fields = pp_fields x xs in
       let left = Token.pp ~inside:loc ~before:fields left in
       let right = Token.pp ~inside:loc ~after:fields right in
-      group (left ^^ break 1) ^^ hang 0 fields ^^ group (break 1 ^^ right)
+      let field_indent = requirement left in
+      group (left ^^ break 1) 
+      ^^ nest (field_indent + 1) fields
+      ^^ group (break 1 ^^ right)
   end
 
 

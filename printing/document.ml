@@ -34,6 +34,12 @@ and border_info = {
 
 let map_loc f { txt; loc } = { txt = f txt; loc }
 
+let requirement { doc; _ } =
+  match doc with
+  | Empty -> 0
+  | WS doc
+  | Located { txt = doc; loc = _ } -> PPrint.requirement doc
+
 let empty =
   let bi = { nest = 0; ws = None } in
   { doc = Empty; left = bi; right = bi }
