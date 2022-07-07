@@ -77,6 +77,70 @@ open Cmdliner
 let (let+) x f = Term.app (Term.const f) x
 let (and+) t1 t2 = Term.(const (fun x y -> (x, y)) $ t1 $ t2)
 
+let print_numbered_lines str =
+  let lines = String.split_on_char '\n' str in
+  List.iteri (Printf.printf "%4d\t%s\n") lines
+
+let fmt_files ~quiet ~inplace =
+  let rec loop ok = function
+    | [] -> ok
+    | (fn, iterate) :: fns ->
+      let intf = Filename.check_suffix fn "mli" in
+      let tmp_ext = if intf then "mli" else "ml" in
+      match fmt_file fn with
+      | exception (Fmt_file_error e) ->
+        begin match e with
+          | Invalid_input e ->
+            if not quiet then Source_parsing.Location.report_exception Format.err_formatter e
+          | Internal_error (txt, e) ->
+            Format.eprintf "neocamlformat: (%S) internal error:%s:@;%s@." fn txt
+              (Printexc.to_string e)
+          | Ast_changed ->
+            Format.eprintf "neocamlformat: AST of %S changed by formater@." fn
+          | Invalid_generated_file e ->
+            Format.eprintf "neocamlformat: formated %S doesn't parse:@.%a@."
+              fn Location.report_exception e;
+        end;
+        loop false fns
+      | exception e ->
+        Format.eprintf "neocamlformat: (%S) uncaught internal error:@;%s@." fn
+          (Printexc.to_string e);
+        loop ok fns
+      | fmted ->
+        if not inplace && iterate = `No then (
+          print_string fmted;
+          print_newline ();
+          loop ok fns
+        ) else if iterate = `First then (
+          let tmpfile = Filename.temp_file "neocamlformat" tmp_ext in
+          let oc = open_out tmpfile in
+          output_string oc fmted;
+          output_string oc "\n";
+          flush oc;
+          close_out oc;
+          print_numbered_lines fmted;
+          Printf.printf
+            "-------------------------------------------------------------\n%!";
+          loop ok ((tmpfile, `Second) :: fns)
+        ) else if iterate = `Second then (
+          Unix.unlink fn;
+          print_numbered_lines fmted;
+          Printf.printf
+            "=============================================================\n%!";
+          loop ok fns
+        ) else (
+          let tmpfile = Filename.temp_file "neocamlformat" tmp_ext in
+          let oc = open_out tmpfile in
+          output_string oc fmted;
+          output_string oc "\n";
+          flush oc;
+          close_out oc;
+          ignore (Sys.command ("mv " ^ tmpfile ^ " " ^ fn));
+          loop ok fns
+        )
+  in
+  loop true
+
 let cmd =
   let open Printing.Options in
   let+ () = Record.expression_cmd
@@ -93,44 +157,19 @@ let cmd =
   and+ ignore_docstrings = Arg.(value & flag & info ["ignore-docstrings"])
   and+ quiet = Arg.(value & flag & info ["quiet"])
   and+ inplace = Arg.(value & flag & info ["i"; "inplace"])
+  and+ iterate = Arg.(value & flag & info ["iterate"])
   in
   Ast_checker.ignore_docstrings.contents <- ignore_docstrings;
-  let ok = ref true in
-  List.iter (fun fn ->
-      match fmt_file fn with
-      | exception (Fmt_file_error e) ->
-         begin match e with
-         | Invalid_input e ->
-            if not quiet then Source_parsing.Location.report_exception Format.err_formatter e
-         | Internal_error (txt, e) ->
-            Format.eprintf "neocamlformat: (%S) internal error:%s:@;%s@." fn txt
-              (Printexc.to_string e)
-         | Ast_changed ->
-            Format.eprintf "neocamlformat: AST of %S changed by formater@." fn
-         | Invalid_generated_file e ->
-            Format.eprintf "neocamlformat: formated %S doesn't parse:@.%a@."
-              fn Location.report_exception e;
-         end;
-         ok.contents <- false
-      | exception e ->
-         Format.eprintf "neocamlformat: (%S) uncaught internal error:@;%s@." fn
-           (Printexc.to_string e)
-      | fmted ->
-         if not inplace then (
-           print_string fmted;
-           print_newline ()
-         ) else (
-           let tmpfile = Filename.temp_file "neocamlformat" "ml" in
-           let oc = open_out tmpfile in
-           output_string oc fmted;
-           output_string oc "\n";
-           flush oc;
-           close_out oc;
-           ignore (Sys.command ("mv " ^ tmpfile ^ " " ^ fn))
-         )
-    ) files;
+  if iterate && inplace then (
+    Format.eprintf "--iterate and --inplace are incompatible, choose one@.";
+    exit 2
+  );
+  let ok =
+    fmt_files ~quiet ~inplace 
+      (List.map (fun fn -> fn, if iterate then `First else `No) files) 
+  in
   flush stdout;
-  if not !ok then exit 1
+  if not ok then exit 1
 
 let info =
   Cmd.info ~exits:Cmd.Exit.defaults "neocamlformat"
