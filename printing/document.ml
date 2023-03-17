@@ -130,17 +130,18 @@ let underscore ~loc : t =
   let bi = { nest = 0; ws = None } in
   { doc = Located (mkloc PPrint.underscore loc); left = bi; right = bi }
 
-let concat_located (d1, right) (d2, left) =
+let concat_located (d1, right_bi) (d2, left_bi) =
   let final_loc = merge_locs d1.loc d2.loc in
   let open PPrint in
   final_loc,
   match Comment.between d1.loc d2.loc with
-  | [], [] -> d1.txt ^^ d2.txt
-  | left_cmts, right_cmts ->
+  | [], [], [] -> d1.txt ^^ d2.txt
+  | left_cmts, float_cmts, right_cmts ->
     let d1 = d1.txt in
     let d2 = d2.txt in
-    match right.ws, left.ws with
-    | None, None ->
+    match right_bi.ws, left_bi.ws with
+    | None, None when float_cmts = [] ->
+      Printf.eprintf "~~ none none\n%!";
       (* compact *)
       d1
       ^^ concat_map (fun x -> x.txt) left_cmts
@@ -161,7 +162,40 @@ let concat_located (d1, right) (d2, left) =
           let cmts = separate_map (break 1) (fun x -> x.txt) l in
           push_left (cmts ^^ space) d2
       in
-      left ^^ right
+      match float_cmts with
+      | [] ->
+        (* DBG *)
+        Printf.eprintf "~~ %s\n%!" (
+          match right_bi.ws, left_bi.ws with
+          | None, None -> assert false
+          | Some Space, Some Space -> "space space"
+          | Some Hardline, Some Hardline -> "\\n \\n"
+          | Some Hardline, Some _
+          | Some _, Some Hardline -> "space \\n || \\n space"
+          | Some Hardline, None -> "\\n none"
+          | None, Some Hardline -> "none \\n"
+          | Some Space, None -> "space none"
+          | None, Some Space -> "none space"
+        );
+        left ^^ right
+      | l ->
+        let cmts = separate_map hardline (fun x -> x.txt) l in
+        match right_bi.ws, left_bi.ws with
+        | None, None -> 
+          left ^//^ cmts ^//^ right
+        | Some Space, Some Space ->
+          left ^//^ cmts ^^ right
+        | Some Hardline, Some Hardline
+        | Some Hardline, Some _
+        | Some _, Some Hardline ->
+          left ^^ cmts ^^ right
+        | Some Hardline, None ->
+          left ^^ cmts ^//^ right
+        | None, Some Hardline ->
+          left ^//^ cmts ^^ right
+        | Some Space, None
+        | None, Some Space ->
+          left ^//^ cmts ^//^ right
 
 let (^^) t1 t2 =
   match t1.doc, t2.doc with

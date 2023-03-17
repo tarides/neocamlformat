@@ -24,7 +24,7 @@ exception Fmt_file_error of fmt_file_error
 let fmt_file fn =
   let source = read_file fn in
   let intf = Filename.check_suffix fn "mli" in
-  let fmted =
+  let doc, fmted =
     let open Source_parsing in
     let open Printing in
     Location.input_name := fn;
@@ -54,8 +54,9 @@ let fmt_file fn =
     in
     Comments.report_remaining ();
     let buf = Buffer.create (String.length source) in
-    PPrint.ToBuffer.pretty 10. !Options.width buf (Document.to_pprint doc);
-    Buffer.to_bytes buf |> Bytes.to_string
+    let doc = Document.to_pprint doc in
+    PPrint.ToBuffer.pretty 10. !Options.width buf doc;
+    doc, (Buffer.to_bytes buf |> Bytes.to_string)
   in
   (try
      if not (Ast_checker.check_same_ast ~impl:(not intf) source fmted)
@@ -70,7 +71,7 @@ let fmt_file fn =
          raise (Fmt_file_error (Invalid_generated_file e))
       | Fmt_file_error _ as e -> raise e
       | e -> raise (Fmt_file_error (Internal_error ("check_same_ast", e))));
-  fmted
+  doc, fmted
 
 open Cmdliner
 
@@ -81,7 +82,7 @@ let print_numbered_lines str =
   let lines = String.split_on_char '\n' str in
   List.iteri (Printf.printf "%4d\t%s\n") lines
 
-let fmt_files ~quiet ~inplace =
+let fmt_files ~quiet ~debug ~inplace =
   let rec loop ok = function
     | [] -> ok
     | (fn, iterate) :: fns ->
@@ -106,9 +107,19 @@ let fmt_files ~quiet ~inplace =
         Format.eprintf "neocamlformat: (%S) uncaught internal error:@;%s@." fn
           (Printexc.to_string e);
         loop ok fns
-      | fmted ->
+      | doc, fmted ->
+        let with_debug =
+          if not debug then
+            fmted
+          else
+            let buf = Buffer.create (String.length fmted / 5) in
+            let doc = PPrint.reify doc in
+            PPrint.ToBuffer.pretty 10. 80 buf doc;
+            Buffer.to_bytes buf
+            |> Bytes.to_string
+        in
         if not inplace && iterate = `No then (
-          print_string fmted;
+          print_string with_debug;
           print_newline ();
           loop ok fns
         ) else if iterate = `First then (
@@ -118,13 +129,13 @@ let fmt_files ~quiet ~inplace =
           output_string oc "\n";
           flush oc;
           close_out oc;
-          print_numbered_lines fmted;
+          print_numbered_lines with_debug;
           Printf.printf
             "-------------------------------------------------------------\n%!";
           loop ok ((tmpfile, `Second) :: fns)
         ) else if iterate = `Second then (
           Unix.unlink fn;
-          print_numbered_lines fmted;
+          print_numbered_lines with_debug;
           Printf.printf
             "=============================================================\n%!";
           loop ok fns
@@ -158,6 +169,7 @@ let cmd =
   and+ quiet = Arg.(value & flag & info ["quiet"])
   and+ inplace = Arg.(value & flag & info ["i"; "inplace"])
   and+ iterate = Arg.(value & flag & info ["iterate"])
+  and+ debug = Arg.(value & flag & info ["debug"])
   in
   Ast_checker.ignore_docstrings.contents <- ignore_docstrings;
   if iterate && inplace then (
@@ -165,7 +177,7 @@ let cmd =
     exit 2
   );
   let ok =
-    fmt_files ~quiet ~inplace 
+    fmt_files ~quiet ~inplace ~debug
       (List.map (fun fn -> fn, if iterate then `First else `No) files) 
   in
   flush stdout;
