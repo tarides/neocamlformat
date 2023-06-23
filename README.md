@@ -94,9 +94,20 @@ If you have a location for all the tokens (which is relatively easy to get as
 OCamlformat already proved), then you can place all the comments in the exact
 same relative position as in the source (i.e. between the same two tokens).
 
-*Caveat:* this works well for "separating" tokens, i.e. keywords (`let`, `with`,
-`in`, ...) and punctuation (`.`, `;`, `::`, ...) but the model breaks down for
-parentheses. That's because we will sometimes synthesize parentheses tokens
-which weren't present in the source.
-Currently this means that edge comments will always appear outside of
-synthesized parentheses, which is a bit unfortunate. Ideas welcome!
+# POST-MORTEM UPDATE
+
+- as a follow up to the previous paragraphs, I initially I wrote this:
+  > *Caveat:* this works well for "separating" tokens, i.e. keywords (`let`, `with`,
+  > `in`, ...) and punctuation (`.`, `;`, `::`, ...) but the model breaks down for
+  > parentheses. That's because we will sometimes synthesize parentheses tokens
+  > which weren't present in the source.
+  > Currently this means that edge comments will always appear outside of
+  > synthesized parentheses, which is a bit unfortunate. Ideas welcome!
+
+  but eventually I came to realize that the formatter should just change the
+  layout/whitespaces of its input, but nothing else. There should be a separate
+  "linter"/"normalizer" if we want to synthetize tokens and such. This is briefly
+  touched upon in
+  [docs/ocaml-workshop-2022_rejected.pdf](docs/ocaml-workshop-2022_rejected.pdf).
+- the HEAD of this repo relies on a custom version of `PPrint`, so don't expect
+  it the last few commits to build.
