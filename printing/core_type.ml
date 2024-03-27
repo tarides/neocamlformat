@@ -232,7 +232,7 @@ end = struct
     let name = Longident.pp name in
     match args with
     | [] -> name
-    | x :: xs -> pp_params ~loc x xs ^/^ name
+    | x :: xs -> pp_params ~loc x xs ^^ group (break 1 ^^ name)
 
   and pp_params ~loc first = function
     | [] -> pp first
